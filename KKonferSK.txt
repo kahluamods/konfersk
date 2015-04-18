@@ -1,0 +1,113 @@
+Welcome to KahLua Konfer, Suicide Kings Edition. KahLua Konfer is part of a
+larger suite of addons called "KahLua". There are several versions of the
+Konfer module, each which deals with different loot distribution systems.
+This one implements the Suicide Kings system, with optional decay. KonferDKP
+implements classic and bidding DKP, and KonferEPGP implements the EP/GP
+loot system.
+
+KSK is fully documented at http://kahluamod.com/ksk.
+
+Hopefully using KonferSK is largely self-explainatory, but here are some
+pointers on initial setup, and best practices.
+
+The basic command for accessing KSK is simply /ksk. There are a number of
+arguments you can give this command, which are discussed briefly below.
+
+KSK can manage multiple "configuration spaces". Think of a configuration
+space (hereafter efered to simply as a config) as a totally unique instance
+of the mod. It has its own user lists, roll lists, loot lists, administrators
+and event history. Only one configuration can be the "active" one at a time,
+although if you do have multiple configurations, you can still receive events
+from all configurations. You select the active configuration using the
+drop-down at the top right hand corner of the KSK window. Each config has
+an owner and a list of co-admins, and a list of users who are known to that
+config. A user must be defined in the user list in order to appear in any
+roll lists. There are two types of configs: guild and PUG. Guild configs
+use the guild addon channel for all their communication, and do certain
+security checks based on rank. PUG configs use the current raid addon channel
+for all their communication, and are intended for those rare cases where you
+may have a regular PUG with users from many guilds and you want to use KSK
+for loot distribution.
+
+FIRST TIME USAGE
+================
+
+If this is the very first time you are using KSK, you need to create an
+initial config. To do this, type "/ksk createconfig NAME", where NAME is the
+name of the configuration, and cannot contain the colon (:) character. The
+default behaviour is to create a PUG config. If this new config is intended
+for guild loot distribution, you should change its type. The person who creates
+the config is always the config owner (although that can be changed later).
+Once you have created the initial config. type "/ksk" to open the main KSK
+window. Type "/ksk config admin" to open the config admin tab, and set the
+config type to "Guild" if this is a guild config.
+
+If you are not a guild master (or officer) or raid leader managing loot and
+you are using KSK simply to facilitate easy bidding and keep up to date with
+the loot lists, you DO NOT NEED TO CREATE A CONFIGURATION! Rather, the guild
+master or officers will broadcast the config, and as a normal user, it will
+be automatically created for you. As a non-admin your view of the mod will
+be considerably less than an admin's view, but you can see all the parts
+that are relevant to normal users.
+
+BOTTOM TABS
+===========
+
+At the bottom of the window are several tabs. Normal users can see the
+first two only, and config admins can see all five. They are, in order:
+
+Lists (/ksk or /ksk lists)
+  The default view. Shows the list of roll lists on the left, and the
+  list members, in their priority order, on the right for the selected
+  list. Config admins will have a number of buttons to the right that can
+  be used to move users on the lists. Config admins will also have access to
+  a "Config" tab at the top of the screen, which is where you add, delete,
+  rename, import and configure roll lists.
+
+Loot (/ksk loot)
+  Shows the loot distribution window. It is divided into 5 panes. The top
+  left pane is the list of roll lists, the bottom left pane is the list of
+  members of that list, in order. The top right pane is the list of loot
+  from the current mob or chest, the middle right pane contains the loot
+  filter settings (who is allowed to bid or roll on items) and the bottom
+  right pane contains the list of current bidders. Normal users can use
+  the "Bid" button on the bottom right pane to place a bid, or the "Retract"
+  button to retract an existing bid. Config admins have some extra buttons
+  for forcing bids or retractions. They can also access the item editor from
+  the top menu, which is used to set default loot distribution for specific
+  items.
+
+Users (/ksk users)
+  Accesses the user editor. This is only for admins. Allows an admin to create,
+  rename, delete or edit users. Users can (and should) be marked as Enchanters
+  if they are suitably high level enchanters you trust, as they can be assigned
+  loot to disenchant when there are no bidders. You can also configure alts.
+  The config owner decides whether or not alts and mains are "tethered". If
+  they are tethered, then the alts and main all occupy the same priority on
+  a roll list, if not tethered it is as if they are completely separate users.
+
+Sync (/ksk sync)
+  Used by admins to remain in sync with each other.
+
+Config (/ksk config)
+  Used by admins to set loot distribution options, and by the config owner
+  to set certain high-level policies such as whether or not alts are tethered.
+
+KNOWN LIMITATIONS AND PROBLEMS
+==============================
+
+o  Automatic list decay and the raid tracker are not working yet and
+   are disabled.
+
+o  Multiple admins adding users when other admins are offline can
+   cause conflicts. It is possible to end up with the same user in the
+   user list multiple times if they were added by different admins when
+   the others were offline. If this happens, you will need to carefully
+   remove one of the users when all admins are in sync.
+
+o  There are no translations to languages other than English. If you use
+   KSK and play WoW in a language other than English, and you are prepared
+   to help translate KSK, I would love to hear from you.
+   Mail cruciformer@gmail.com with the langauges you are able to translate
+   into. You will of course be given full credit.
+

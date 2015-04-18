@@ -1,0 +1,24 @@
+Please see the file KKore/credits.txt for credits relating to KKore. This
+file is crediting people who helped me during the development of KonferSK
+itself.
+
+First, many thanks to Zhinjio, the re-author of Suicide Kings Geo. I used
+no code from that mod, but the idea for suicide kings came from using it
+in our guild. KonferSK is simply my implementation of suicide kings, and
+hopefully addresses some of the weaknesses found in SKG. I hope KSK also
+adds a few features not present in SKG.
+
+Second, a big thanks to the folks in #wowuidev on irc.freenode.net. They
+answered many questions and were a great resource. Some were more helpful
+than others and more forgiving of a newbie (since this is my first mod) but
+most of the people there are very smart and helpful. In no particular
+order I would like to thank Cairenn, Shirik, Mikk, Foxlit, alestane,
+Iriel and Arrowmaster. A special thanks to Adys who pointed me at the tooltip
+scanning code found in KSK-Utility.lua. It was a huge help.
+
+Third, thanks to my fellow guildicans in <Hyperion> who allowed me to use
+them as unwitting lab rats.
+
+Special thanks to Tynia (EU Realm: Die Silberne Hand) for the German
+translation. Some initial work on it was also done by "Mephir". Many thanks.
+Thanks to Florian Dupret (Grimal) for the French translation.
