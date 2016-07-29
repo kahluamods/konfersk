@@ -109,6 +109,10 @@ h1 {
   color:#00fe95;
 }
 
+.demonhunter {
+  color:#a330c9;
+}
+
 .unkclass {
   color:#7f7f7f;
 }

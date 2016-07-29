@@ -100,6 +100,10 @@ h1 {
   color:#c69b6d;
 }
 
+.demonhunter {
+  color:#a330c9
+}
+
 </style>
 </head>
 <body>

@@ -33,7 +33,7 @@ if (not K) then
   error ("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-if (tonumber(KM) < 603) then
+if (tonumber(KM) < 700) then
   error ("KahLua KonferSK: outdated KahLua Kore. Please update all KahLua addons.")
 end
 
@@ -58,6 +58,8 @@ ksk.dbversion = 15
 ksk.L = L
 ksk.CHAT_MSG_PREFIX = "KSK"
 ksk.initialised = false
+ksk.allclasses = "111111111111"
+ksk.maxlevel = 110
 
 ksk.KUI = KUI
 local MakeFrame = KUI.MakeFrame
@@ -1746,7 +1748,7 @@ function ksk:AddItemToBossLoot (ilink, quant, lootslot)
 
   local lootslot = lootslot or 0
   local itemid = string.match (ilink, "item:(%d+)")
-  local _, _, _, _, _, icls, isubcls, _, slot = GetItemInfo (ilink)
+  local _, _, _, _, _, _, _, _, slot, _, _, icls, isubcls = GetItemInfo (ilink)
   local filt, boe = ksk.GetItemClassFilter (ilink)
   local ti = { itemid = itemid, ilink = ilink, slot = lootslot, quant = quant, boe = boe }
   if (icls == ksk.classfilters.weapon) then
@@ -2244,57 +2246,84 @@ ksk:RegisterMessage ("KSK_INITIALISED", function (evt, ...)
   -- order for a given UI release. If this proves to be inacurate, this whole
   -- strategy will need to be re-thought.
   --
-  local weapon, armor = GetAuctionItemClasses ()
   ksk.classfilters = {}
-  ksk.classfilters.weapon = weapon
-  ksk.classfilters.armor = armor
-  local ohaxe,thaxe,bows,guns,ohmace,thmace,poles,ohsword,thsword,staves,fist,misc,daggers,thrown,xbows,wands,fish = GetAuctionItemSubClasses (1)
-  local misc, cloth, leather, mail, plate, cosmetic, shields = GetAuctionItemSubClasses (2)
+  ksk.classfilters.weapon = LE_ITEM_CLASS_WEAPON   -- 2
+  ksk.classfilters.armor  = LE_ITEM_CLASS_ARMOR    -- 4
+
+  local ohaxe    = LE_ITEM_WEAPON_AXE1H            -- 0
+  local thaxe    = LE_ITEM_WEAPON_AXE2H            -- 1
+  local bows     = LE_ITEM_WEAPON_BOWS             -- 2
+  local guns     = LE_ITEM_WEAPON_GUNS             -- 3
+  local ohmace   = LE_ITEM_WEAPON_MACE1H           -- 4
+  local thmace   = LE_ITEM_WEAPON_MACE2H           -- 5
+  local poles    = LE_ITEM_WEAPON_POLEARM          -- 6
+  local ohsword  = LE_ITEM_WEAPON_SWORD1H          -- 7
+  local thsword  = LE_ITEM_WEAPON_SWORD2H          -- 8
+  local glaives  = LE_ITEM_WEAPON_WARGLAIVE	   -- 9
+  local staves   = LE_ITEM_WEAPON_STAFF            -- 10
+  local fist     = LE_ITEM_WEAPON_UNARMED          -- 13
+  local miscw    = LE_ITEM_WEAPON_GENERIC          -- 14
+  local daggers  = LE_ITEM_WEAPON_DAGGER           -- 15
+  local thrown   = LE_ITEM_WEAPON_THROWN           -- 16
+  local xbows    = LE_ITEM_WEAPON_CROSSBOW         -- 18
+  local wands    = LE_ITEM_WEAPON_WAND             -- 19
+  local fish     = LE_ITEM_WEAPON_FISHINGPOLE      -- 20
+
+  local amisc    = LE_ITEM_ARMOR_GENERIC           -- 0
+  local cloth    = LE_ITEM_ARMOR_CLOTH             -- 1
+  local leather  = LE_ITEM_ARMOR_LEATHER           -- 2
+  local mail     = LE_ITEM_ARMOR_MAIL              -- 3
+  local plate    = LE_ITEM_ARMOR_PLATE             -- 4
+  local cosmetic = LE_ITEM_ARMOR_COSMETIC          -- 5
+  local shields  = LE_ITEM_ARMOR_SHIELD            -- 6
+
   ksk.classfilters.strict = {}
   ksk.classfilters.relaxed = {}
   ksk.classfilters.weapons = {}
-  --                                   +------------- Warriors
-  --                                   |+------------ Paladins
-  --                                   ||+----------- Hunters
-  --                                   |||+---------- Rogues
-  --                                   ||||+--------- Priests
-  --                                   |||||+-------- Death Knights
-  --                                   ||||||+------- Shaman
-  --                                   |||||||+------ Mages
-  --                                   ||||||||+----- Warlocks
-  --                                   |||||||||+---- Monks
-  --                                   ||||||||||+--- Druids
-  ksk.classfilters.strict[misc]     = "11111111111"
-  ksk.classfilters.strict[cloth]    = "00001001100"
-  ksk.classfilters.strict[leather]  = "00010000011"
-  ksk.classfilters.strict[mail]     = "00100010000"
-  ksk.classfilters.strict[plate]    = "11000100000"
-  ksk.classfilters.strict[cosmetic] = "11111111111"
-  ksk.classfilters.strict[shields]  = "11000010000"
-  ksk.classfilters.relaxed[misc]    = "11111111111"
-  ksk.classfilters.relaxed[cloth]   = "11111111111"
-  ksk.classfilters.relaxed[leather] = "11110110011"
-  ksk.classfilters.relaxed[mail]    = "11100110000"
-  ksk.classfilters.relaxed[plate]   = "11000100000"
-  ksk.classfilters.relaxed[cosmetic]= "11111111111"
-  ksk.classfilters.relaxed[shields] = "11000010000"
-  ksk.classfilters.weapons[ohaxe]   = "11110110010"
-  ksk.classfilters.weapons[thaxe]   = "11100110000"
-  ksk.classfilters.weapons[bows]    = "10110000000"
-  ksk.classfilters.weapons[guns]    = "10110000000"
-  ksk.classfilters.weapons[ohmace]  = "11011110011"
-  ksk.classfilters.weapons[thmace]  = "11000110001"
-  ksk.classfilters.weapons[poles]   = "11100100011"
-  ksk.classfilters.weapons[ohsword] = "11110101110"
-  ksk.classfilters.weapons[thsword] = "11100100000"
-  ksk.classfilters.weapons[staves]  = "10101011111"
-  ksk.classfilters.weapons[fist]    = "10110010011"
-  ksk.classfilters.weapons[misc]    = "11111111111"
-  ksk.classfilters.weapons[daggers] = "10111011101"
-  ksk.classfilters.weapons[thrown]  = "10110000000"
-  ksk.classfilters.weapons[xbows]   = "10110000000"
-  ksk.classfilters.weapons[wands]   = "00001001100"
-  ksk.classfilters.weapons[fish]    = "11111111111"
+  --                                   +------------- Warriors            1
+  --                                   |+------------ Paladins            2
+  --                                   ||+----------- Hunters             3
+  --                                   |||+---------- Rogues              4
+  --                                   ||||+--------- Priests             5
+  --                                   |||||+-------- Death Knights       6
+  --                                   ||||||+------- Shaman              7
+  --                                   |||||||+------ Mages               8
+  --                                   ||||||||+----- Warlocks            9
+  --                                   |||||||||+---- Monks               10
+  --                                   ||||||||||+--- Druids              11
+  --                                   |||||||||||+-- Demon Hunter        12
+  ksk.classfilters.strict[amisc]    = "111111111111"
+  ksk.classfilters.strict[cloth]    = "000010011000"
+  ksk.classfilters.strict[leather]  = "000100000111"
+  ksk.classfilters.strict[mail]     = "001000100000"
+  ksk.classfilters.strict[plate]    = "110001000000"
+  ksk.classfilters.strict[cosmetic] = "111111111111"
+  ksk.classfilters.strict[shields]  = "110000100000"
+  ksk.classfilters.relaxed[amisc]   = "111111111111"
+  ksk.classfilters.relaxed[cloth]   = "111111111111"
+  ksk.classfilters.relaxed[leather] = "111101100111"
+  ksk.classfilters.relaxed[mail]    = "111001100000"
+  ksk.classfilters.relaxed[plate]   = "110001000000"
+  ksk.classfilters.relaxed[cosmetic]= "111111111111"
+  ksk.classfilters.relaxed[shields] = "110000100000"
+  ksk.classfilters.weapons[ohaxe]   = "111101100101"
+  ksk.classfilters.weapons[thaxe]   = "111001100000"
+  ksk.classfilters.weapons[bows]    = "101100000000"
+  ksk.classfilters.weapons[guns]    = "101100000000"
+  ksk.classfilters.weapons[ohmace]  = "110111100110"
+  ksk.classfilters.weapons[thmace]  = "110001100010"
+  ksk.classfilters.weapons[poles]   = "111001000110"
+  ksk.classfilters.weapons[ohsword] = "111101011101"
+  ksk.classfilters.weapons[thsword] = "111001000000"
+  ksk.classfilters.weapons[staves]  = "101010111110"
+  ksk.classfilters.weapons[fist]    = "101100100111"
+  ksk.classfilters.weapons[miscw]   = "111111111111"
+  ksk.classfilters.weapons[daggers] = "101110111011"
+  ksk.classfilters.weapons[thrown]  = "101100000000"
+  ksk.classfilters.weapons[xbows]   = "101100000000"
+  ksk.classfilters.weapons[wands]   = "000010011000"
+  ksk.classfilters.weapons[glaives] = "100101000101"
+  ksk.classfilters.weapons[fish]    = "111111111111"
 
   --
   -- Broadcasts a list of all configurations we have, and the latest events

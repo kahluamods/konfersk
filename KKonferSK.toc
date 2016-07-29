@@ -1,4 +1,4 @@
-﻿## Interface: 60100
+﻿## Interface: 70000
 ## Title: Konfer (Suicide Kings) |cffff2222-K-|r
 ## Notes: Suicide Kings loot distribution system.
 ## Notes-deDE: Suicide Kings Loot Verteilungs System.
@@ -12,7 +12,7 @@
 ## X-Curse-Packaged-Version: r@revision@
 ## X-Curse-Project-Name: KKonferSK
 ## X-Curse-Project-ID: ksk
-## X-SVN: http://kahluamod.com/svn/konfersk
+## X-git: git@github.com:kahluamods/konfersk
 ## SavedVariables: KKonferSKOptions, KKonferSKDB
 ## SavedVariablesPerCharacter: KKonferSKCharDB
 #@debug-start@

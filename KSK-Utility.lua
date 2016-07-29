@@ -78,7 +78,7 @@ local aclass = ksk.aclass
 function ksk.GetItemClassFilter (ilink)
   local tnm = GetItemInfo (ilink)
   if (not tnm or tnm == "") then
-    return "11111111111", nil
+    return ksk.allclasses, nil
   end
 
   local tt = ksk.ScanTooltip (ilink)
@@ -93,14 +93,14 @@ function ksk.GetItemClassFilter (ilink)
 
   if (foo) then
     foo = gsub (foo, " ", "")
-    local clist = { "0","0","0","0","0","0","0","0","0","0","0" }
+    local clist = { "0","0","0","0","0","0","0","0","0","0","0", "0" }
     for k,v in pairs ( { string.split (",", foo) } ) do
       local cp = tonumber (K.LClassIndexNSP[v]) or 10
       clist[cp] = "1"
     end
     return tconcat (clist, ""), boe
   else
-    return "11111111111", boe
+    return ksk.allclasses, boe
   end
 end
 

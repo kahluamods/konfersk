@@ -137,6 +137,7 @@ local function enable_ui_elements (val)
   ksk.qf.lootrules.mage:SetEnabled (onoff)
   ksk.qf.lootrules.warlock:SetEnabled (onoff)
   ksk.qf.lootrules.priest:SetEnabled (onoff)
+  ksk.qf.lootrules.demonhunter:SetEnabled (onoff)
   ksk.qf.lootrules.role:SetEnabled (onoff)
   ksk.qf.lootrules.rank:SetEnabled (onoff)
   ksk.qf.lootrules.nextrank:SetEnabled (onoff)
@@ -1136,6 +1137,7 @@ local function enable_uvalues (io, en)
   io.mage:SetEnabled (en)
   io.warlock:SetEnabled (en)
   io.priest:SetEnabled (en)
+  io.demonhunter:SetEnabled (en)
   io.role:SetEnabled (en)
   io.nextdrop:SetEnabled (en)
   io.nextuser:SetEnabled (en and iinfo.nextdrop)
@@ -1212,6 +1214,7 @@ local function ilist_selectitem (objp, idx, slot, btn, onoff)
     io.deathknight:SetChecked (iinfo.cfilter[K.CLASS_DEATHKNIGHT])
     io.paladin:SetChecked (iinfo.cfilter[K.CLASS_PALADIN])
     io.warrior:SetChecked (iinfo.cfilter[K.CLASS_WARRIOR])
+    io.demonhunter:SetChecked (iinfo.cfilter[K.CLASS_DEMONHUNTER])
     io.speclist:SetValue (iinfo.list)
     io.defrank:SetValue (iinfo.rank)
     io.ignore:SetChecked (iinfo.ignore)
@@ -2327,6 +2330,15 @@ function ksk:InitialiseLootGUI ()
     class_filter_func (this, evt, val, K.CLASS_MONK, user)
   end)
 
+  arg = {
+    x = 176, y = ypos, label = { text = K.IndexClass[K.CLASS_DEMONHUNTER].c },
+    font = "GameFontHighlightSmall", height = 16,
+  }
+  bm.demonhunter = KUI:CreateCheckBox (arg, bm)
+  bm.demonhunter:Catch ("OnValueChanged", function (this, evt, val, user)
+    class_filter_func (this, evt, val, K.CLASS_DEMONHUNTER, user)
+  end)
+
   ypos = ypos - 20
 
   arg = {
@@ -2628,6 +2640,7 @@ function ksk:InitialiseLootGUI ()
     io.deathknight:SetChecked (false)
     io.paladin:SetChecked (false)
     io.warrior:SetChecked (false)
+    io.demonhunter:SetChecked (false)
     io.defrank:SetValue (999)
     io.speclist:SetValue ("0")
   end
@@ -2861,6 +2874,16 @@ function ksk:InitialiseLootGUI ()
   rs.monk = KUI:CreateCheckBox (arg, rs)
   rs.monk:Catch ("OnValueChanged", function (this, evt, val, user)
     iclass_filter_func (this, evt, val, K.CLASS_MONK, user)
+  end)
+
+  arg = {
+    x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_DEMONHUNTER].c },
+    font = "GameFontHighlightSmall", height = 16,
+    enabled = false,
+  }
+  rs.demonhunter = KUI:CreateCheckBox (arg, rs)
+  rs.demonhunter:Catch ("OnValueChanged", function (this, evt, val, user)
+    iclass_filter_func (this, evt, val, K.CLASS_DEMONHUNTER, user)
   end)
 
   ypos = ypos - 18
@@ -3820,8 +3843,8 @@ function ksk:AddItem (itemid, itemlink, cfgid, nocmd)
   end
 
   local ifs = ksk.GetItemClassFilter (itemlink)
-  if (ifs == "11111111111") then
-    local _, _, _, _, _, icls, isubcls, _, slot = GetItemInfo (itemlink)
+  if (ifs == ksk.allclasses) then
+    local _, _, _, _, _, _, _, _, slot, _, _, icls, isubcls = GetItemInfo (itemlink)
     if (icls == ksk.classfilters.weapon) then
       ifs = ksk.classfilters.weapons[isubcls]
     elseif (icls == ksk.classfilters.armor) then

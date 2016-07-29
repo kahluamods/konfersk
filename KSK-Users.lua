@@ -347,7 +347,7 @@ local function guild_import_button (shown)
   y = y - 24
 
   arg = {
-    x = 10, y = y, minval = 1, maxval = 100, initialvalue = 100, step = 1,
+    x = 10, y = y, minval = 1, maxval = ksk.maxlevel, initialvalue = ksk.maxlevel, step = 1,
     label = { text = L["Minimum Level"], },
     tooltip = { title = "$$", text = L["TIP074"] },
   }
