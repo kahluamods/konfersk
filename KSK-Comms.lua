@@ -355,7 +355,8 @@ end
 
 local userwarn = userwarn or {}
 
-function ksk:OnCommReceived (prefix, msg, dist, sender)
+function ksk:OnCommReceived (prefix, msg, dist, snd)
+  local sender = K.CanonicalName (snd)
   if (sender == K.player.player) then
     return -- Ignore our own messages
   end
@@ -665,15 +666,14 @@ end
 
 --
 -- Command: BCAST configdata
--- Purpose: Sent by a guild master or officer with suitable guild permissions
---          to broadcast the entire current configuration to users who are
---          not actively syncing co-admins. This message includes the full
---          user list, all roll lists, and the full members list for each
---          roll list. About the only thing it does not include is the item
---          database. Only syncers care about that, and they get it via a
---          full sync. If this is a PUG config, we pop up a confirmation
---          window if the user did not have that config before, as they
---          may not care to have some random PUG's config data.
+-- Purpose: Sent by a guild master to broadcast the entire current
+--          configuration to users who are not actively syncing co-admins.
+--          This message includes the full user list, all roll lists, and the
+--          full members list for each roll list. About the only thing it does
+--          not include is the item database. Only syncers care about that,
+--          and they get it via a full sync. If this is a PUG config, we pop
+--          up a confirmation window if the user did not have that config
+--          before, as they may not care to have some random PUG's config data.
 --
 ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
   local ncf, cfgid = prepare_config_from_bcast (cfd)
@@ -682,9 +682,8 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
   --
   -- First step is to verify that the sending user is someone we should be
   -- paying attention to. If the configuration is a guild configuration,
-  -- the user needs to be the GM or an officer (someone who can read
-  -- officer chat). If it is a PUG configuration, the person needs to be
-  -- the master looter or a raid admin. If any of those
+  -- the user needs to be the GM. If it is a PUG configuration, the person
+  -- needs to be the master looter or a raid admin. If any of those
   -- conditions is not true, silently ignore the message.
   --
   if (K.player.isguilded and cfgtype == ksk.CFGTYPE_GUILD) then

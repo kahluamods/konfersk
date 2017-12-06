@@ -703,25 +703,20 @@ local function import_list_button ()
     ret.OnAccept = function (this)
       if (imprank ~= "") then
         -- Import a guild rank (possibly randomly)
-        local oldoff = GetGuildRosterShowOffline ()
-        SetGuildRosterShowOffline (true)
-        GuildRoster()
-        SortGuildRoster ("rank")
         local rusers = {}
-        local nrank = 0
-        local ngm = GetNumGuildMembers ()
-        for i = 1,ngm do
-          local nm, _, ri, lvl, _, _, _, _, _, _, cl = GetGuildRosterInfo (i)
-          if (ri == imprank-1) then
+        local ngm = K.guild.numroster
+        for i = 1, ngm do
+          local nm = K.guild.roster.id[i].name
+          local ri = K.guild.roster.id[i].rankidx
+          local cl = K.guild.roster.id[i].class
+          if (ri == imprank - 1) then
             local uid = ksk:FindUser (nm)
             if (not uid) then
-              uid = ksk:CreateNewUser (nm, K.ClassIndex[cl], nil, false, true)
+              uid = ksk:CreateNewUser (nm, cl, nil, false, true)
             end
             tinsert (rusers, uid)
-            nrank = nrank + 1
           end
         end
-        SetGuildRosterShowOffline (oldoff)
 
         for k,v in pairs (rusers) do
           local pos = nil
@@ -792,7 +787,7 @@ local function import_list_button ()
   if (K.player.isguilded) then
     ild.grank:SetEnabled (true)
     for i = 1, K.guild.numranks do
-      local iv = { text = K.guild.ranks[i].name, value = i }
+      local iv = { text = K.guild.ranks[i], value = i }
       tinsert (gitems, iv)
     end
   else

@@ -785,7 +785,7 @@ local function rank_editor ()
   for i = 1, K.guild.numranks do
     local rlbl = "ranklbl" .. tostring(i)
     local rpe = "rankprio" .. tostring(i)
-    rp[rlbl]:SetText (K.guild.ranks[i].name)
+    rp[rlbl]:SetText (K.guild.ranks[i])
     rp[rpe]:SetText (tostring (ksk.settings.rank_prio[i] or 1))
     rp[rlbl]:Show ()
     rp[rpe]:Show ()
@@ -1830,10 +1830,10 @@ function ksk:CreateNewConfig (name, initial, new, nouser, mykey)
   end
 
   --
-  -- If we have no guild configs, and we are the GM or an officer, make this
+  -- If we have no guild configs, and we are the GM, make this
   -- a guild config initially. They can change it immediately if this is wrong.
   --
-  if (K.player.isgm or K.player.isofficer) then
+  if (K.player.isgm) then
     local ng = 0
     for k,v in pairs (ksk.frdb.configs) do
       if (v.cfgtype == ksk.CFGTYPE_GUILD) then

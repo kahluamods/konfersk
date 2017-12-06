@@ -105,11 +105,11 @@ function ksk.GetItemClassFilter (ilink)
 end
 
 --
--- Returns true if the user is thought to be a guild master or officer, false
+-- Returns true if the user is thought to be a guild master, false
 -- if we cant tell or can tell if they are not.
 --
 function ksk:UserIsRanked (name)
-  if (K.guild.officers[name] ~= nil) then
+  if (K.guild and K.guild.gmname and  K.guild.gmname == name) then
     return true
   else
     return false

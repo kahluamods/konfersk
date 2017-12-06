@@ -340,7 +340,7 @@ local function guild_import_button (shown)
     local cbn = "rankcb" .. tostring(i)
     arg.y = y
     arg.x = 10
-    arg.label = { text = K.guild.ranks[i].name }
+    arg.label = { text = K.guild.ranks[i] }
     ret[cbn] = KUI:CreateCheckBox (arg, ret)
   end
 
@@ -362,15 +362,15 @@ local function guild_import_button (shown)
     end
   end
 
-  local function do_rank (dp, r, ngm, minlev)
+  local function do_rank (r, minlev)
     local rv = 0
+    local ngm = K.guild.numroster
     for i = 1, ngm do
-      local nm, _, ri, lvl, _, _, _, _, _, _, cl = GetGuildRosterInfo (i)
-      nm = K.CanonicalName (nm, nil)
-      if (ri == r-1 and lvl >= minlev) then
+      if (K.guild.roster.id[i].rankidx == r and K.guild.roster.id[i].level >= minlev) then
+        local nm = K.guild.roster.id[i].name
         local uid = ksk:FindUser (nm)
         if (not uid) then
-          local kcl = K.ClassIndex[cl]
+          local kcl = K.guild.roster.id[i].class
           uid = ksk:CreateNewUser (nm, kcl, nil, true)
           if (uid) then
             rv = rv + 1
@@ -384,21 +384,15 @@ local function guild_import_button (shown)
   end
 
   ret.OnAccept = function (this)
-    local oldoff = GetGuildRosterShowOffline ()
-    SetGuildRosterShowOffline (true)
-    GuildRoster()
-    SortGuildRoster ("rank")
-    local ngm = GetNumGuildMembers ()
     local cas,ccs
     local tadd = 0
     local minlev = this.minlevel:GetValue ()
-    for i = 1,K.guild.numranks do
+    for i = 1, K.guild.numranks do
       ccs = "rankcb" .. tostring(i)
       if (this[ccs]:GetChecked ()) then
-        tadd = tadd + do_rank (this, i, ngm, minlev)
+        tadd = tadd + do_rank (i - 1, minlev)
       end
     end
-    SetGuildRosterShowOffline (oldoff)
     ksk:RefreshUsers ()
     ksk:RefreshRaid ()
     ksk.SendAM ("RFUSR", "ALERT", true)

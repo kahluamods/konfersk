@@ -3611,7 +3611,7 @@ function ksk:NewBidder (u)
 
     if (ksk.loot_rank ~= 999) then
       if (ri > (ksk.loot_rank - 1)) then
-        ksk.SendWhisper (strfmt (L["%s: you do not meet the current guild rank requirement (%q) - %s ignored."], L["MODTITLE"], K.guild.ranks[ksk.loot_rank].name, L["bid"]), u)
+        ksk.SendWhisper (strfmt (L["%s: you do not meet the current guild rank requirement (%q) - %s ignored."], L["MODTITLE"], K.guild.ranks[ksk.loot_rank], L["bid"]), u)
         return
       end
     end

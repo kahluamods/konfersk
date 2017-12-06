@@ -33,7 +33,7 @@ if (not K) then
   error ("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-if (tonumber(KM) < 700) then
+if (tonumber(KM) < 730) then
   error ("KahLua KonferSK: outdated KahLua Kore. Please update all KahLua addons.")
 end
 
@@ -53,13 +53,13 @@ if (not ksk) then
 end
 
 ksk.version = MINOR
-ksk.protocol = 6        -- Protocol version
+ksk.protocol = 7        -- Protocol version
 ksk.dbversion = 15
 ksk.L = L
 ksk.CHAT_MSG_PREFIX = "KSK"
 ksk.initialised = false
 ksk.allclasses = "111111111111"
-ksk.maxlevel = 110
+ksk.maxlevel = K.maxlevel
 
 ksk.KUI = KUI
 local MakeFrame = KUI.MakeFrame
@@ -1396,7 +1396,7 @@ function ksk:CanChangeConfigType ()
   if (K.player.isguilded == false) then
      return false
   else
-    if (K.player.isgm == true or K.player.isofficer == true) then
+    if (K.player.isgm == true) then
       return true
     end
   end
@@ -1544,7 +1544,7 @@ local function guild_info_updated (evt, ...)
   local rvals = {}
   if (K.player.isguilded) then
     for i = 1, K.guild.numranks do
-      local iv = {text = K.guild.ranks[i].name, value = i }
+      local iv = {text = K.guild.ranks[i], value = i }
       tinsert (rvals, iv)
     end
   end
