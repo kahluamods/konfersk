@@ -480,6 +480,8 @@ L["Auto-assign to Master Looter"] = "Auto-Zuweisung zu Plündermeister"
 L["Raiders Not on Current List"] = "Raidmitglieder nicht auf aktueller Liste"
 L["%s: users not on the %q list: %s"] = "%s: Nutzer nicht auf der %q - Liste: %s"
 L["User Search"] = "Nutzer-Suche"
+L["Edit Officer Ranks"] = "Edit Officer Ranks"
+L["Set Guild Officer Ranks"] = "Set Guild Officer Ranks"
 
 --
 -- Tooltip text.
@@ -600,6 +602,7 @@ L["TIP096"] = "Wenn du eine Item-Level-Marke für Gebote gesetzt hast und sie is
 L["TIP097"] = "Aktiviere diese Option, um das Item automatisch an den Entzauberer zu senden und nicht zum Bieten / Würfeln zuzulassen. Wenn kein Entzauberer vorhanden ist, wird das Item dem Plündermeister zugewiesen."
 L["TIP098"] = "Aktiviere diese Option, um das Item automatisch an den Plündermeister zu senden und nicht zum Bieten / Würfeln zuzulassen."
 L["TIP099"] = "Gib den Namen des Nutzers ein, den Du suchen willst. Dies kann auch nur ein Teil des Nutzer-Namens sein. Der erste gefundenen Nutzer wird hervorgehoben und ausgewählt."
+L["TIP100"] = "Mark which guild ranks are officer ranks. Only officers will be permitted to broadcast configs to the entire guild."
 
 --
 -- Shared Konfer dialog. These strings are used by all Konfer addons.

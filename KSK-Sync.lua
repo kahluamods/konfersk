@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2010 James Kean Johnston. All rights reserved.
+   Copyright 2008-2017 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -225,7 +225,7 @@ end
 -- config.
 -- a table suitable for transmission with the following values:
 --   v=1 (version 1 broadcast)
---   c=cfgid:name:type:tethered:limit:ownerid:crc
+--   c=cfgid:name:type:tethered:limit:ownerid:oranks:crc
 --   u={numusers,userlist}
 --     Each element in userlist is name:class:role:ench:frozen:exempt:alt:main
 --   a=adminstring
@@ -243,9 +243,9 @@ local function prepare_broadcast (cfg)
   local ci = {}
   local tc = ksk.configs[cfg]
 
-  ci.v = 1
-  ci.c = strfmt ("%s:%s:%d:%s:%d:%s:0x%s", cfg, tc.name, tc.cfgtype,
-    tc.tethered and "Y" or "N", 0, tc.owner, K.hexstr (tc.cksum))
+  ci.v = 2
+  ci.c = strfmt ("%s:%s:%d:%s:%d:%s:%s:0x%s", cfg, tc.name, tc.cfgtype,
+    tc.tethered and "Y" or "N", 0, tc.owner, tc.oranks, K.hexstr (tc.cksum))
 
   local ulist = {}
   for k,v in pairs (tc.users) do

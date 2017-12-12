@@ -104,10 +104,3 @@ o  Multiple admins adding users when other admins are offline can
    user list multiple times if they were added by different admins when
    the others were offline. If this happens, you will need to carefully
    remove one of the users when all admins are in sync.
-
-o  There are no translations to languages other than English. If you use
-   KSK and play WoW in a language other than English, and you are prepared
-   to help translate KSK, I would love to hear from you.
-   Mail cruciformer@gmail.com with the langauges you are able to translate
-   into. You will of course be given full credit.
-

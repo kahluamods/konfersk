@@ -479,6 +479,8 @@ L["Auto-assign to Master Looter"] = true
 L["Raiders Not on Current List"] = true
 L["%s: users not on the %q list: %s"] = true
 L["User Search"] = true
+L["Edit Officer Ranks"] = true
+L["Set Guild Officer Ranks"] = true
 
 --
 -- Tooltip text.
@@ -599,6 +601,7 @@ L["TIP096"] = "If you have the bid item level threshold set and it is set to a l
 L["TIP097"] = "Enable this option to have the item automatically sent to a raid enchanter and completely bypass bidding or rolling. If an enchanter is not online, it will be given to the master looter."
 L["TIP098"] = "Enable this option to have the item automatically sent to the master looter, and completely bypass bidding and rolling."
 L["TIP099"] = "Start typing the name of a user you wish to search for. This can be any part of the user's name. The first user that matches is highlighted and selected."
+L["TIP100"] = "Mark which guild ranks are officer ranks. Only officers will be permitted to broadcast configs to the entire guild."
 
 --
 -- Shared Konfer dialog. These strings are used by all Konfer addons.

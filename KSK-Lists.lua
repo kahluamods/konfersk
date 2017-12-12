@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2010 James Kean Johnston. All rights reserved.
+   Copyright 2008-2017 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -1130,10 +1130,10 @@ local function announce_list_button (isall, shifted)
     as = nil
     if (not isall and ksk.raid.users[uid]) then
       np = np + 1
-      as = strfmt ("%s(%d) ", ksk.users[uid].name, members[i].idx)
+      as = strfmt ("%s(%d) ", K.ShortName (ksk.users[uid].name), members[i].idx)
     elseif (isall) then
       np = np + 1
-      as = ksk.users[uid].name .. " "
+      as = K.ShortName (ksk.users[uid].name) .. " "
     end
     if (as) then
       al = strlen (as)

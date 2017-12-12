@@ -477,6 +477,8 @@ L["Auto-assign to Master Looter"] = "Auto-attribuer au ma\195\174tre du butin"
 L["Raiders Not on Current List"] = "Raideurs qui ne sont pas sur la liste actuelle"
 L["%s: users not on the %q list: %s"] = "%s : joueurs qui ne sont pas sur la liste %q : %s"
 L["User Search"] = "Rechercher un joueur"
+L["Edit Officer Ranks"] = "Edit Officer Ranks"
+L["Set Guild Officer Ranks"] = "Set Guild Officer Ranks"
 
 --
 -- Tooltip text.
@@ -597,6 +599,7 @@ L["TIP096"] = "Si vous avez d\195\169fini le seuil d'ench\195\168re et qu'il est
 L["TIP097"] = "Activer cette option pour que l'objet soit automatiquement attribu\195\169 \195\160 un enchanteur du raid et qu'il saute l'\195\169tape des ench\195\168res ou des rands. Si aucun enchanteur n'est connect\195\169, il sera donn\195\169 au ma\195\174tre du butin."
 L["TIP098"] = "Activer cette option pour que l'objet soit automatiquement attribu\195\169 au ma\195\174tre du butin, et qu'il saute l'\195\169tape des ench\195\168res ou des rands."
 L["TIP099"] = "Commencez \195\160 saisir le nom du joueur que vous recherchez. Cela peut-\195\170tre n'importe quelle partie du nom du joueur. Le premier joueur trouv\195\169 est surlign\195\169 est s\195\169lectionn\195\169."
+L["TIP100"] = "Mark which guild ranks are officer ranks. Only officers will be permitted to broadcast configs to the entire guild."
 
 --
 -- Shared Konfer dialog. These strings are used by all Konfer addons.

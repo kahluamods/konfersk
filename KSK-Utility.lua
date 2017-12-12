@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2010 James Kean Johnston. All rights reserved.
+   Copyright 2008-2017 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -108,12 +108,27 @@ end
 -- Returns true if the user is thought to be a guild master, false
 -- if we cant tell or can tell if they are not.
 --
-function ksk:UserIsRanked (name)
-  if (K.guild and K.guild.gmname and  K.guild.gmname == name) then
-    return true
-  else
+function ksk:UserIsRanked (cfg, name)
+  if (not K.player.isguilded or not K.guild or not ksk.frdb.configs[cfg]) then
     return false
   end
+
+  if (name == K.guild.gmname) then
+    return true
+  end
+
+  if (not K.guild.roster.name[name]) then
+    return false
+  end
+
+  local gi = K.guild.roster.name[name]
+  local gu = K.guild.roster.id[gi]
+  local ri = gu.rankidx + 1
+  if (strsub (ksk.frdb.configs[cfg].oranks, ri, ri) == "1") then
+    return true
+  end
+
+  return false
 end
 
 --
@@ -631,6 +646,21 @@ function ksk:UpdateDatabaseVersion ()
       for kk,vv in pairs (v.users) do
         vv.name = K.CanonicalName (vv.name, nil)
       end
+    end
+    ret = true
+    ksk.frdb.dbversion = 15
+  end
+
+  if (ksk.frdb.dbversion == 15) then
+    --
+    -- Version 16 added the list of guild ranks that are officer ranks to the
+    -- config options for guild configs. Also remove the tethered setting
+    -- from the settings array as it is stored in the top level config
+    -- structure not the settings structure.
+    --
+    for k,v in pairs (ksk.frdb.configs) do
+      v.oranks = "1000000000"
+      v.settings.tethered = nil
     end
     ret = true
   end

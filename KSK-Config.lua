@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2010 James Kean Johnston. All rights reserved.
+   Copyright 2008-2017 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -101,6 +101,13 @@ local function config_setenabled (onoff)
     if (ksk.qf.cfgopts.cfgtype) then
       ksk.qf.cfgopts.cfgtype:SetEnabled (onoff)
     end
+    if ksk.qf.cfgopts.orankedit then
+      if (K.player.isguilded and K.player.isgm) then
+        ksk.qf.cfgopts.orankedit:SetEnabled (onoff)
+      else
+        ksk.qf.cfgopts.orankedit:SetEnabled (false)
+      end
+    end
   end
   if (ksk.qf.cfgdelbutton) then
     ksk.qf.cfgdelbutton:SetEnabled (onoff)
@@ -127,6 +134,11 @@ local function config_selectitem (objp, idx, slot, btn, onoff)
     local en = ksk.csdata[admincfg].isadmin == 2 and true or false
     ksk.qf.cfgopts.cfgowner:SetEnabled (en)
     ksk.qf.cfgopts.tethered:SetEnabled (en)
+    if (lcf.cfgtype == ksk.CFGTYPE_GUILD and K.player.isguilded and K.player.isgm) then
+      ksk.qf.cfgopts.orankedit:SetEnabled (en)
+    else
+      ksk.qf.cfgopts.orankedit:SetEnabled (false)
+    end
     ksk.qf.coadadd:SetEnabled (en and lcf.nadmins < 36)
     ksk.qf.cfgrenbutton:SetEnabled (en)
     local foo = ksk:CanChangeConfigType ()
@@ -532,6 +544,7 @@ local function copy_space_button (cfgid, newname, newid, shown)
         dc.tethered = sc.tethered
         dc.cfgtype = sc.cfgtype
         dc.owner = ksk:FindUser (sc.users[sc.owner].name, newid)
+        dc.oranks = sc.oranks
       end
 
       --
@@ -795,6 +808,83 @@ local function rank_editor ()
 end
 
 local coadmin_popup
+
+local function orank_edit_button ()
+  if (not ksk.orankdialog) then
+    local arg = {
+      x = "CENTER", y = "MIDDLE",
+      name = "KSKiOfficerRankEditDlg",
+      title = L["Set Guild Officer Ranks"],
+      border = true,
+      width = 240,
+      height = 372,
+      canmove = true,
+      canresize = false,
+      escclose = true,
+      okbutton = { text = K.ACCEPTSTR },
+      cancelbutton = {text = K.CANCELSTR },
+    }
+
+    local y = 24
+
+    local ret = KUI:CreateDialogFrame (arg)
+
+    arg = {
+      width = 170, height = 24
+    }
+    for i = 1, 10 do
+      y = y - 24
+      local cbn = "orankcb" .. tostring(i)
+      arg.y = y
+      arg.x = 10
+      arg.label = { text = " " }
+      ret[cbn] = KUI:CreateCheckBox (arg, ret)
+    end
+
+    ret.OnCancel = function (this)
+      this:Hide ()
+      ksk.mainwin:Show ()
+    end
+
+    ret.OnAccept = function (this)
+      local ccs
+      local oranks = ""
+      for i = 1, K.guild.numranks do
+        ccs = "orankcb" .. tostring(i)
+        if (this[ccs]:GetChecked ()) then
+          oranks = oranks .. "1"
+        else
+          oranks = oranks .. "0"
+        end
+      end
+      oranks = strsub (oranks .. "0000000000", 1, 10)
+      ksk.frdb.configs[admincfg].oranks = oranks
+      ksk.SendAM ("ORANK", "ALERT", oranks)
+      this:Hide ()
+      ksk.mainwin:Show ()
+    end
+
+    ksk.orankdialog = ret
+  end
+
+  local rp = ksk.orankdialog
+  local lcf = ksk.frdb.configs[admincfg]
+  rp:SetHeight (((K.guild.numranks + 1) * 28) + 10)
+
+  for i = 1, 10 do
+    local rcb = "orankcb" .. tostring(i)
+    if (K.guild.ranks[i]) then
+      rp[rcb]:SetText (K.guild.ranks[i])
+      rp[rcb]:Show ()
+      rp[rcb]:SetChecked (strsub (lcf.oranks, i, i) == "1")
+    else
+      rp[rcb]:Hide ()
+    end
+  end
+
+  ksk.mainwin:Hide ()
+  rp:Show ()
+end
 
 function ksk:InitialiseConfigGUI ()
   local arg
@@ -1171,7 +1261,7 @@ function ksk:InitialiseConfigGUI ()
   ypos = ypos - 24
 
   --
-  -- Config panel, admin tab
+  -- Config panel, roll options tab
   --
   local cf = ksk.qf.rollopts
   ypos = 0
@@ -1270,7 +1360,7 @@ function ksk:InitialiseConfigGUI ()
   local bl = ls.hsplit.bottomframe
 
   arg = {
-    height = 105,
+    height = 135,
     name = "KSKCfgAdminRSHSplit",
     leftsplit = true,
     topanchor = true,
@@ -1385,7 +1475,7 @@ function ksk:InitialiseConfigGUI ()
   tr.cfgowner:Catch ("OnValueChanged", function (this, evt, newv, user)
     if (user) then
       local lcf = ksk.frdb.configs[admincfg]
-      lcf.owner = nuid
+      lcf.owner = newv
       ksk:UpdateUserSecurity ()
       ksk:RefreshCSData ()
       local en = ksk.csdata[admincfg].isadmin == 2 and true or false
@@ -1395,6 +1485,17 @@ function ksk:InitialiseConfigGUI ()
         en = false
       end
       tr.cfgtype:SetEnabled (en)
+      en = ksk.csdata[admincfg].isadmin == 2 and true or false
+      if (en and lcf.cfgtype == ksk.CFGTYPE_GUILD) then
+        if (K.player.isguilded and K.player.isgm and K.guild.gmname == newv)  then
+          en = true
+        else
+          en = false
+        end
+      else
+        en = false
+      end
+      tr.orankedit:SetEnabled (en)
       ksk:RefreshConfigSpaces ()
     end
   end)
@@ -1427,6 +1528,28 @@ function ksk:InitialiseConfigGUI ()
   tr.cfgtype:Catch ("OnValueChanged", function (this, evt, newv)
     local lcf = ksk.frdb.configs[admincfg]
     lcf.cfgtype = newv
+    if (lcf.cfgtype == ksk.CFGTYPE_GUILD and K.player.isguilded and K.player.isgm) then
+      ksk.qf.cfgopts.orankedit:SetEnabled (true)
+    else
+      ksk.qf.cfgopts.orankedit:SetEnabled (false)
+    end
+  end)
+  arg = {}
+
+  arg = {
+    name = "KSKCfgGuildOfficerButton",
+    x = 4, y = -92, width = 160, height = 24,
+    text = L["Edit Officer Ranks"], enabled = false,
+    tooltip = { title = "$$", text = L["TIP100"] }
+  }
+  tr.orankedit = KUI:CreateButton (arg, tr)
+  tr.orankedit:Catch ("OnClick", function (this, evt)
+    local lcf = ksk.frdb.configs[admincfg]
+    if (lcf.cfgtype == ksk.CFGTYPE_GUILD and K.player.isguilded and K.player.isgm) then
+      ksk.mainwin:Hide ()
+      K:UpdatePlayerAndGuild ()
+      orank_edit_button ()
+    end
   end)
   arg = {}
 
@@ -1601,7 +1724,6 @@ end
 function ksk:RefreshConfigSpaces ()
   local vt = {}
   sortedconfigs = {}
-  ksk.frdb.configs = ksk.frdb.configs
   ksk.currentid = ksk.frdb.defconfig
   ksk.cfg = ksk.frdb.configs[ksk.currentid]
   ksk.users = ksk.frdb.configs[ksk.currentid].users
@@ -1787,6 +1909,7 @@ function ksk:CreateNewConfig (name, initial, new, nouser, mykey)
   sp.name = name
   sp.tethered = false
   sp.cfgtype = ksk.CFGTYPE_PUG
+  sp.oranks = "1000000000"
   sp.settings = {}
   sp.history = {}
   sp.users = {}

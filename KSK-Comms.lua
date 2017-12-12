@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2010 James Kean Johnston. All rights reserved.
+   Copyright 2008-2017 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -596,15 +596,17 @@ end
 local function prepare_config_from_bcast (cfd)
   local ncf = {}
 
-  local cfgid, cfgname, cfgtype, tethered, uloot, owner, ts, crc
-  if (cfd.v == 1) then
-    cfgid, cfgname, cfgtype, tethered, uloot, owner, crc = strsplit (":", cfd.c)
+  local cfgid, cfgname, cfgtype, tethered, uloot, owner, ts, oranks, crc
+  cfgid = nil
+  if (cfd.v == 2) then
+    cfgid, cfgname, cfgtype, tethered, uloot, owner, oranks, crc = strsplit (":", cfd.c)
     ncf.name = cfgname
     ncf.cfgtype = tonumber (cfgtype)
     ncf.tethered = getbool (tethered)
     ncf.owner = owner
     ncf.cksum = tonumber (crc)
     ncf.lastevent = 0
+    ncf.oranks = oranks
 
     ncf.history = {}
 
@@ -679,6 +681,10 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
   local ncf, cfgid = prepare_config_from_bcast (cfd)
   local cfgtype = ncf.cfgtype
 
+  if (not cfgid or proto < 8) then
+    return
+  end
+
   --
   -- First step is to verify that the sending user is someone we should be
   -- paying attention to. If the configuration is a guild configuration,
@@ -688,7 +694,7 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
   --
   if (K.player.isguilded and cfgtype == ksk.CFGTYPE_GUILD) then
     -- Guild config
-    if (not ksk:UserIsRanked (sender)) then
+    if (not ksk:UserIsRanked (cfg, sender)) then
       debug (2, "BCAST returning: cfgtype=1 not ranked")
       return
     end
@@ -744,6 +750,7 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
       ksk.configs[cfgid].name = ncf.name
       ksk.configs[cfgid].tethered = ncf.tethered
       ksk.configs[cfgid].owner = ncf.owner
+      ksk.configs[cfgid].oranks = ncf.oranks
     end
 
     if (amadmin) then
@@ -2012,5 +2019,35 @@ ehandlers.SUNDO = function (adm, sender, proto, cmd, cfg, ...)
   local rilink = gsub (ilink, "\7", ":")
   local movelist = ksk:SplitRaidList (movers)
   ksk:UndoSuicide (cfg, listid, movelist, uid, ilink, true)
+end
+
+--
+-- Command: ORANK oranks
+-- Purpose: Sent to the guild when the GM has changed the list of which ranks
+--          are considered officer ranks. We only process this message if the
+--          sender is the GM.
+--
+ihandlers.ORANK = function (sender, proto, cmd, cfg, ...)
+  local oranks = ...
+
+  if (not ksk.configs[cfg]) then
+    return
+  end
+
+  local cfp = ksk.configs[cfg]
+
+  if (cfp.settings.cfgtype ~= ksk.CFGTYPE_GUILD) then
+    return
+  end
+
+  if (not K.player.isguilded) then
+    return
+  end
+
+  if (sender ~= K.guild.gmname) then
+    return
+  end
+
+  cfp.oranks = oranks
 end
 

@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2010 James Kean Johnston. All rights reserved.
+   Copyright 2008-2017 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ if (not K) then
   error ("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-if (tonumber(KM) < 730) then
+if (tonumber(KM) < 731) then
   error ("KahLua KonferSK: outdated KahLua Kore. Please update all KahLua addons.")
 end
 
@@ -53,8 +53,8 @@ if (not ksk) then
 end
 
 ksk.version = MINOR
-ksk.protocol = 7        -- Protocol version
-ksk.dbversion = 15
+ksk.protocol = 8        -- Protocol version
+ksk.dbversion = 16
 ksk.L = L
 ksk.CHAT_MSG_PREFIX = "KSK"
 ksk.initialised = false
@@ -519,7 +519,6 @@ ksk.defaults = {
   hide_absent = false,
   use_ranks = false,
   rank_prio = {},
-  tethered = false,
   denchers = {},
 }
 
@@ -1580,11 +1579,7 @@ function ksk:RefreshRaid (checkit)
   local nraiders = GetNumGroupMembers ()
   local oldinraid = ksk.inraid or nil
   ksk.inraid = IsInRaid ()
-  local _, rtype = GetInstanceInfo ()
   if (UnitInBattleground ("player")) then
-    ksk.inraid = false
-  end
-  if (rtype ~= "raid") then
     ksk.inraid = false
   end
   local sendmsg = false
@@ -2148,9 +2143,7 @@ local function chat_msg_whisper (evt, msg, snd, ...)
 end
 
 local function raid_roster_update (evt,...)
-  if (IsInRaid ()) then
-    ksk:RefreshRaid ()
-  end
+  ksk:RefreshRaid ()
 end
 
 ksk:RegisterMessage ("KSK_CONFIG_ADMIN", function (evt, onoff, ...)
