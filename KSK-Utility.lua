@@ -109,12 +109,16 @@ end
 -- if we cant tell or can tell if they are not.
 --
 function ksk:UserIsRanked (cfg, name)
-  if (not K.player.isguilded or not K.guild or not ksk.frdb.configs[cfg]) then
+  if (not K.player.isguilded or not K.guild) then
     return false
   end
 
   if (name == K.guild.gmname) then
     return true
+  end
+
+  if (not ksk.frdb.configs[cfg]) then
+    return false
   end
 
   if (not K.guild.roster.name[name]) then
