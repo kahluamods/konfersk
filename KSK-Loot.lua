@@ -3970,7 +3970,9 @@ end
 function ksk:CleanupLootRoll ()
   if (ksk.rolling) then
     ksk:EndOpenRoll ()
-    ksk.SendRaidAM ("EROLL", "ALERT")
+    if (ksk:AmIMasterLooter ()) then
+      ksk.SendRaidAM ("EROLL", "ALERT")
+    end
   end
   local rlf = ksk.qf.lootroll
   rlf:UnregisterEvent ("CHAT_MSG_SYSTEM")

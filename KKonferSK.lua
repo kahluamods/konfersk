@@ -422,6 +422,28 @@ function ksk:UpdateUserSecurity ()
   ksk:SendMessage ("KSK_CONFIG_ADMIN", ksk.csd.isadmin ~= nil)
 end
 
+function ksk:AmIMasterLooter ()
+  if (not ksk.inraid or not ksk.isml or not ksk.raid or not ksk.raid.masterloot) then
+    return false
+  end
+  return true
+end
+
+function ksk:IsSenderMasterLooter (sender)
+  if (not ksk.inraid or not ksk.raid or not ksk.raid.players or not ksk.raid.players[sender]) then
+    return false
+  end
+  local ix = ksk.raid.players[sender]
+  if (not ksk.raid.members or not ksk.raid.members[ix]) then
+    return false
+  end
+  if (ksk.raid.members[ix].ml) then
+    return true
+  else
+    return false
+  end
+end
+
 function ksk:IsAdmin (uid, cfg)
   local cfg = cfg or ksk.currentid
   if (not cfg) then
@@ -910,7 +932,11 @@ end
 
 local function ksk_main()
   ksk.mainwin:Show ()
-  ksk.mainwin:SetTab (ksk.LISTS_TAB, ksk.LISTS_MEMBERS_TAB)
+  if (ksk.bossloot) then
+    ksk.mainwin:SetTab (ksk.LOOT_TAB, ksk.LOOT_ASSIGN_TAB)
+  else
+    ksk.mainwin:SetTab (ksk.LISTS_TAB, ksk.LISTS_MEMBERS_TAB)
+  end
 end
 
 local function ksk_users()
@@ -1805,7 +1831,7 @@ end
 -- the loot table.
 --
 function ksk:RefreshBossLoot()
-  if (ksk.suspended or (not ksk.inraid) or (not ksk.isml) or (not ksk.raid) or (not ksk.raid.masterloot)) then
+  if (ksk.suspended or not ksk:AmIMasterLooter ()) then
     return
   end
 

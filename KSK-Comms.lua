@@ -473,6 +473,10 @@ ihandlers.OLOOT = function (sender, proto, cmd, cfg, ...)
     return
   end
 
+  if (not ksk:IsSenderMasterLooter (sender)) then
+    return
+  end
+
   ksk:ResetBossLoot ()
   ksk.bossloot = {}
 
@@ -512,6 +516,10 @@ end
 --          OLOOT processing.
 --
 ihandlers.CLOOT = function (sender, proto, cmd, cfg, ...)
+  if (not ksk:IsSenderMasterLooter (sender)) then
+    return
+  end
+
   ksk:ResetBossLoot ()
   if (we_opened) then
     we_opened = nil
@@ -545,6 +553,9 @@ ihandlers.BIDCL = function (sender, proto, cmd, cfg, ...)
     return
   end
   if (not ksk.bossloot) then
+    return
+  end
+  if (not ksk:IsSenderMasterLooter (sender)) then
     return
   end
   ksk:ResetBidders (false)
@@ -1955,6 +1966,9 @@ end
 -- Purpose: Sent when an item is being sent to open roll.
 --
 ihandlers.OROLL = function (sender, proto, cmd, cfg, ilink, timeout)
+  if (not ksk:IsSenderMasterLooter (sender)) then
+    return
+  end
   ksk.rolling = 1
   ksk:StartOpenRoll (ilink, timeout)
 end
@@ -1964,6 +1978,9 @@ end
 -- Purpose: Sent when a roll ends or is cancelled.
 --
 ihandlers.EROLL = function (sender, proto, cmd, cfg, ...)
+  if (not ksk:IsSenderMasterLooter (sender)) then
+    return
+  end
   ksk.rolling = nil
   ksk:EndOpenRoll ()
 end
