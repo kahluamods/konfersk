@@ -64,19 +64,21 @@ local red = ksk.red
 local green = ksk.green
 local yellow = ksk.yellow
 local class = ksk.class
+local shortclass = ksk.shortclass
 local aclass = ksk.aclass
+local shortaclass = ksk.shortaclass
 
-local initdone = false
 local selsyncer
 local sortedsyncers
 local repliers
 local busy_with_sync = nil
 local recovery = nil
+local qf = {}
 
 local function clear_syncers_list ()
-  ksk.qf.syncers.itemcount = 0
-  ksk.qf.syncers:UpdateList ()
-  ksk.qf.syncers:SetSelected (nil)
+  qf.syncers.itemcount = 0
+  qf.syncers:UpdateList ()
+  qf.syncers:SetSelected (nil)
   repliers = nil
 end
 
@@ -88,26 +90,26 @@ end
 --
 
 local function slist_selectitem (objp, idx, slot, btn, onoff)
+  local onoff = onoff or false
   local mask = true
-  if (ksk.csd.isadmin == 2 and not ksk.cfg.syncing) then
+
+  if (ksk.csd.is_admin == 2 and not ksk.cfg.syncing) then
     mask = false
   end
 
   if (onoff) then
     local en = true
-    ksk.qf.reqsyncbutton:SetEnabled (en and mask)
-    if (ksk.csd.isadmin == 2) then
+    qf.reqsyncbutton:SetEnabled (en and mask)
+    if (ksk.csd.is_admin == 2) then
       en = true
     else
       en = false
     end
-    ksk.qf.recoverbutton:SetEnabled (en)
-  elseif (onoff == nil) then
-    if (initdone) then
-      ksk.qf.reqsyncallbutton:SetEnabled (mask)
-      ksk.qf.reqsyncbutton:SetEnabled (false)
-      ksk.qf.recoverbutton:SetEnabled (false)
-    end
+    qf.recoverbutton:SetEnabled (en)
+  else
+    qf.reqsyncallbutton:SetEnabled (mask)
+    qf.reqsyncbutton:SetEnabled (false)
+    qf.recoverbutton:SetEnabled (false)
   end
 end
 
@@ -135,7 +137,7 @@ local function rlist_newitem (objp, num)
       return
     end
     local rp = repliers[idx]
-    busy_with_sync = aclass (ksk.users[rp.theiruid])
+    busy_with_sync = shortaclass (ksk.users[rp.theiruid])
 
     --
     -- This is where the magic starts. We have determined that the user has
@@ -201,8 +203,7 @@ local function rlist_newitem (objp, num)
     if (rp.synced) then
       self.syncbutton:Disable ()
     end
-    self.tss:SetText (fn (strfmt ("%s / %s", strfmt ("%014.0f", rp.mylast),
-      strfmt ("%014.0f", rp.last))))
+    self.tss:SetText (fn (strfmt ("%014.0f / %014.0f", rp.mylast, rp.last)))
   end
 
   rf:SetScript ("OnClick", function (this)
@@ -224,7 +225,7 @@ end
 -- This function will prepare the table to be broadcast for a specified
 -- config.
 -- a table suitable for transmission with the following values:
---   v=1 (version 1 broadcast)
+--   v=2 (version 2 broadcast)
 --   c=cfgid:name:type:tethered:limit:ownerid:oranks:crc
 --   u={numusers,userlist}
 --     Each element in userlist is name:class:role:ench:frozen:exempt:alt:main
@@ -301,7 +302,7 @@ local function broadcast_config ()
   ksk.SendAM ("BCAST", "ALERT", ci)
 end
 
-function ksk:RecoverConfig (sender, cfg, cfgid, rdata)
+function ksk.RecoverConfig (sender, cfg, cfgid, rdata)
   if (not recovery) then
     return
   end
@@ -310,7 +311,7 @@ function ksk:RecoverConfig (sender, cfg, cfgid, rdata)
     return
   end
 
-  local current_cfgid = ksk:FindConfig (cfg.name)
+  local current_cfgid = ksk.FindConfig (cfg.name)
   assert (current_cfgid)
 
   --
@@ -329,7 +330,7 @@ function ksk:RecoverConfig (sender, cfg, cfgid, rdata)
 
   for k,v in pairs (rdata.s) do
     local adm, le = strsplit (":", v)
-    if (adm == "0001") then
+    if (adm == cfg.owner) then
       cfg.lastevent = tonumber (le)
       cfg.admins[adm] = { id = "0" }
     else
@@ -352,12 +353,13 @@ function ksk:RecoverConfig (sender, cfg, cfgid, rdata)
     end
   end
   if (ksk.frdb.defconfig == cfgid) then
-    ksk:SetDefaultConfig (cfgid, true, true)
+    ksk.SetDefaultConfig (cfgid, true, true)
   end
-  ksk:FullRefresh ()
-  ksk:SyncUpdateReplier ()
-  ksk:RefreshSyncers (true)
-  info ("recovery from user %s complete.", aclass (cfg.users[rdata.d]))
+  ksk.FullRefresh (true)
+  ksk.SyncUpdateReplier ()
+  ksk.RefreshSyncUI (true)
+  info ("recovery from user %s complete.", shortaclass (cfg.users[rdata.d]))
+  ksk.mainwin:Show ()
 end
 
 local function recover_config ()
@@ -372,10 +374,10 @@ local function recover_config ()
     --
     recovery = { cfg = arg.cfg, uid = arg.uid }
     ksk.SendWhisperAM (ksk.users[arg.uid].name, "RCOVR", "ALERT", ksk.cfg.name)
-    info (L["waiting for recovery reply from %s. Do not use KSK until recovery is complete."], aclass (ksk.users[arg.uid]))
+    info (L["waiting for recovery reply from %s. Do not use KSK until recovery is complete."], shortaclass (ksk.users[arg.uid]))
   end
 
-  ksk:ConfirmationDialog (L["Recover Configuration"],
+  ksk.ConfirmationDialog (L["Recover Configuration"],
     strfmt (L["RECOVERMSG"], aclass (ksk.users[selsyncer]),
       aclass (ksk.users[selsyncer])),
     ksk.cfg.name, real_recover,
@@ -383,7 +385,7 @@ local function recover_config ()
   return
 end
 
-function ksk:InitialiseSyncGUI ()
+function ksk.InitialiseSyncUI ()
   local arg
 
   --
@@ -403,6 +405,7 @@ function ksk:InitialiseSyncGUI ()
   tbf.mycksum = KUI:CreateStringLabel (arg, tbf)
   arg = {}
 
+  -- Must preserve this in ksk.qf its used in many places.
   ksk.qf.synctopbar = tbf
   tbf.SetCurrentCRC = function ()
     tbf.mycksum:SetText (strfmt (L["My checksum: %s"], white (strfmt ("0x%s", K.hexstr (ksk.cfg.cksum)))))
@@ -428,7 +431,7 @@ function ksk:InitialiseSyncGUI ()
     setitem = function (objp, idx, slot, btn)
       return KUI.SetItemHelper (objp, btn, idx,
         function (op, ix)
-          return aclass (ksk.cfg.users[sortedsyncers[ix]])
+          return shortaclass (ksk.cfg.users[sortedsyncers[ix]])
         end)
       end,
     selectitem = function (objp, idx, slot, btn, onoff)
@@ -443,7 +446,7 @@ function ksk:InitialiseSyncGUI ()
   }
   ls.olist = KUI:CreateScrollList (arg, ls)
   arg = {}
-  ksk.qf.syncerslist = ls.olist
+  qf.syncerslist = ls.olist
 
   local bdrop = {
     bgFile = KUI.TEXTURE_PATH .. "TDF-Fill",
@@ -464,7 +467,7 @@ function ksk:InitialiseSyncGUI ()
     ksk.SendWhisperAM (ksk.users[selsyncer].name, "RSYNC", "ALERT")
   end)
   arg = {}
-  ksk.qf.reqsyncbutton = br.rsync
+  qf.reqsyncbutton = br.rsync
 
   arg = {
     x = 145, y = ypos, text = L["Request Sync (All)"], width = 140,
@@ -477,7 +480,7 @@ function ksk:InitialiseSyncGUI ()
     ksk.SendAM ("RSYNC", "ALERT")
   end)
   arg = {}
-  ksk.qf.reqsyncallbutton = br.rsyncall
+  qf.reqsyncallbutton = br.rsyncall
   ypos = ypos - 24
 
   arg = {
@@ -490,6 +493,7 @@ function ksk:InitialiseSyncGUI ()
     broadcast_config ()
   end)
   arg = {}
+  -- Keep this in ksk.qf as its accessed from KKonferSK.lua
   ksk.qf.bcastbutton = br.bcast
 
   arg = {
@@ -499,11 +503,11 @@ function ksk:InitialiseSyncGUI ()
   }
   br.recover = KUI:CreateButton (arg, br)
   br.recover:Catch ("OnClick", function (this, evt)
-    if (ksk.csd.isadmin == 2) then
+    if (ksk.csd.is_admin == 2) then
       recover_config ()
     end
   end)
-  ksk.qf.recoverbutton = br.recover
+  qf.recoverbutton = br.recover
 
   arg = {
     name = "KSKSyncReplyScrollList",
@@ -517,23 +521,19 @@ function ksk:InitialiseSyncGUI ()
   }
   tr.rlist = KUI:CreateScrollList (arg, tr)
   arg = {}
-  ksk.qf.syncers = tr.rlist
+  qf.syncers = tr.rlist
   tr.rlist:SetBackdrop (bdrop)
-
-  initdone = true
-  clear_syncers_list ()
-  ksk:RefreshSyncers ()
 end
 
-function ksk:RefreshSyncers (clearlist)
-  if (not initdone) then
+function ksk.RefreshSyncUI (reset)
+  if (ksk.frdb.tempcfg) then
     return
   end
 
   sortedsyncers = {}
   selsyncer = nil
 
-  local ia, maid = ksk:IsAdmin (ksk.csd.myuid)
+  local ia, maid = ksk.IsAdmin (ksk.csd.myuid)
 
   for k,v in pairs (ksk.cfg.admins) do
     if (k ~= maid) then
@@ -544,15 +544,15 @@ function ksk:RefreshSyncers (clearlist)
     return ksk.users[a].name < ksk.users[b].name
   end)
 
-  ksk.qf.syncerslist.itemcount = #sortedsyncers
-  ksk.qf.syncerslist:UpdateList ()
-  ksk.qf.syncerslist:SetSelected (nil)
+  qf.syncerslist.itemcount = #sortedsyncers
+  qf.syncerslist:UpdateList ()
+  qf.syncerslist:SetSelected (nil)
 
-  if (clearlist) then
+  if (reset) then
     repliers = nil
-    ksk.qf.syncers.itemcount = 0
-    ksk.qf.syncers:UpdateList ()
-    ksk.qf.syncers:SetSelected (nil)
+    qf.syncers.itemcount = 0
+    qf.syncers:UpdateList ()
+    qf.syncers:SetSelected (nil)
     return
   end
 
@@ -570,9 +570,9 @@ function ksk:RefreshSyncers (clearlist)
         i = i + 1
       end
     end
-    ksk.qf.syncers.itemcount = #repliers
-    ksk.qf.syncers:UpdateList ()
-    ksk.qf.syncers:SetSelected (nil)
+    qf.syncers.itemcount = #repliers
+    qf.syncers:UpdateList ()
+    qf.syncers:SetSelected (nil)
   end
 end
 
@@ -583,7 +583,7 @@ end
 -- that we are no longer busy syncing so that other sync buttons become
 -- active again.
 --
-function ksk:SyncUpdateReplier (theiruid, theireid)
+function ksk.SyncUpdateReplier (theiruid, theireid)
   busy_with_sync = nil
   if (not theiruid or not repliers) then
     return
@@ -612,7 +612,7 @@ end
 -- an active sync button will be displayed that when pressed, does the
 -- actual sync request.
 --
-function ksk:ProcessSyncAck (cfg, myuid, theiruid, cktheiruid, lastevt, cksum)
+function ksk.ProcessSyncAck (cfg, myuid, theiruid, cktheiruid, lastevt, cksum)
   repliers = repliers or {}
 
   local fullsync = false
@@ -625,23 +625,20 @@ function ksk:ProcessSyncAck (cfg, myuid, theiruid, cktheiruid, lastevt, cksum)
     mylast = 0
   end
 
-  local active = ksk.configs[cfg].admins[cktheiruid].active
-  if (not active) then
-    active = false
-  end
+  local active = ksk.configs[cfg].admins[cktheiruid].active or false
 
-  tinsert (repliers, { name = aclass (ksk.users[theiruid]),
+  tinsert (repliers, { name = shortaclass (ksk.users[theiruid]),
     theiruid = theiruid, myuid = myuid, mylast = mylast,
     last = lastevt, cksum = cksum, fullsync = fullsync,
     active = active, cktheiruid = cktheiruid,
   })
 
-  ksk.qf.syncers.itemcount = #repliers
-  ksk.qf.syncers:UpdateList ()
-  ksk.qf.syncers:SetSelected (nil)
+  qf.syncers.itemcount = #repliers
+  qf.syncers:UpdateList ()
+  qf.syncers:SetSelected (nil)
 end
 
-function ksk:SendFullSync (cfg, dest, lasteid, isrecover)
+function ksk.SendFullSync (cfg, dest, lasteid, isrecover)
   local ci = prepare_broadcast (cfg)
 
   --
@@ -683,12 +680,12 @@ function ksk:SendFullSync (cfg, dest, lasteid, isrecover)
   -- I may be on an alt. We need to set this to the real main ID not the
   -- alt ID.
   --
-  local ia,aid = ksk:IsAdmin (ksk.csdata[cfg].myuid, cfg)
+  local ia,aid = ksk.IsAdmin (ksk.csdata[cfg].myuid, cfg)
   ci.d = aid
 
   if (not isrecover) then
     ksk.configs[cfg].syncing = true
-    ksk.qf.reqsyncallbutton:SetEnabled (true)
+    qf.reqsyncallbutton:SetEnabled (true)
     ksk.SendWhisperAM (dest, "FSYNC", "ALERT", ci)
   else
     ksk.SendWhisperAM (dest, "RCACK", "ALERT", ci)
@@ -707,7 +704,7 @@ end
 -- they do, they can safely remove any events that are <= the event ID that
 -- we have. This helps keep memory usage down to the barest minimum.
 --
-function ksk:SyncCleanup ()
+function ksk.SyncCleanup ()
   local gsend = {}
   local psend = {}
 
@@ -725,7 +722,7 @@ function ksk:SyncCleanup ()
       if (ntc > 0) then
         if (v.cfgtype == ksk.CFGTYPE_GUILD) then
           tinsert (gsend, strfmt ("%s:%d:%s", k, ntc, sps))
-        elseif (v.cfgtype == ksk.CFGTYPE_PUG and ksk.inraid) then
+        elseif (v.cfgtype == ksk.CFGTYPE_PUG and ksk.raid) then
           tinsert (psend, strfmt ("%s:%d:%s", k, ntc, sps))
         end
       end

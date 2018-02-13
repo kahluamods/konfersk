@@ -70,6 +70,20 @@ local err = ksk.err
 -- This file contains all of the UI initialisation code for KahLua KonferSK.
 --
 
+--
+-- Local state variable to record the name of the last configuration we
+-- selected from the config dropdown. This is used to prevent a loop where
+-- the button is changed when a new config is selected, which makes a call
+-- to refresh the UI, which makes a call to set the conf, which makes a
+-- call to refresh the UI ..... ad infinitum. Note that this doesn't REALLY
+-- happen because the UI detects whether or not there has been an actual
+-- change but that means that this code is dependent on that exact behaviour
+-- which isn't a guaranteed contract between the UI code and this. So this
+-- errs on the side of caution and prevents what would otherwise be an
+-- infinite loop.
+--
+local last_cfg_selected = nil
+
 local maintitle = "|cffff2222<" .. K.KAHLUA .. ">|r " .. L["MODTITLE"]
 
 local mainwin = {
@@ -86,63 +100,64 @@ local mainwin = {
   minheight = 512,
   level = 8,
   tltexture = "Interface\\Addons\\KKonferSK\\KKonferSK.blp",
+  deftab = ksk.LISTS_TAB,
   tabs = {
     lists = {
       text = L["Lists"],
-      id = tostring (ksk.LISTS_TAB),
+      id = ksk.LISTS_TAB,
       title = maintitle .. " - " .. L["List Manager"],
-      vsplit = { width = 180 }, tabframe = "RIGHT",
+      vsplit = { width = 198 }, tabframe = "RIGHT",
+      deftab = ksk.LISTS_MEMBERS_PAGE,
       tabs = {
-        members = { text = L["Members"],id = tostring (ksk.LISTS_MEMBERS_TAB) },
-        config = { text = L["Config"],id = tostring (ksk.LISTS_CONFIG_TAB) },
+        members = { text = L["Members"], id = ksk.LISTS_MEMBERS_PAGE },
+        config = { text = L["Config"], id = ksk.LISTS_CONFIG_PAGE },
       },
     },
     loot = {
       text = L["Loot"],
-      id = tostring (ksk.LOOT_TAB),
+      id = ksk.LOOT_TAB,
       title = maintitle .. " - " .. L["Loot Manager"],
+      deftab = ksk.LOOT_ASSIGN_PAGE,
       tabs = {
-        assign = { text = L["Assign Loot"],
-          id = tostring (ksk.LOOT_ASSIGN_TAB), 
+        assign = { text = L["Assign Loot"], id = ksk.LOOT_ASSIGN_PAGE, 
           vsplit = { width = 180}, },
-        itemedit = { text = L["Item Editor"],
-          id = tostring (ksk.LOOT_ITEMS_TAB),
+        itemedit = { text = L["Item Editor"], id = ksk.LOOT_ITEMS_PAGE,
           vsplit = { width = 225}, },
-        history = { text = L["History"],
-          id = tostring (ksk.LOOT_HISTORY_TAB),
+        history = { text = L["History"], id = ksk.LOOT_HISTORY_PAGE,
           hsplit = { height = 48 }, },
       },
     },
     users = {
       text = L["Users"],
-      id = tostring (ksk.USERS_TAB), vsplit = { width = 180},
+      id = ksk.USERS_TAB, vsplit = { width = 210},
       title = maintitle .. " - " .. L["User List Manager"],
     },
     sync = {
       text = L["Sync"],
-      id = tostring (ksk.SYNC_TAB), vsplit = { width = 180},
+      id = ksk.SYNC_TAB, vsplit = { width = 180},
       title = maintitle .. " - " .. L["Sync Manager"],
     },
     config = {
       text = L["Config"],
-      id = tostring (ksk.CONFIG_TAB),
+      id = ksk.CONFIG_TAB,
       title = maintitle .. " - " .. L["Config Manager"],
+      deftab = ksk.CONFIG_LOOT_PAGE,
       tabs = {
-        loot = { text = L["Loot"], id = tostring (ksk.CONFIG_LOOT_TAB) },
-        rolls = { text = L["Rolls"], id = tostring (ksk.CONFIG_ROLLS_TAB) },
-        admin = { text = L["Admin"], id = tostring (ksk.CONFIG_ADMIN_TAB),
+        loot = { text = L["Loot"], id = ksk.CONFIG_LOOT_PAGE },
+        rolls = { text = L["Rolls"], id = ksk.CONFIG_ROLLS_PAGE },
+        admin = { text = L["Admin"], id = ksk.CONFIG_ADMIN_PAGE,
           vsplit = { width = 180}, },
       },
     },
   }
 }
 
-ksk.mainwin = KUI:CreateTabbedDialog (mainwin)
-
-function ksk:InitialiseUI()
+function ksk.InitialiseUI()
   if (ksk.initialised) then
     return
   end
+
+  ksk.mainwin = KUI:CreateTabbedDialog (mainwin)
 
   --
   -- Every panel and every sub-panel needs to display the current config and
@@ -163,44 +178,30 @@ function ksk:InitialiseUI()
   ksk.mainwin.cfgselector:ClearAllPoints ()
   ksk.mainwin.cfgselector:SetPoint ("TOPRIGHT", tbf, "TOPRIGHT", 4, -4)
   ksk.mainwin.cfgselector:Catch ("OnValueChanged", function (this, evt, nv)
-    ksk:SetDefaultConfig (nv)
+    if (ksk.frdb and not ksk.frdb.tempcfg) then
+      if (last_cfg_selected ~= nv) then
+        last_cfg_selected = nv
+        ksk.SetDefaultConfig (nv)
+        if (ksk.qf.synctopbar) then
+          ksk.qf.synctopbar:SetCurrentCRC ()
+        end
+      end
+    end
   end)
   arg = {}
 
-  ksk.qf.cfgsel = ksk.mainwin.cfgselector
-  ksk.qf.lootopts = ksk.mainwin.tabs[ksk.CONFIG_TAB].tabs[ksk.CONFIG_LOOT_TAB].content
-  ksk.qf.rollopts = ksk.mainwin.tabs[ksk.CONFIG_TAB].tabs[ksk.CONFIG_ROLLS_TAB].content
-  ksk.qf.cfgadmin = ksk.mainwin.tabs[ksk.CONFIG_TAB].tabs[ksk.CONFIG_ADMIN_TAB].content
   ksk.qf.configtab = ksk.mainwin.tabs[ksk.CONFIG_TAB].tbutton
   ksk.qf.userstab = ksk.mainwin.tabs[ksk.USERS_TAB].tbutton
   ksk.qf.synctab = ksk.mainwin.tabs[ksk.SYNC_TAB].tbutton
-  ksk.qf.loot = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ASSIGN_TAB].content
-  ksk.qf.iedit = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ITEMS_TAB].content
-  ksk.qf.iedittab = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ITEMS_TAB].tbutton
-  ksk.qf.listcfgtab = ksk.mainwin.tabs[ksk.LISTS_TAB].tabs[ksk.LISTS_CONFIG_TAB].tbutton
-  ksk.qf.cfgadmintab = ksk.mainwin.tabs[ksk.CONFIG_TAB].tabs[ksk.CONFIG_ADMIN_TAB].tbutton
+  ksk.qf.iedit = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ITEMS_PAGE].content
+  ksk.qf.iedittab = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ITEMS_PAGE].tbutton
+  ksk.qf.historytab = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_HISTORY_PAGE].tbutton
+  ksk.qf.listcfgtab = ksk.mainwin.tabs[ksk.LISTS_TAB].tabs[ksk.LISTS_CONFIG_PAGE].tbutton
+  ksk.qf.cfgadmintab = ksk.mainwin.tabs[ksk.CONFIG_TAB].tabs[ksk.CONFIG_ADMIN_PAGE].tbutton
 
-  ksk:InitialiseConfigGUI ()
-  ksk:InitialiseListsGUI ()
-  ksk:InitialiseUsersGUI ()
-  ksk:InitialiseLootGUI ()
-  ksk:InitialiseSyncGUI ()
-
-  ksk:RefreshListDropDowns ()
-  ksk:RefreshConfigSpaces ()
-  ksk:RefreshUsers ()
-  ksk:RefreshLists ()
-  ksk:RefreshHistory ()
-  ksk:RefreshItemList ()
-  ksk:UpdateAllConfigSettings ()
-  ksk.currentid = ksk.frdb.defconfig
-  ksk.initialised = true
-  K:UpdatePlayerAndGuild ()
-  ksk.mainwin.OnShow = function (this, evt)
-    K:UpdatePlayerAndGuild ()
-    ksk.mainwin.OnShow = function (this, evt)
-      ksk:CleanupLootRoll ()
-    end
-  end
+  ksk.InitialiseListsUI ()
+  ksk.InitialiseLootUI ()
+  ksk.InitialiseUsersUI ()
+  ksk.InitialiseSyncUI ()
+  ksk.InitialiseConfigUI ()
 end
-

@@ -94,6 +94,9 @@ L["WHISPERCMD_HELP"] = "ksk"
 -- Main localisation strings start here
 --
 
+L["VCTITLE"] = "%s %s Version Check"
+L["Version"] = true
+L["In Raid"] = true
 L["NEWMSG"] = "Enter the name of a new configuration space below. Please remember that this new space shares absolutely no data with any other configuration space. This new configuration will be treated as if it was an entirely separate copy of Konfer running."
 L["DELMSG"] = "Are you absolutely sure you want to delete this configuration? It is not possible to undo this operation, and all roll lists, user permissions, raid history and user loot information associated with this configuration will be lost. If you are the owner of this configuration and you have shared it with other users, you should wait until you have transfered ownership to another user, else they will be unable to edit any security related settings on the list. Please be very sure the correct list is displayed above before proceeding."
 L["DELUSER"] = "Are you absolutely sure you want to delete this user? It is not possible to undo this operation, and all user history and information will be lost, and the user will be removed from all roll lists in all configurations, not just the active one. If this user is a main and has alts defined, they can all be removed as well. Please be very sure the correct user is displayed above before proceeding."
@@ -362,7 +365,7 @@ L["%s: I am not the master looter."] = true
 L["%s: loot method is not master looter, there is no bidding."] = true
 L["%s: you were not found in the user list. Contact an admin for help."] = true
 L["%s: you are not in my guild - bid ignored."] = true
-L["%s: user %q has no role defined - permitting %s."] = true
+L["user %q has no role defined - permitting %s."] = true
 L["%s: you are not a member of the %q list - bid ignored."] = true
 L["%q attempted to bid on the %q list but is not a member."] = true
 L["%s: you have already bid on that item. Whisper %s the word %q to retract your bid."] = true
@@ -477,7 +480,7 @@ L["Auto-disenchant Items Below Threshold"] = true
 L["Auto-assign to Enchanter"] = true
 L["Auto-assign to Master Looter"] = true
 L["Raiders Not on Current List"] = true
-L["%s: users not on the %q list: %s"] = true
+L["users not on the %q list: %s"] = true
 L["User Search"] = true
 L["Edit Officer Ranks"] = true
 L["Set Guild Officer Ranks"] = true

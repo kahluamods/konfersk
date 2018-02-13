@@ -1,12 +1,13 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
      WWW: http://kahluamod.com/ksk
-     SVN: http://kahluamod.com/svn/konfersk
+     Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
      E-mail: cruciformer@gmail.com
+
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2017 James Kean Johnston. All rights reserved.
+   Copyright 2008-2018 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -70,46 +71,11 @@ local aclass = ksk.aclass
 --
 
 --
--- This function will take a given itemlink and examine its tooltip looking
--- for class restrictions. It will return a class filter mask suitable for
--- use in the loot system. If no class restriction was found, return the
--- all-inclusive mask.
---
-function ksk.GetItemClassFilter (ilink)
-  local tnm = GetItemInfo (ilink)
-  if (not tnm or tnm == "") then
-    return ksk.allclasses, nil
-  end
-
-  local tt = ksk.ScanTooltip (ilink)
-  local ss = strfmt (ITEM_CLASSES_ALLOWED, "(.-)\n")
-  local foo = string.match (tt, ss)
-  local boe = nil
-  if (string.match (tt, ITEM_BIND_ON_PICKUP)) then
-    boe = false
-  elseif (string.match (tt, ITEM_BIND_ON_EQUIP)) then
-    boe = true
-  end
-
-  if (foo) then
-    foo = gsub (foo, " ", "")
-    local clist = { "0","0","0","0","0","0","0","0","0","0","0", "0" }
-    for k,v in pairs ( { string.split (",", foo) } ) do
-      local cp = tonumber (K.LClassIndexNSP[v]) or 10
-      clist[cp] = "1"
-    end
-    return tconcat (clist, ""), boe
-  else
-    return ksk.allclasses, boe
-  end
-end
-
---
 -- Returns true if the user is thought to be a guild master, false
 -- if we cant tell or can tell if they are not.
 --
-function ksk:UserIsRanked (cfg, name)
-  if (not K.player.isguilded or not K.guild) then
+function ksk.UserIsRanked (cfg, name)
+  if (not K.player.is_guilded or not K.guild) then
     return false
   end
 
@@ -127,7 +93,7 @@ function ksk:UserIsRanked (cfg, name)
 
   local gi = K.guild.roster.name[name]
   local gu = K.guild.roster.id[gi]
-  local ri = gu.rankidx + 1
+  local ri = gu.rank
   if (strsub (ksk.frdb.configs[cfg].oranks, ri, ri) == "1") then
     return true
   end
@@ -139,10 +105,10 @@ end
 -- If we have tethered alts, and the alt is in the raid, we need to store
 -- the UID of the alt's main, else they will not be suicided.
 --
-function ksk:CreateRaidList (listid)
+function ksk.CreateRaidList (listid)
   local raiders = {}
   for k,v in ipairs (ksk.lists[listid].users) do
-    if (ksk:UserIsReserved (v)) then
+    if (ksk.UserIsReserved (v)) then
       tinsert (raiders, v)
     elseif (ksk.raid.users[v]) then
       tinsert (raiders, v)
@@ -158,7 +124,7 @@ function ksk:CreateRaidList (listid)
   return raiders
 end
 
-function ksk:SplitRaidList (raidlist)
+function ksk.SplitRaidList (raidlist)
   local raiders = {}
   for w in string.gmatch (raidlist, "....") do
     tinsert (raiders, w)
@@ -190,14 +156,17 @@ end
 -- suicided is themselves frozen, we simply pretend that they are not, and
 -- move them to the bottom of the list.
 --
-function ksk:SuicideUserLowLevel (listid, rlist, uid, cfgid, ilink)
+function ksk.SuicideUserLowLevel (listid, rlist, uid, cfgid, ilink)
   cfgid = cfgid or ksk.currentid
+
   if (not ksk.configs[cfgid]) then
     return
   end
+
   if (not ksk.configs[cfgid].lists[listid]) then
     return
   end
+
   local wl = ksk.configs[cfgid].lists[listid]
   local lu = wl.users
   local found = false
@@ -234,7 +203,7 @@ function ksk:SuicideUserLowLevel (listid, rlist, uid, cfgid, ilink)
         foundfirst = true
       end
       if (foundfirst) then
-        if (lu[i] == uid or not ksk:UserIsFrozen (lu[i], nil, cfgid)) then
+        if (lu[i] == uid or not ksk.UserIsFrozen (lu[i], nil, cfgid)) then
           tinsert (movers, i)
         end
       end
@@ -268,7 +237,7 @@ function ksk:SuicideUserLowLevel (listid, rlist, uid, cfgid, ilink)
       return
     end
     for i = p+1, #lu do
-      if (not ksk:UserIsFrozen (lu[i], nil, cfgid)) then
+      if (not ksk.UserIsFrozen (lu[i], nil, cfgid)) then
         tinsert (movers, i)
       end
     end
@@ -288,18 +257,19 @@ function ksk:SuicideUserLowLevel (listid, rlist, uid, cfgid, ilink)
     ksk.csdata[cfgid].undo = {}
   end
   tinsert (ksk.csdata[cfgid].undo, 1, undo)
-  ksk.qf.undobutton:SetEnabled (true)
+  if (ksk.AmIML() and cfgid == ksk.currentid) then
+    ksk.qf.undobutton:SetEnabled (true)
+  end
   local nmove = undo.n - 1
   for i = 1, nmove do
     lu[movers[i]] = lu[movers[i+1]]
   end
   lu[movers[nmove+1]] = uid
-  ksk:RefreshLists ()
+  ksk.RefreshAllMemberLists ()
 end
 
 function ksk.AddEvent (cfgid, event, estr, ufn)
   local cfgid = cfgid or ksk.currentid
-  debug (9, "adding event %q [%s] for cfgid %s", event, estr, cfgid)
 
   --
   -- If I am an admin, but not the owner, and I am not syncing yet, do
@@ -308,7 +278,7 @@ function ksk.AddEvent (cfgid, event, estr, ufn)
   -- relationship.
   --
   local myuid = ksk.csdata[cfgid].myuid
-  local ov = ksk.csdata[cfgid].isadmin
+  local ov = ksk.csdata[cfgid].is_admin
   if (ov == 1 and not ksk.configs[cfgid].syncing) then
     return
   end
@@ -328,7 +298,7 @@ function ksk.AddEvent (cfgid, event, estr, ufn)
   local oldsum = cfg.cksum
   local newsum = bxor (oldsum, crc)
   local oldeid = cfg.lastevent
-  local eid = ksk:GetEventID (cfgid)
+  local eid = ksk.GetEventID (cfgid)
   local scrc = strfmt ("0x%s", K.hexstr (crc))
   cfg.cksum = newsum
   if (ksk.qf.synctopbar) then
@@ -349,7 +319,7 @@ function ksk.AddEvent (cfgid, event, estr, ufn)
   ksk.CSendAM (cfgid, event, "ALERT", estr, scrc, eid, oldeid, ufn or false)
 end
 
-function ksk:RepairDatabases (users, lists)
+function ksk.RepairDatabases (users, lists)
   if (users == nil) then
     users = true
   end
@@ -376,7 +346,7 @@ function ksk:RepairDatabases (users, lists)
       -- First remove any alts whose main was removed
       for uk, uv in pairs (v.users) do
         if (uv.main and not v.users[uv.main]) then
-          ksk:DeleteUser (uk, k, false, true)
+          ksk.DeleteUser (uk, k, false, true)
         end
       end
       -- Now calculate the correct number of users
@@ -429,7 +399,7 @@ function ksk:RepairDatabases (users, lists)
   end
 end
 
-function ksk:UpdateDatabaseVersion ()
+function ksk.UpdateDatabaseVersion ()
   local ret = false
 
   if (not ksk.frdb.dbversion) then
@@ -570,7 +540,7 @@ function ksk:UpdateDatabaseVersion ()
           else
             err ("forced to remove user %q from configuration %q due to bad Suicide Kings import data.", uv.name, v.name)
             uv.class = K.CLASS_PRIEST
-            ksk:DeleteUser (uk, k, true)
+            ksk.DeleteUser (uk, k, true)
           end
         end
       end
@@ -623,7 +593,7 @@ function ksk:UpdateDatabaseVersion ()
     -- corrupted user database and we need to fix it here.
     -- This is now done every time the mod initialises.
     --
-    ksk:RepairDatabases (true, true)
+    ksk.RepairDatabases (true, true)
     ksk.frdb.dbversion = 13
     ret = true
   end
@@ -638,7 +608,7 @@ function ksk:UpdateDatabaseVersion ()
     end
     ret = true
     ksk.frdb.dbversion = 14
-    ksk:RepairDatabases (true, true)
+    ksk.RepairDatabases (true, true)
   end
 
   if (ksk.frdb.dbversion == 14) then
@@ -667,6 +637,42 @@ function ksk:UpdateDatabaseVersion ()
       v.settings.tethered = nil
     end
     ret = true
+    ksk.frdb.dbversion = 16
+  end
+
+  if (ksk.frdb.dbversion == 16) then
+    --
+    -- Version 17 changed the value for an unknown guild rank from 999 to 0.
+    -- It also dropped the number of denchers you can define in a config
+    -- from 6 to 4, so remove the last 2. PUG configs can't use guild rank
+    -- priorities so make sure they are set to none in all the configs.
+    -- PUG configs can't announce winners to guild chat.
+    --
+    for k, v in pairs (ksk.frdb.configs) do
+      v.settings.denchers[5] = nil
+      v.settings.denchers[6] = nil
+      if (v.settings.def_rank == 999) then
+        v.settings.def_rank = 0
+      end
+      for kk, vv in pairs (v.lists) do
+        if (vv.def_rank == 999) then
+          vv.def_rank = 0
+        end
+      end
+      if (v.cfgtype == ksk.CFGTYPE_PUG) then
+        v.settings.def_rank = 0
+        v.settings.use_ranks = false
+        v.settings.ann_winners_guild = false
+        v.settings.rank_prio = {}
+        for kk, vv in pairs (v.lists) do
+          vv.def_rank = 0
+        end
+        for kk, vv in pairs (v.items) do
+          vv.rank = 0
+        end
+      end
+    end
+    ret = true
   end
 
   --
@@ -690,110 +696,4 @@ function ksk:UpdateDatabaseVersion ()
   ksk.frdb.dbversion = ksk.dbversion
   return ret
 end
-
---
--- This portion of this file (through to the end) was not written by me.
--- It was a link given to me by Adys on #wowuidev@irc.freenode.net. Many
--- thanks for this code. It has been modified to suit KSK so any bugs are
--- mine.
---
-
---[[
-Copyright (c) Jerome Leclanche. All rights reserved.
-
-
-Redistribution and use in source and binary forms, with or without modification,
-are permitted provided that the following conditions are met:
-
-    1. Redistributions of source code must retain the above copyright notice, 
-       this list of conditions and the following disclaimer.
-    
-    2. Redistributions in binary form must reproduce the above copyright 
-       notice, this list of conditions and the following disclaimer in the
-       documentation and/or other materials provided with the distribution.
-
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
---]]
-
-local ksktt = CreateFrame ("GameTooltip", "KSKUTooltip", UIParent,
-  "GameTooltipTemplate")
-ksktt:SetOwner (UIParent, "ANCHOR_PRESERVE")
-ksktt:SetPoint ("CENTER", "UIParent")
-ksktt:Hide ()
-
-local function SetTooltipHack (link)
-  ksktt:SetOwner (UIParent, "ANCHOR_PRESERVE")
-  ksktt:SetHyperlink ("spell:1")
-  ksktt:Show ()
-  ksktt:SetHyperlink (link)
-end
-
-local function UnsetTooltipHack ()
-  ksktt:SetOwner (UIParent, "ANCHOR_PRESERVE")
-  ksktt:Hide ()
-end
-
-function ksk.ScanTooltip (link)
-  SetTooltipHack (link)
-
-  local lines = ksktt:NumLines ()
-  local tooltiptxt = ""
-
-  for i = 1, lines do
-    local left = _G["KSKUTooltipTextLeft"..i]:GetText ()
-    local right = _G["KSKUTooltipTextRight"..i]:GetText ()
-
-    if (left) then
-      tooltiptxt = tooltiptxt .. left
-      if (right) then
-        tooltiptxt = tooltiptxt .. "\t" .. right .. "\n"
-      else
-        tooltiptxt = tooltiptxt .. "\n"
-      end
-    elseif (right) then
-      tooltiptxt = tooltiptxt .. right .. "\n"
-    end
-  end
-
-  UnsetTooltipHack ()
-  return tooltiptxt
-end
-
---[[ NOT CURRENTLY USED
-function ksk.GetTooltipLine (link, line, side)
-  side = side or "Left"
-  SetTooltipHack (link)
-
-  local lines = ksktt:NumLines ()
-  if (line > lines) then
-    return UnsetTooltipHack()
-  end
-
-  local text = _G["KSKUTooltipText"..side..line]:GetText ()
-  UnsetTooltipHack ()
-  return text
-end
-
-function ksk.GetTooltipLines (link, ...)
-  local lines = {}
-  SetTooltipHack (link)
-        
-  for k,v in pairs({...}) do
-    lines[#lines+1] = _G["KSKUTooltipTextLeft"..v]:GetText()
-  end
-
-  UnsetTooltipHack ()
-  return unpack (lines)
-end
-]]
 
