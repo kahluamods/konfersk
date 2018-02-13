@@ -116,9 +116,17 @@ local ihandlers = {}
 local ehandlers = {}
 
 local function send_addon_msg (cfg, cmd, prio, dist, target, ...)
+  local proto = ksk.protocol
+  local rcmd = cmd
+  if (type (cmd) == "table") then
+    assert(cmd.proto)
+    assert(cmd.cmd)
+    proto = cmd.proto
+    rcmd = cmd.cmd
+  end
   local cfg = cfg or ksk.currentid
   local prio = prio or "BULK"
-  local fs = strfmt ("%02x:%s:%s:", ksk.protocol, cmd, cfg)
+  local fs = strfmt ("%02x:%s:%s:", proto, rcmd, cfg)
   local crc = H:CRC32 (fs, nil, false)
   local ndata = K.Serialise (...)
   crc = H:CRC32 (ndata, crc, true)

@@ -985,10 +985,10 @@ local function ksk_versioncheck ()
   vcdlg:Show ()
 
   if (ksk.raid) then
-    ksk.SendRaidAM ("VCHEK", nil)
+    ksk.SendRaidAM ({proto = 6, cmd = "VCHEK"}, nil)
   end
   if (K.player.is_guilded) then
-    ksk.SendGuildAM ("VCHEK", nil)
+    ksk.SendGuildAM ({proto = 6, cmd = "VCHEK"}, nil)
   end
 end
 
