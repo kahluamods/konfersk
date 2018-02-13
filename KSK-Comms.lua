@@ -439,7 +439,7 @@ end
 -- Purpose: Respond to sender with a version check
 --
 ihandlers.VCHEK = function (sender, proto, cmd, cfg, ...)
-  ksk.SendWhisperAM (sender, "VCACK", nil, ksk.version)
+  ksk.SendWhisperAM (sender, { proto = 6, cmd = "VCACK" }, nil, ksk.version)
 end
 
 --
