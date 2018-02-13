@@ -1,12 +1,13 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
      WWW: http://kahluamod.com/ksk
-     SVN: http://kahluamod.com/svn/konfersk
+     Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
      E-mail: cruciformer@gmail.com
+
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2017 James Kean Johnston. All rights reserved.
+   Copyright 2008-2018 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -32,9 +33,13 @@ if (not LibDeformat) then
   error ("KahLua KonferSK: could not find LibDeformat.", 2)
 end
 
+local dfmt = LibDeformat.Deformat
+
 local ksk = K:GetAddon ("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
+local KRP = ksk.KRP
+local KLD = ksk.KLD
 local MakeFrame = KUI.MakeFrame
 
 -- Local aliases for global or Lua library functions
@@ -67,34 +72,235 @@ local info = ksk.info
 local err = ksk.err
 local white = ksk.white
 local class = ksk.class
+local shortclass = ksk.shortclass
 local aclass = ksk.aclass
+local shortaclass = ksk.shortaclass
 
 --
 -- This file contains all of the UI handling code for the loot panel,
--- as well as all loot manipulation functions.
+-- as well as all loot manipulation functions. This is a fairly complicated UI
+-- with lots of moving parts so it's a good idea to understand what is going
+-- on here.
+--
+-- We have 3 panels - loot distribution  (qf.assign), the item editor
+-- (qf.itemedit) and the loot history page (qf.history). Only the first two
+-- are vaguely interesting. The history page is just a list with a few simple
+-- buttons.
+--
+-- The loot page is divided into 5 main regions:
+-- top left - the list of roll lists (qf.lists)
+-- bottom left - the list of members of the selected list (qf.members)
+-- top right - the loot selection list (qf.lootwin is the frame,
+--   qf.lootwin.slist and ksk.qf.lootscroll is the actual scroll list). It also
+--   contains all of the buttons for controlling loot distribution. These are
+--   only displayed for the master looter. These buttons are all children of
+--   qf.lootwin. .oclbids is for open / close bids. It toggles between the two.
+--   .orpause either starts an open roll or pauses one in progress. And last
+--   .remcancel is either the button to remove a bid item or to cancel a bid
+--   or open roll.
+-- middle right is the loot rules frame, the open roll timer frame and the
+--   auto loot assignment confirmation frame. This is also known as the ALF
+--   frame and one of those three pages is selected with select_alf().
+--   qf.lootrules, qf.lootroll and qf.autoloot are the shortcuts for these
+--   3 frames, only one of which can ever be visible at a time.
+-- bottom right - the bidders / rollers frame. This is where the list of
+--   bidders or rollers is displayed, along with buttons for both normal users
+--   and the master looter to control those bidders / bids. qf.bidders is the
+--   encosing frame. This has two portions - the actual scroll list of bidders
+--   on the left (qf.bidscroll) and several buttons on the right. These are
+--   not encosed in their own frame but are direct children of qf.bidders.
+--   .mybid is the button used by users to bid on an item. When they press it
+--   it will change into the retract button to retract a bid. If we are rolling
+--   on an item it becomes the "main spec" roll button. .forcebid is only
+--   enabled for the master looter and it forces the selected member to bid as
+--   if they has pressed bid themselves. If we are rolling then this becomes
+--   the "offspec roll" button, if that feature is enabled in the config UI.
+--   .forceret is the "force retract" button for the ML. If we are rolling it
+--   becomes the "cancel roll" button. .undo (qf.undobutton) is for the ML
+--   only and does an undo of the last suicide on the list.
+--
+-- The ALF frame is the middle right frame and it is used for 3 different
+-- things using select_alf():
+-- ALF_LOOT - the loot rules frame. This is the frame shown while bids are
+--   open or before open rolls are started. This contains all of the class
+--   specific check boxes (for class filtering), the role filter, the guild
+--   rank filter, and the strict armor / class checkboxes. The containing
+--   frame is qf.lootrules and has the following children:
+--   .warrior, .paladin, .druid etc for all 12 classes
+--   .role - the drop down for the user role
+--   .rank - the dropdown for the guild rank
+--   .nextrank - the button for moving to the next lower rank
+--   .strictarmor - checkbox for strict armor filtering
+--   .strictrole - checkbox for string role filtering
+-- ALF_CONFIRM - the auto-loot confirmation frame. This is displayed when an
+--   item is about to be assigned to a user, for whatever reason. It is always
+--   displayed before the mod assigns loot (except under very special cases
+--   too complex to describe here). This frame has both UI elements and loot
+--   related variables (non UI widgets) associated with it. Its base is
+--   qf.autoloot and the widget children are:
+--   .item (and qf.autoassign_item) - a text label designed to hold the name of
+--     the item being assigned. This is almost always an item link.
+--   .str (and qf.autoassign_msg) - a text string that contains any assignment
+--     message instructions.
+--   .ok - a button that will perform the assignment
+--   .cancel - a button that closes the ALF window but doesn't assign the item.
+--   Data items set on qf.autoloot and used by the Ok and cancel button
+--   handlers are:
+--   .slot - the slot number on the corpse of the item to be assigned
+--   .bosslootidx - the boss loot index number of the item being awarded.
+--   .uid - the KSK internal user ID of the user to receive the item
+--   .name - full player name
+--   .party - the raid party the winner is in
+--   .announce - a boolean true if we are to announce the asignment
+--   .suicide - the list on which the user will be suicided (if any)
+--   .ilink - the item being awarded
+--   .autodel - true if the item should be removed from the items database.
+--     This is set when there is a once-off assignment of an item setup in the
+--     items database, for a specific user, and this is that assignment. Since
+--     the assignment has now been done it can be removed from the database.
+--   .denched - true if the item is being assigned to a dencher for mats.
+--   .rolled - true if the item was won by a roll not a bid.
+--   .leaveloot - only used by the cancel button and indicates that the loot
+--     should be left in the loot list. The default is to remove it.
+--
 --
 
-local members
-local realmemberid
-local initdone = false
+local lootlistid = nil
+local lootlist = nil
+local members = nil
+local memberid = nil
+local realmemberid = nil
+local biditem = nil
+local selitemid = nil
 local iinfo = {}
+
+-- The index into ksk.bossloot of the currently selected loot item.
+local selectedloot = nil
+
+-- Data table of the currently selected loot item.
+--  idx - same as selectedloot above.
+--  itemid - the item ID
+--  filter - the class filter
+--  role - the role filter
+--  list - the desired roll list
+--  rank - the rank filter
+--  loot - ksk.bossloot[selectedloot]
+--     slot - the loot slot index for Blizzard API functions
+--     itemid - the item ID
+--     ilink - the item link text
+--     quant - the number of this item on the corpse
+--     boe - true if the item is BoE
+--     strict - the strict class filter
+--     relaxed - the relaxed class filter
+local lootitem = nil
+
+local lootroll = nil
+
+-- Table of people who have bid on the current item.
+local bidders = nil
+-- Index into bidders of the currently selected bidder and that user's uid.
+local selectedbidder = nil
+local selectedbiduid = nil
+
+local qf = {}
+local exphistdlg = nil
+local undodlg = nil
+
+--
+-- This can have 4 possible values:
+-- nil - No rolling taking place
+-- 1   - roll actively underway.
+-- 2   - active roll paused.
+-- 3   - roll paused and window closed.
+local rolling = nil
+
+--
+-- The top right division of the loot assignment page serves 3 main purposes:
+-- loot selection, assignment confirmation and open rolls. Only one of these
+-- can be active at a time as they all overlay each other. This function
+-- ensures that only one of these three frames is active.
+--
+local ALF_LOOT    = 1
+local ALF_CONFIRM = 2
+local ALF_ROLL    = 3
+
+local function select_alf (which)
+  if (which == ALF_CONFIRM) then
+    qf.lootrules:Hide ()
+    qf.lootroll:Hide ()
+    qf.autoloot:Show ()
+  elseif (which == ALF_ROLL) then
+    qf.lootrules:Hide ()
+    qf.autoloot:Hide ()
+    qf.lootroll:Show ()
+  else
+    qf.autoloot:Hide ()
+    qf.lootroll:Hide ()
+    qf.lootrules:Show ()
+  end
+end
+
+local function hide_popup ()
+  if (ksk.popupwindow) then
+    ksk.popupwindow:Hide ()
+    ksk.popupwindow = nil
+  end
+end
+
+--
+-- We have a few places where we have very similar widgets, such as the
+-- class filtering stuff. All of the containing widgets have sub-widgets of
+-- the same name and all of them have the same requirement of needing to
+-- either be enabled/disabled or have their value set according to a filter
+-- string. These three functions are helpers for those cases and do the busy
+-- work in this one place rather than repeating it in several places.
+--
+local function classes_setenabled (tbl, onoff)
+  local onoff = onoff or false
+
+  for k, v in pairs (K.IndexClass) do
+    if (k ~= K.CLASS_UNKNOWN and v.w and tbl[v.w]) then
+      tbl[v.w]:SetEnabled (onoff)
+    end
+  end
+end
+
+local function classes_setchecked (tbl, onoff)
+  local onoff = onoff or false
+
+  for k, v in pairs (K.IndexClass) do
+    if (k ~= K.CLASS_UNKNOWN and v.w and tbl[v.w]) then
+      tbl[v.w]:SetChecked (onoff)
+    end
+  end
+end
+
+local function classes_cfilter (tbl, cfilter)
+  for k, v in pairs (K.IndexClass) do
+    if (k ~= K.CLASS_UNKNOWN and v.w and tbl[v.w]) then
+      tbl[v.w]:SetChecked (cfilter[k])
+    end
+  end
+end
 
 --
 -- Check to see if any of the current raiders are not on the currently
 -- selected list.
 --
 local function check_missing_members ()
-  if (not ksk.cfg.settings.ann_missing or not ksk.inraid) then
+  if (not ksk.settings.ann_missing or not ksk.raid or not lootlistid) then
     return
   end
+
   local missing = {}
 
-  for k,v in pairs (ksk.raid.members) do
-    if (v.unknown) then
-      tinsert (missing, aclass (v.unknown))
+  for k,v in pairs (KRP.players) do
+    local uid = v["ksk_uid"]
+    if (not uid) then
+      tinsert (missing, shortaclass (v))
     else
-      if (not ksk:UserInList (v.uid, ksk.lootlistid)) then
-        tinsert (missing, aclass (ksk.users[v.uid]))
+      if (not ksk.UserInList (uid, lootlistid)) then
+        tinsert (missing, shortaclass (ksk.users[uid]))
       end
     end
   end
@@ -102,7 +308,7 @@ local function check_missing_members ()
   if (#missing == 0) then
     return
   end
-  info (L["%s: users not on the %q list: %s"], L["MODTITLE"], ksk.lootlist.name, tconcat (missing, ", "))
+  info (L["users not on the %q list: %s"], lootlist.name, tconcat (missing, ", "))
 end
 
 local function changed (res, user)
@@ -110,61 +316,58 @@ local function changed (res, user)
     return
   end
 
-  if (res == nil) then
-    res = false
-  end
-  if (not ksk.itemid) then
+  local res = res or false
+
+  if (not selitemid) then
     res = true
   end
-  if (ksk.qf.itemupdbtn) then
-    ksk.qf.itemupdbtn:SetEnabled (not res)
+
+  qf.itemupdbtn:SetEnabled (not res)
+end
+
+local function lootrules_setenabled (val)
+  if (not qf.lootrules) then
+    return
+  end
+
+  local val = val or false
+  local onoff = ksk.AmIML () and val
+
+  classes_setenabled (qf.lootrules, onoff)
+  qf.lootrules.role:SetEnabled (onoff)
+  qf.lootrules.rank:SetEnabled (onoff)
+  qf.lootrules.nextrank:SetEnabled (onoff)
+  qf.lootrules.strictarmour:SetEnabled (onoff)
+  qf.lootrules.strictrole:SetEnabled (onoff)
+
+  if (ksk.cfg.cfgtype == ksk.CFGTYPE_PUG) then
+    qf.lootrules.rank:SetEnabled (false)
+    qf.lootrules.nextrank:SetEnabled (false)
   end
 end
 
-local function enable_ui_elements (val)
-  if (not initdone) then
+local function lootbid_setenabled (val)
+  if (not qf.lootwin or not qf.bidders) then
     return
   end
-  local onoff = (ksk.csd.isadmin ~= nil) and (ksk.isml == true) and val
-  ksk.qf.lootrules.warrior:SetEnabled (onoff)
-  ksk.qf.lootrules.paladin:SetEnabled (onoff)
-  ksk.qf.lootrules.deathknight:SetEnabled (onoff)
-  ksk.qf.lootrules.hunter:SetEnabled (onoff)
-  ksk.qf.lootrules.shaman:SetEnabled (onoff)
-  ksk.qf.lootrules.druid:SetEnabled (onoff)
-  ksk.qf.lootrules.monk:SetEnabled (onoff)
-  ksk.qf.lootrules.rogue:SetEnabled (onoff)
-  ksk.qf.lootrules.mage:SetEnabled (onoff)
-  ksk.qf.lootrules.warlock:SetEnabled (onoff)
-  ksk.qf.lootrules.priest:SetEnabled (onoff)
-  ksk.qf.lootrules.demonhunter:SetEnabled (onoff)
-  ksk.qf.lootrules.role:SetEnabled (onoff)
-  ksk.qf.lootrules.rank:SetEnabled (onoff)
-  ksk.qf.lootrules.nextrank:SetEnabled (onoff)
-  ksk.qf.lootrules.strictarmour:SetEnabled (onoff)
-  ksk.qf.lootrules.strictrole:SetEnabled (onoff)
-end
 
-local function enable_bid_buttons (val)
-  if (not initdone) then
-    return
-  end
-  local onoff = (ksk.csd.isadmin ~= nil) and (ksk.isml == true) and val
-  ksk.qf.lootwin.oclbids:SetEnabled (onoff)
-  ksk.qf.lootwin.orpause:SetEnabled (onoff)
-  ksk.qf.lootwin.remcancel:SetEnabled (onoff)
-  ksk.qf.bidders.forcebid:SetEnabled (onoff)
-  ksk.qf.bidders.forceret:SetEnabled (onoff)
-  ksk.qf.bidders.mybid:SetEnabled (onoff)
+  local val = val or false
+  local onoff = ksk.AmIML () and val
+
+  qf.lootwin.oclbids:SetEnabled (onoff)
+  qf.lootwin.orpause:SetEnabled (onoff)
+  qf.lootwin.remcancel:SetEnabled (onoff)
+  qf.bidders.mybid:SetEnabled (onoff)
 end
 
 local function verify_user_class (user, class, what)
   local w = K.IndexClass[class].w
-  if (not ksk.qf.lootrules[w]:GetChecked ()) then
+
+  if (not qf.lootrules[w]:GetChecked ()) then
     local clist = {}
     for k,v in pairs (K.IndexClass) do
-      if (v.w) then
-        if (ksk.qf.lootrules[v.w]:GetChecked ()) then
+      if (k ~= K.CLASS_UNKNOWN and v.w) then
+        if (qf.lootrules[v.w]:GetChecked ()) then
           tinsert (clist, v.c)
         end
       end
@@ -175,28 +378,50 @@ local function verify_user_class (user, class, what)
   return true
 end
 
+--
+-- Setup the auto-assign loot confirmation frame. The sole parameter is the
+-- name of the person who either won the item or is going to have the item
+-- assigned to them (for DE or guild bank).
+--
 local function set_autoloot_win (name)
-  ksk.qf.autoassign_item:SetText (ksk.lootitem.loot.ilink)
-  ksk.qf.autoloot.slot = ksk.bossloot[ksk.selectedloot].slot
-  ksk.qf.autoloot.target = nil
-  if (ksk.qf.autoloot.slot ~= 0) then
-    if (ksk.numlooters and ksk.numlooters > 0 and ksk.looters[name]) then
-      ksk.qf.autoloot.target = ksk.looters[name].mlidx
+  if (not lootitem or not selectedloot or not name or name == "") then
+    return
+  end
+
+  local uid = KRP.players[name]["ksk_uid"]
+
+  qf.autoassign_item:SetText (lootitem.loot.ilink)
+  qf.autoloot.slot = lootitem.loot.slot or nil
+  qf.autoloot.bosslootidx = selectedloot
+  qf.autoloot.ilink = lootitem.loot.ilink
+  qf.autoloot.uid = uid
+  qf.autoloot.name = name
+  qf.autoloot.party = KRP.players[name].subgroup
+  qf.autoloot.announce = false
+  qf.autoloot.leaveloot = false
+  qf.autoloot.denched = false
+  qf.autoloot.rolled = false
+  qf.autoloot.autodel = false
+  qf.autoloot.suicide = nil
+  lootbid_setenabled (false)
+  select_alf (ALF_CONFIRM)
+end
+
+function ksk.PauseResumeRoll (pause, timeout)
+  if (not lootroll) then
+    return
+  end
+
+  if (pause) then
+    if (rolling == 1) then
+      rolling = 2
+    end
+  else
+    if (rolling == 2) then
+      rolling = 1
+      lootroll.endtime = GetTime() + timeout
     end
   end
-  ksk.qf.autoloot.loot = ksk.selectedloot
-  ksk.qf.autoloot.announce = false
-  ksk.qf.autoloot.leaveloot = false
-  ksk.qf.autoloot.denched = false
-  ksk.qf.autoloot.rolled = false
-  ksk.qf.autoloot.ilink = nil
-  ksk.qf.autoloot.uid = nil
-  ksk.qf.lootrules:Hide ()
-  ksk.qf.lootroll:Hide ()
-  ksk.qf.autoloot:Show ()
-  ksk.qf.lootwin.oclbids:SetEnabled (false)
-  ksk.qf.lootwin.orpause:SetEnabled (false)
-  ksk.qf.lootwin.remcancel:SetEnabled (false)
 end
 
 --
@@ -204,38 +429,38 @@ end
 -- the Open Roll / Pause button is pressed.
 --
 local function open_roll_or_pause ()
-  local tr = ksk.qf.lootwin
+  local tr = qf.lootwin
 
-  if (ksk.rolling) then
-    if (ksk.rolling == 1) then
-      local rem = floor (ksk.lootroll.endtime - GetTime()) + 1
+  if (rolling) then
+    if (rolling == 1) then
+      local rem = floor (lootroll.endtime - GetTime()) + 1
       tr.orpause:SetText (L["Resume"])
-      ksk.rolling = 2
+      rolling = 2
       if (rem < 6) then
-        rem = ksk.cfg.settings.roll_extend + 1
+        rem = ksk.settings.roll_extend + 1
       end
-      ksk.lootroll.resume = rem
+      lootroll.resume = rem
+      ksk.SendRaidAM ("PROLL", "ALERT", true, 0)
     else
-      local etime = GetTime() + ksk.lootroll.resume
-      ksk.lootroll.endtime = etime
-      ksk.lootroll.lastwarn = nil
-      ksk.lootroll.resume = nil
+      lootroll.endtime = GetTime() + lootroll.resume
+      lootroll.lastwarn = nil
+      ksk.SendRaidAM ("PROLL", "ALERT", false, lootroll.resume)
+      lootroll.resume = nil
       tr.orpause:SetText (L["Pause"])
-      ksk.rolling = 1
+      rolling = 1
     end
   else
-    local sroll = ksk.cfg.settings.suicide_rolls
+    local sroll = ksk.settings.suicide_rolls
     if (IsShiftKeyDown ()) then
       sroll = not sroll
     end
-    ksk.rolling = 1
-    tr.orpause:SetText (L["Pause"])
-    tr.remcancel:SetText (K.CANCEL_STR)
+
     if (sroll) then
-      ksk.SendRaidWarning (strfmt (L["Suicide Roll (on list %q) for %s within %d seconds."], ksk.lootlist.name, ksk.lootitem.loot.ilink, ksk.cfg.settings.roll_timeout))
+      ksk.SendRaidWarning (strfmt (L["Suicide Roll (on list %q) for %s within %d seconds."], lootlist.name, lootitem.loot.ilink, ksk.settings.roll_timeout))
     else
-      ksk.SendRaidWarning (strfmt (L["Roll for %s within %d seconds."], ksk.lootitem.loot.ilink, ksk.cfg.settings.roll_timeout))
+      ksk.SendRaidWarning (strfmt (L["Roll for %s within %d seconds."], lootitem.loot.ilink, ksk.settings.roll_timeout))
     end
+
     if (ksk.settings.ann_roll_usage) then
       if (ksk.settings.offspec_rolls) then
         ksk.SendRaidMsg (strfmt (L["%s: type '/roll' for main spec, '/roll 101-200' for off-spec or '/roll 1-1' to cancel a roll."], L["MODABBREV"]))
@@ -243,70 +468,73 @@ local function open_roll_or_pause ()
         ksk.SendRaidMsg (strfmt (L["%s: type '/roll' for main spec or '/roll 1-1' to cancel a roll."], L["MODABBREV"]))
       end
     end
-    ksk.qf.lootrules:Hide ()
-    ksk.qf.autoloot:Hide ()
-    ksk.qf.lootroll:Show ()
-    ksk.qf.lootroll.StartRoll (sroll)
+
+    qf.lootroll.StartRoll (sroll)
   end
 end
 
 local function boe_to_ml_or_de (isroll)
-  ksk:ResetBidders (true)
-  if (ksk.lootitem.loot.boe) then
-    if (ksk.settings.boe_to_ml) then
-      ksk:AddLootHistory (nil, ksk:TimeStamp (), ksk.lootitem.loot.ilink, ksk.csd.myuid, "B")
-      if (ksk.lootitem.loot.slot ~= 0 and ksk.looters[ksk.mlname]) then
-        local tgt = ksk.looters[ksk.mlname].mlidx
-        GiveMasterLoot (ksk.lootitem.loot.slot, tgt)
-      end
-    end
-    ksk:RemoveItemByIdx (ksk.selectedloot)
-    ksk.SendRaidAM ("BIREM", "ALERT", ksk.selectedloot)
-    ksk.qf.lootroll:Hide ()
-    ksk.qf.autoloot:Hide ()
-    ksk.qf.lootrules:Show ()
+  ksk.ResetBidders (true)
+
+  if (not lootitem or not KLD.items) then
+    return false
+  end
+
+  local loot = lootitem.loot
+  local slot = loot.slot
+  local kldi = KLD.items[slot]
+  local ilink = loot.ilink
+
+  if (loot.boe and ksk.settings.boe_to_ml) then
+    ksk.AddLootHistory (nil, ksk.TimeStamp (), ilink, ksk.csd.myuid, "B")
+    KLD.GiveMasterLoot (slot, KRP.master_looter)
+    ksk.RemoveItemByIdx (selectedloot, false)
+    select_alf (ALF_LOOT)
     return true
   else
     if (not isroll and ksk.settings.try_roll) then
       open_roll_or_pause ()
       return true
     end
+
+    if (isroll) then
+      ksk.EndOpenRoll (true)
+    end
+
     if (ksk.settings.disenchant) then
-      if (#ksk.raid.denchers > 0) then
+      local rdenchers = #ksk.raid.denchers
+
+      if (rdenchers > 0) then
         --
         -- Must see if the denchers are eligible for loot. They may not
         -- have been present for the boss kill.
         --
-        for de = 1, 6 do
-          if (ksk.raid.denchers[de]) then
-            local thisde = ksk.raid.denchers[de]
-            local tname = ksk.users[thisde].name
-            local vtarget = false
-            local rs = ""
-            if (ksk.lootitem.loot.slot == 0 or not ksk.numlooters or not ksk.looters[tname]) then
-              rs = "\n\n" .. white (L["Note: player will need to pick item up manually."])
-              if (UnitInRange (tname) == 1) then
-                vtarget = true
-              end
+        for de = 1, rdenchers do
+          local tname = ksk.raid.denchers[de]
+          local uid = KRP.players[tname]["ksk_uid"]
+          local vtarget = false
+          local rs = ""
+          if (slot == 0 or not kldi.candidates[tname]) then
+            rs = "\n\n" .. white (L["Note: player will need to pick item up manually."])
+            if (UnitInRange (tname) == 1) then
+              vtarget = true
+            end
+          else
+            if (kldi.candidates[tname]) then
+              vtarget = true
+            end
+          end
+          if (vtarget) then
+            local cname = shortaclass (ksk.users[uid])
+            if (isroll) then
+              qf.autoassign_msg:SetText (strfmt (L["AUTODENCHNR"], cname, cname) .. rs)
             else
-              if (ksk.looters[tname]) then
-                vtarget = true
-              end
+              qf.autoassign_msg:SetText (strfmt (L["AUTODENCH"], cname, cname) .. rs)
             end
-            if (vtarget) then
-              local cname = aclass (ksk.users[thisde])
-              if (isroll) then
-                ksk.qf.autoassign_msg:SetText (strfmt (L["AUTODENCHNR"], cname, cname) .. rs)
-              else
-                ksk.qf.autoassign_msg:SetText (strfmt (L["AUTODENCH"], cname, cname) .. rs)
-              end
-              set_autoloot_win (tname)
-              ksk.qf.autoloot.uid = thisde
-              ksk.qf.autoloot.denched = true
-              ksk.qf.autoloot.leaveloot = not isroll
-              ksk.qf.autoloot.ilink = ksk.lootitem.loot.ilink
-              return true
-            end
+            set_autoloot_win (tname)
+            qf.autoloot.denched = true
+            qf.autoloot.leaveloot = not isroll
+            return true
           end
         end
       end
@@ -322,38 +550,46 @@ end
 -- bids or rolls were received.
 --
 local function auto_loot_ok ()
-  local li = ksk.qf.autoloot
+  local li = qf.autoloot
   local lh = li.listid
-  if (li.slot ~= 0 and li.target) then
-    GiveMasterLoot (li.slot, li.target)
+  local uname = li.name
+
+  if (li.slot) then
+    KLD.GiveMasterLoot (li.slot, li.name)
   end
+
   if (li.announce) then
     local pos = ""
     if (li.suicide) then
-      local il, lp = ksk:UserInList (li.uid, li.suicide)
+      local il, lp = ksk.UserInList (li.uid, li.suicide)
       if (il) then
         pos = strfmt ("[%d]", lp)
       end
     end
+
     if (ksk.settings.ann_winners_raid) then
       ksk.SendRaidMsg (strfmt (L["%s: %s%s (group %d) won %s. Grats!"],
-        L["MODABBREV"], li.uname, pos, li.party, li.ilink))
+        L["MODABBREV"], uname, pos, li.party, li.ilink))
     end
+
     if (ksk.settings.ann_winners_guild) then
       ksk.SendGuildMsg (strfmt (L["%s: %s%s won %s. Grats!"],
-        L["MODABBREV"], li.uname, pos, li.ilink))
+        L["MODABBREV"], uname, pos, li.ilink))
     end
   end
+
   if (li.suicide) then
     lh = li.suicide
-    local sulist = ksk:CreateRaidList (li.suicide)
-    ksk:SuicideUser (li.suicide, sulist, li.uid, ksk.currentid, li.ilink, true)
+    local sulist = ksk.CreateRaidList (li.suicide)
+    ksk.SuicideUser (li.suicide, sulist, li.uid, ksk.currentid, li.ilink, true)
     li.suicide = nil
   end
+
   if (li.autodel) then
     li.autodel = nil
-    ksk:DeleteItem (ksk.lootitem.itemid)
+    ksk.DeleteItem (lootitem.loot.itemid)
   end
+
   if (li.uid) then
     if (li.denched) then
       lh = "D"
@@ -362,21 +598,20 @@ local function auto_loot_ok ()
     elseif (not lh) then
       lh = "A"
     end
-    ksk:AddLootHistory (nil, ksk:TimeStamp (), li.ilink, li.uid, lh)
+    ksk.AddLootHistory (nil, ksk.TimeStamp (), li.ilink, li.uid, lh)
   end
-  ksk:RemoveItemByIdx (li.loot)
-  ksk.SendRaidAM ("BIREM", "ALERT", li.loot)
-  ksk:ResetBidders (true)
-  ksk.qf.autoloot:Hide ()
-  ksk.qf.lootroll:Hide ()
-  ksk.qf.lootrules:Show ()
+
+  ksk.RemoveItemByIdx (li.bosslootidx, false)
+  ksk.ResetBidders (true)
+  select_alf (ALF_LOOT)
 end
 
 --
 -- Called when a user presses 'Cancel' in the autoloot panel.
 --
 local function auto_loot_cancel ()
-  local li = ksk.qf.autoloot
+  local li = qf.autoloot
+
   if (not li.announce and not li.leaveloot) then
     if (li.uid) then
       local lh = li.listid
@@ -387,54 +622,81 @@ local function auto_loot_cancel ()
       elseif (not lh) then
         lh = "A"
       end
-      ksk:AddLootHistory (nil, ksk:TimeStamp (), li.ilink, li.uid, lh)
+      ksk.AddLootHistory (nil, ksk.TimeStamp (), li.ilink, li.uid, lh)
     end
-    ksk:RemoveItemByIdx (li.loot)
-    ksk.SendRaidAM ("BIREM", "ALERT", li.loot)
-    ksk:ResetBidders (true)
+    ksk.RemoveItemByIdx (li.bosslootidx, false)
+    ksk.ResetBidders (true)
   end
-  ksk.qf.autoloot:Hide ()
-  ksk.qf.lootroll:Hide ()
-  ksk.qf.lootrules:Show ()
-  ksk.qf.lootwin.oclbids:SetEnabled (true)
-  ksk.qf.lootwin.orpause:SetEnabled (true)
-  ksk.qf.lootwin.remcancel:SetEnabled (true)
+  select_alf (ALF_LOOT)
 end
 
 --
 -- OnUpdate script handler for the open roll timer bar. This needs to examine
 -- the remaining time, move the bar and set its color accordingly (it changes
--- from green to red gradually as the timeout gets closer and closer) and
--- deals with the timer expiring.
+-- from green to red gradualy as the timeout gets closer and closer) and
+-- deals with the timer expiring. There are actually two versions of this.
+-- One is for the master looter and the other for everyone else. The former
+-- does all kinds of checking and processing based on the timeout and the
+-- latter simply updates the spark.
 --
-local function rolltimer_onupdate()
-  local rlf = ksk.qf.lootroll
-  if (not ksk.lootroll) then
+local function rolltimer_onupdate_user ()
+  local rlf = qf.lootroll
+
+  if (not lootroll) then
     rlf.timerbar:SetScript ("OnUpdate", nil)
     return
   end
-  if (ksk.rolling == 2) then
+
+  if (rolling >= 2) then
     return
   end
+
   local now = GetTime ()
-  if (now > ksk.lootroll.endtime) then
+  local remt = lootroll.endtime - now
+  local pct = remt / lootroll.timeout
+  rlf.timerbar:SetStatusBarColor (1-pct, pct, 0)
+  rlf.timerbar:SetValue (pct)
+  rlf.timertext:SetText (strfmt (L["Roll closing in %s"], ("%.1f)"):format (remt)))
+  rlf.timerspark:ClearAllPoints ()
+  rlf.timerspark:SetPoint ("CENTER", rlf.timerbar, "LEFT", pct * 200, 0)
+end
+
+local function rolltimer_onupdate_ml ()
+  local rlf = qf.lootroll
+
+  if (not lootroll) then
     rlf.timerbar:SetScript ("OnUpdate", nil)
-    ksk.rolling = 0
+    return
+  end
+
+  if (rolling >= 2) then
+    return
+  end
+
+  local now = GetTime ()
+  if (now > lootroll.endtime) then
+    rlf.timerbar:SetScript ("OnUpdate", nil)
+    rolling = nil
     local topmain = {}
     local topalts = {}
     local nummain = 0
     local numalts = 0
-    if (not ksk.lootroll.sorted) then
-      ksk.lootroll.sorted = {}
+
+    -- Stop the end user's timer spark and reset their UI.
+    if (ksk.AmIML ()) then
+      ksk.SendRaidAM ("EROLL", "ALERT")
     end
-    for i = 1, #ksk.lootroll.sorted do
-      local nm = ksk.lootroll.sorted[i]
-      local ru = ksk.lootroll.rollers[nm]
+
+    lootroll.sorted = lootroll.sorted or {}
+
+    for i = 1, #lootroll.sorted do
+      local nm = lootroll.sorted[i]
+      local ru = lootroll.rollers[nm]
       if (ru.minr == 1 and nummain < 5) then
-        tinsert (topmain, aclass (nm, ru.class) .. " [" .. ru.roll .. "]")
+        tinsert (topmain, shortaclass (nm, ru.class) .. " [" .. ru.roll .. "]")
         nummain = nummain + 1
       elseif (ru.minr == 101 and numalts < 5) then
-        tinsert (topalts, aclass (nm, ru.class) .. " [" .. ru.roll .. "]")
+        tinsert (topalts, shortaclass (nm, ru.class) .. " [" .. ru.roll .. "]")
         numalts = numalts + 1
       end
     end
@@ -442,24 +704,26 @@ local function rolltimer_onupdate()
     if (nummain > 0 ) then
       info (L["top main spec rollers: %s"], tconcat (topmain, ", "))
     end
+
     if (numalts > 0 ) then
       info (L["top off-spec rollers: %s"], tconcat (topalts, ", "))
     end
+
     topmain = nil
     topalts = nil
 
-    local winner = ksk.lootroll.sorted[1]
+    local winner = lootroll.sorted[1]
     if (winner) then
-      -- Deal with ties here.
+      local ilink = lootitem.loot.ilink
       local nwinners = 1
       local winners = {}
       local winnames = {}
-      winners[winner] = ksk.lootroll.rollers[winner].class
+      winners[winner] = lootroll.rollers[winner].class
       tinsert (winnames, winner)
-      local winroll = ksk.lootroll.rollers[winner].roll
-      for i = 2, #ksk.lootroll.sorted do
-        local nm = ksk.lootroll.sorted[i]
-        local ru = ksk.lootroll.rollers[nm]
+      local winroll = lootroll.rollers[winner].roll
+      for i = 2, #lootroll.sorted do
+        local nm = lootroll.sorted[i]
+        local ru = lootroll.rollers[nm]
         if (ru.roll == winroll) then
           winners[nm] = ru.class
           tinsert (winnames, nm)
@@ -468,47 +732,46 @@ local function rolltimer_onupdate()
       end
 
       if (nwinners > 1) then
+        -- Deal with ties here.
         if (ksk.settings.ann_roll_ties) then
           ksk.SendRaidMsg (strfmt (L["%s: the following users tied with %d: %s. Roll again."], L["MODABBREV"], winroll, tconcat (winnames, ", ")))
         end
         winnames = nil
-        ksk.lootroll.rollers = {}
-        ksk.lootroll.sorted = nil
-        ksk.lootroll.restrict = winners
+        lootroll.rollers = {}
+        lootroll.sorted = nil
+        lootroll.restrict = winners
         for i = 1,5 do
           rlf["pos"..i]:SetText ("")
           rlf["rem"..i]:SetEnabled (false)
         end
-        ksk.lootroll.endtime = GetTime () + ksk.cfg.settings.roll_timeout + 1
-        ksk.lootroll.lastwarn = nil
-        ksk.rolling = 1
-        rlf.timerbar:SetScript ("OnUpdate", rolltimer_onupdate)
+        lootroll.endtime = GetTime () + ksk.settings.roll_timeout + 1
+        lootroll.lastwarn = nil
+        rolling = 1
+        rlf.timerbar:SetScript ("OnUpdate", rolltimer_onupdate_ml)
+        ksk.SendRaidAM ("RROLL", "ALERT", ilink, timeout, winners)
         return
       end
 
-      local winclass = ksk.lootroll.rollers[winner].class
-      local rid = ksk.raid.players[winner]
-      local party = ksk.raid.members[rid].party
-      local ilink = ksk.lootitem.loot.ilink
-      local uid = ksk.raid.members[rid].uid
-      if (ksk.raid.members[rid].unkuser) then
-        uid = ksk.raid.members[rid].unkuser.name
-      end
+      local winclass = lootroll.rollers[winner].class
+      local party = KRP.players[winner].subgroup
+      local uid = KRP.players[winner]["ksk_uid"] or winner
+      local missing = KRP.players[winner]["ksk_missing"]
       local suicide = nil
       local gpos = ""
 
-      if (ksk.lootroll.suicide and not ksk.raid.members[rid].unkuser) then
-        local il, lp = ksk:UserInList (uid, suicide)
+      if (lootroll.suicide and not missing) then
+        local il, lp = ksk.UserInList (uid, suicide)
         if (il) then
           gpos = strfmt ("[%d]", lp)
         end
-        suicide = ksk.lootlistid
-        local sulist = ksk:CreateRaidList (ksk.lootlistid)
-        ksk:SuicideUser (suicide, sulist, uid, ksk.currentid, ilink, true)
-        ksk:AddLootHistory (nil, ksk:TimeStamp (), ilink, uid, suicide)
+        suicide = lootlistid
+        local sulist = ksk.CreateRaidList (lootlistid)
+        ksk.SuicideUser (suicide, sulist, uid, ksk.currentid, ilink, true)
+        ksk.AddLootHistory (nil, ksk.TimeStamp (), ilink, uid, suicide)
       end
 
-      local ts = strfmt (L["%s: %s%s (group %d) won %s. Grats!"], L["MODABBREV"], winner, gpos, party, ilink)
+      local ts = strfmt (L["%s: %s%s (group %d) won %s. Grats!"],
+                           L["MODABBREV"], winner, gpos, party, ilink)
       if (ksk.settings.ann_winners_raid) then
         ksk.SendRaidMsg (ts)
       end
@@ -517,24 +780,21 @@ local function rolltimer_onupdate()
         ksk.SendGuildMsg (strfmt (L["%s: %s%s won %s. Grats!"], L["MODABBREV"], winner, gpos, ilink))
       end
 
-      if (ksk.lootitem.loot.slot ~= 0 and ksk.settings.auto_loot and ksk.numlooters and ksk.numlooters > 0) then
-        local cname = aclass (winner, winclass)
-        ksk.qf.autoassign_msg:SetText (strfmt (L["AUTOLOOT"], cname, cname, cname))
+      if (lootitem.loot.slot ~= 0 and ksk.settings.auto_loot) then
+        local cname = shortaclass (winner, winclass)
+        qf.autoassign_msg:SetText (strfmt (L["AUTOLOOT"], cname, cname, cname))
         set_autoloot_win (winner)
-        ksk.qf.autoloot.uid = uid
-        ksk.qf.autoloot.rolled = true
-        ksk.qf.autoloot.ilink = ilink
+        qf.autoloot.rolled = true
         return
       else
         if (not suicide) then
-          ksk:AddLootHistory (nil, ksk:TimeStamp (), ilink, uid, "R")
+          ksk.AddLootHistory (nil, ksk.TimeStamp (), ilink, uid, "R")
         end
-        ksk:RemoveItemByIdx (ksk.selectedloot)
-        ksk.SendRaidAM ("BIREM", "ALERT", ksk.selectedloot)
-        ksk:ResetBidders (false)
+        ksk.RemoveItemByIdx (selectedloot, false)
+        ksk.ResetBidders (false)
       end
     else -- No winner because no-one rolled
-      info (strfmt (L["no-one rolled for %s."], ksk.lootitem.loot.ilink))
+      info (strfmt (L["no-one rolled for %s."], lootitem.loot.ilink))
       if (boe_to_ml_or_de (true)) then
         return
       end
@@ -547,19 +807,17 @@ local function rolltimer_onupdate()
       -- recipient is out of range. No-one ever said this was a perfect
       -- system.
       --
-      ksk:RemoveItemByIdx (ksk.selectedloot)
-      ksk.SendRaidAM ("BIREM", "ALERT", ksk.selectedloot)
-      ksk:ResetBidders (false)
+      ksk.EndOpenRoll ()
+      ksk.RemoveItemByIdx (selectedloot, false)
     end
 
-    ksk.qf.lootroll:Hide () -- Calls cleanup in OnHide handler
-    ksk.qf.lootrules:Show ()
+    select_alf (ALF_LOOT)
     return
   end
 
-  local remt = ksk.lootroll.endtime - now
+  local remt = lootroll.endtime - now
   local warnt = floor(remt)
-  local pct = remt / (ksk.cfg.settings.roll_timeout + 1)
+  local pct = remt / (ksk.settings.roll_timeout + 1)
   rlf.timerbar:SetStatusBarColor (1-pct, pct, 0)
   rlf.timerbar:SetValue (pct)
   rlf.timertext:SetText (strfmt (L["Roll closing in %s"], ("%.1f)"):format (remt)))
@@ -567,8 +825,8 @@ local function rolltimer_onupdate()
   rlf.timerspark:SetPoint ("CENTER", rlf.timerbar, "LEFT", pct * 200, 0)
 
   if (warnt < 5) then
-    if (not ksk.lootroll.lastwarn or warnt ~= ksk.lootroll.lastwarn) then
-      ksk.lootroll.lastwarn = warnt
+    if (not lootroll.lastwarn or warnt ~= lootroll.lastwarn) then
+      lootroll.lastwarn = warnt
       if (ksk.settings.ann_countdown) then
         ksk.SendRaidMsg (strfmt (L["%s: roll closing in: %d"], L["MODABBREV"], warnt+1))
       end
@@ -580,27 +838,29 @@ end
 -- This is called when a valid player has typed /roll. 
 --
 local function player_rolled (player, roll, minr, maxr)
-  if (not ksk.rolling) then
+  if (not rolling) then
     return
   end
+
   local rp
-  if (ksk.lootroll.rollers[player]) then
+
+  if (lootroll.rollers[player]) then
     --
     -- If they had rolled before but were using a different min and max,
     -- recheck things, as they may be correcting a main spec versus offspec
     -- roll. Seems like /roll 101-200 is really hard for people to do right
     -- the first time!
     --
-    rp = ksk.lootroll.rollers[player]
+    rp = lootroll.rollers[player]
     if ((rp.minr == minr) and (rp.maxr == maxr)) then
-      ksk.SendWhisper (strfmt (L["%s: you already rolled %d. New roll ignored."], L["MODTITLE"], ksk.lootroll.rollers[player].roll), player)
+      ksk.SendWhisper (strfmt (L["%s: you already rolled %d. New roll ignored."], L["MODTITLE"], lootroll.rollers[player].roll), player)
       return
     end
 
     --
     -- We dont actually accept the new roll value. Rather, we either add
     -- or subtract 100 from the original roll, so that the user doesn't
-    -- end up with two chances to roll and improve their scrore.
+    -- end up with two chances to roll and improve their score.
     --
     if (rp.minr == 1 and minr == 101) then
       rp.roll = rp.roll + 100
@@ -622,12 +882,12 @@ local function player_rolled (player, roll, minr, maxr)
       return
     end
     local class
-    if (ksk.lootroll.restrict) then
-      if (not ksk.lootroll.restrict[player]) then
+    if (lootroll.restrict) then
+      if (not lootroll.restrict[player]) then
         ksk.SendWhisper (strfmt (L["%s: sorry you are not allowed to roll right now."], L["MODTITLE"]), player)
         return
       end
-      class = ksk.lootroll.restrict[player]
+      class = lootroll.restrict[player]
       if (minr == 101) then
         minr = 1
         maxr = 100
@@ -639,25 +899,14 @@ local function player_rolled (player, roll, minr, maxr)
       -- where no-one is marked as a master loot candidate because the
       -- raid leader had loot set incorerctly, and subsequently changed it
       -- to master looting. In this case we don't want to block the user
-      -- from bidding.
+      -- from rolling.
       --
       if (ksk.numlooters and ksk.numlooters > 0 and not ksk.looters[player]) then
         ksk.SendWhisper (strfmt (L["%s: you are not eligible to receive loot - %s ignored."], L["MODTITLE"], L["roll"]), player)
         return
       end
 
-      local uid = ksk:FindUser (player) or "0fff"
-      if (uid == "0fff") then
-        for k,v in pairs (ksk.missing) do
-          if (v.name == player) then
-            class = v.class
-            break
-          end
-        end
-      else
-        class = ksk.users[uid].class
-      end
-
+      class = KRP.players[player].class
       assert (class)
 
       --
@@ -668,8 +917,8 @@ local function player_rolled (player, roll, minr, maxr)
       end
     end
 
-    ksk.lootroll.rollers[player] = {}
-    rp = ksk.lootroll.rollers[player]
+    lootroll.rollers[player] = {}
+    rp = lootroll.rollers[player]
     rp.roll = roll
     rp.minr = minr
     rp.maxr = maxr
@@ -679,18 +928,18 @@ local function player_rolled (player, roll, minr, maxr)
   --
   -- Create the sorted list of rollers
   --
-  ksk.lootroll.sorted = {}
-  for k,v in pairs (ksk.lootroll.rollers) do
+  lootroll.sorted = {}
+  for k,v in pairs (lootroll.rollers) do
     if (v.maxr ~= 1) then
-      tinsert (ksk.lootroll.sorted, k)
+      tinsert (lootroll.sorted, k)
     end
   end
-  tsort (ksk.lootroll.sorted, function (a,b)
-    if (ksk.lootroll.rollers[a].minr > ksk.lootroll.rollers[b].minr) then
+  tsort (lootroll.sorted, function (a,b)
+    if (lootroll.rollers[a].minr > lootroll.rollers[b].minr) then
       return false
-    elseif (ksk.lootroll.rollers[a].minr < ksk.lootroll.rollers[b].minr) then
+    elseif (lootroll.rollers[a].minr < lootroll.rollers[b].minr) then
       return true
-    elseif (ksk.lootroll.rollers[a].roll > ksk.lootroll.rollers[b].roll) then
+    elseif (lootroll.rollers[a].roll > lootroll.rollers[b].roll) then
       return true
     end
     return false
@@ -699,28 +948,60 @@ local function player_rolled (player, roll, minr, maxr)
   --
   -- Display the top 5 in the dialog
   --
-  local rlf = ksk.qf.lootroll
+  local rlf = qf.lootroll
   for i = 1,5 do
     rlf["pos"..i]:SetText ("")
     rlf["rem"..i]:SetEnabled (false)
   end
+
+  local toprolls = {}
   for i = 1,5 do
-    local nm = ksk.lootroll.sorted[i]
+    local nm = lootroll.sorted[i]
     if (nm) then
-      local ru = ksk.lootroll.rollers[nm]
-      rlf["pos"..i]:SetText (aclass (nm, ru.class) .. " [" .. tostring(ru.roll) .. "]")
+      local ru = lootroll.rollers[nm]
+      local ts = shortaclass (nm, ru.class) .. "[" .. tostring (ru.roll) .. "]"
+      rlf["pos"..i]:SetText (ts)
       rlf["rem"..i]:SetEnabled (true)
+      tinsert (toprolls, ts)
     end
   end
+  ksk.SendRaidAM ("TROLL", "ALERT", toprolls)
 
   --
   -- If this roll arrived within 5 seconds of the timeout reset the timeout
   -- back up to 5 seconds.
   --
   local now = GetTime ()
-  local rem = floor (ksk.lootroll.endtime - now) + 1
+  local rem = floor (lootroll.endtime - now) + 1
   if (rem < 6) then
-    ksk.lootroll.endtime = now + ksk.cfg.settings.roll_extend + 1
+    lootroll.endtime = now + ksk.settings.roll_extend + 1
+    ksk.SendRaidAM ("XROLL", "ALERT", ksk.settings.roll_extend)
+  end
+end
+
+local function rlf_onevent (this, evt, arg1, ...)
+  if (evt == "CHAT_MSG_SYSTEM") then
+    local plr, roll, minr, maxr = dfmt (arg1, RANDOM_ROLL_RESULT)
+    local player = K.CanonicalName (plr, nil)
+
+    if (player and not KRP.players[player]) then
+      player = nil
+    end
+
+    if (player and roll and minr and maxr) then
+      if ((minr == 1 and maxr == 100) or
+        (ksk.settings.offspec_rolls and (minr == 101 and maxr == 200)) or
+        (minr == 1 and maxr == 1)) then
+        player_rolled (player, roll, minr, maxr)
+      else
+        if (ksk.settings.offspec_rolls) then
+          ksk.SendWhisper (strfmt (L["%s: invalid roll. Use '/roll' for main spec, '/roll 101-200' for off-spec or '/roll 1-1' to cancel a roll."], L["MODTITLE"]), player)
+        else
+          ksk.SendWhisper (strfmt (L["%s: invalid roll. Use '/roll' for main spec or '/roll 1-1' to cancel a roll."], L["MODTITLE"]), player)
+        end
+        return
+      end
+    end
   end
 end
 
@@ -728,59 +1009,99 @@ end
 -- Either remove an item or cancel a bid / roll.
 --
 local function remove_or_cancel ()
-  local tr = ksk.qf.lootwin
-  if (ksk.rolling) then
+  local tr = qf.lootwin
+
+  if (rolling) then
     if (ksk.settings.ann_cancel) then
       ksk.SendRaidWarning (strfmt (L["%s: %s cancelled!"], L["MODABBREV"], L["roll"]))
     end
-    ksk.rolling = 0
-    ksk.qf.lootroll:Hide ()
-    ksk.qf.lootrules:Show ()
-    ksk.rolling = nil
+    ksk.EndOpenRoll ()
     return
   end
 
-  if (ksk.biditem) then
+  if (biditem) then
     if (ksk.settings.ann_cancel) then
       ksk.SendRaidWarning (strfmt (L["%s: %s cancelled!"], L["MODABBREV"], L["bid"]))
     end
-    ksk:ResetBidders (false)
-    ksk.qf.lootwin.orpause:SetEnabled (true)
-    ksk.SendRaidAM ("BICAN", "ALERT", ksk.biditem)
+    ksk.ResetBidders (false)
+    lootbid_setenabled (true)
+    qf.bidders.mybid:SetEnabled (false)
+    ksk.SendRaidAM ("BICAN", "ALERT", biditem)
     return
   end
 
-  if (ksk.selectedloot) then
-    ksk:RemoveItemByIdx (ksk.selectedloot)
-    ksk.SendRaidAM ("BIREM", "ALERT", ksk.selectedloot)
+  if (selectedloot) then
+    ksk.RemoveItemByIdx (selectedloot, false)
   end
 end
 
 local function rlist_newitem (objp, num)
   local rf = KUI.NewItemHelper (objp, num, "KSKLListButton", 155, 16, nil, nil, nil, nil)
+
   rf:SetScript ("OnClick", function (this)
-    if (not ksk.isml) then
+    if (not ksk.AmIML ()) then
       return
     end
+
     local idx = this:GetID ()
-    if (ksk.lootlistid ~= ksk.sortedlists[idx].id) then
-      ksk.lootlistid = ksk.sortedlists[idx].id
-      ksk.lootlist = ksk.cfg.lists[ksk.lootlistid]
-      this:GetParent():GetParent():SetSelected (idx)
-      --
-      -- Be careful to only reset bidders when we have actually switched
-      -- to a different list by clicking on it.
-      --
-      ksk:ResetBidList ()
-      ksk.SendRaidAM ("LLSEL", "ALERT", ksk.lootlistid, true)
-      if ((ksk.biditem or (ksk.lootroll and ksk.lootroll.suicide)) and ksk.settings.ann_bidchanges) then
-        ksk.SendRaidWarning (strfmt (L["Bid list changed to %q for %s."], ksk.lootlist.name, ksk.lootitem.loot.ilink))
+    --
+    -- Be careful to only reset bidders when we have actually switched
+    -- to a different list by clicking on it.
+    --
+    if (not lootlistid or lootlistid ~= ksk.sortedlists[idx].id) then
+      -- The following will set lootlistid and lootlist and populate the
+      -- members scroll list with the list members.
+      this:GetParent():GetParent():SetSelected (idx, true, true)
+      ksk.ResetBidList ()
+      ksk.SendRaidAM ("LLSEL", "ALERT", lootlistid, true)
+      if ((biditem or (lootroll and lootroll.suicide)) and ksk.settings.ann_bidchanges) then
+        ksk.SendRaidWarning (strfmt (L["Bid list changed to %q for %s."], lootlist.name, lootitem.loot.ilink))
       end
       check_missing_members ()
-
     end
   end)
   return rf
+end
+
+function ksk.RestrictedRoll (ilink, timeout, winners)
+  if (not lootroll) then
+    return
+  end
+
+  for i = 1,5 do
+    rlf["pos"..i]:SetText ("")
+  end
+
+  if (not winners[K.player.name]) then
+    qf.bidders.mybid:SetEnabled (false)
+    qf.bidders.forcebid:SetEnabled (false)
+    qf.bidders.forceret:SetEnabled (false)
+  end
+
+  select_alf (ALF_ROLL)
+  lootroll.endtime = GetTime () + timeout + 1
+  rolling = 1
+  qf.lootroll.timerbar:SetScript ("OnUpdate", rolltimer_onupdate_user)
+end
+
+function ksk.ExtendRoll (timeout)
+  if (lootroll and rolling == 1) then
+    lootroll.endtime = GetTime () + timeout + 1
+  end
+end
+
+function ksk.TopRollers (trolls)
+  local rlf = qf.lootroll
+
+  for i = 1,5 do
+    rlf["pos"..i]:SetText ("")
+  end
+
+  if (trolls) then
+    for k, v in ipairs (trolls) do
+      rlf["pos"..k]:SetText (v)
+    end
+  end
 end
 
 local function rlist_setitem (objp, idx, slot, btn)
@@ -790,25 +1111,38 @@ local function rlist_setitem (objp, idx, slot, btn)
 end
 
 local function rlist_selectitem (objp, idx, slot, btn, onoff)
+  local onoff = onoff or false
+
+  hide_popup ()
+
   if (onoff) then
-    ksk:RefreshLootMembers ()
+    lootlistid = ksk.sortedlists[idx].id
+    lootlist = ksk.lists[lootlistid]
     --
     -- If this list has a default rank, set it now, unless its "None".
     -- Otherwise, set it to the global one if its not None.
     --
-    if (ksk.lootlist.def_rank and ksk.lootlist.def_rank ~= 999) then
-      ksk.qf.lootrules.rank:SetValue (ksk.lootlist.def_rank)
+    if (lootlist.def_rank) then
+      qf.lootrules.rank:SetValue (lootlist.def_rank)
     else
-      if (ksk.settings.def_rank and ksk.settings.def_rank ~= 999) then
-        ksk.qf.lootrules.rank:SetValue (ksk.settings.def_rank)
+      if (ksk.settings.def_rank) then
+        qf.lootrules.rank:SetValue (ksk.settings.def_rank)
+      else
+        qf.lootrules.rank:SetValue (0)
       end
     end
     --
     -- Set the strict enforcing options
     --
-    ksk.qf.lootrules.strictarmour:SetChecked (ksk.lootlist.strictcfilter)
-    ksk.qf.lootrules.strictrole:SetChecked (ksk.lootlist.strictrfilter)
+    qf.lootrules.strictarmour:SetChecked (lootlist.strictcfilter)
+    qf.lootrules.strictrole:SetChecked (lootlist.strictrfilter)
+  else
+    lootlistid = nil
+    lootlist = nil
   end
+
+  -- Updates members, memberid, realmemberid
+  ksk.RefreshLootMembers (lootlistid)
 end
 
 local function mlist_newitem (objp, num)
@@ -859,13 +1193,13 @@ local function mlist_newitem (objp, num)
   end
 
   rf:SetScript ("OnClick", function (this)
-    if (not ksk.isml) then
+    qf.membersearch:ClearFocus ()
+    if (not ksk.AmIML ()) then
       return
     end
-    ksk.qf.membersearch:SetText ("")
-    ksk.qf.membersearch:ClearFocus ()
+    qf.membersearch:SetText ("")
     local idx = this:GetID ()
-    this:GetParent():GetParent():SetSelected (idx)
+    this:GetParent():GetParent():SetSelected (idx, true, true)
   end)
 
   return rf
@@ -881,7 +1215,7 @@ local function mlist_setitem (objp, idx, slot, btn)
   --
   -- If we are tethered, we only care about the main character being frozen
   -- or reserved, but we do care about any of the alts being enchanters.
-  -- Also, if we are thethered, then members points to a different array that
+  -- Also, if we are tethered, then members points to a different array that
   -- has different info we care about.
   --
   if (ksk.cfg.tethered and not ksk.settings.hide_absent) then
@@ -892,35 +1226,143 @@ local function mlist_setitem (objp, idx, slot, btn)
     end
   end
 
-  ench = ksk:UserIsEnchanter (uid)
-  frozen = ksk:UserIsFrozen (uc) and bm
-  res = ksk:UserIsReserved (uc) and bm
+  ench = ksk.UserIsEnchanter (uid)
+  frozen = ksk.UserIsFrozen (uc) and bm
+  res = ksk.UserIsReserved (uc) and bm
 
-  btn:SetText (at .. class (ksk.users[uid]), ench, frozen, res)
+  if (uid and ksk.users[uid]) then
+    btn:SetText (at .. shortclass (ksk.users[uid]), ench, frozen, res)
+  else
+    btn:SetText ("", ench, frozen, res)
+  end
   btn:SetID (idx)
   btn:Show ()
 end
 
 local function mlist_selectitem (objp, idx, slot, btn, onoff)
-  local en = false
+  local onoff = onoff or false
+
   if (onoff) then
     local mid = members[idx].id
-    ksk.lootmemberid = members[idx].id
-    realmemberid = members[idx].id
+    memberid = mid
+    realmemberid = mid
     if (ksk.cfg.tethered) then
       if (members[idx].isalt) then
-        ksk.lootmemberid = members[idx].main
+        memberid = members[idx].main
       end
     end
-    en = true
-  elseif (onoff == nil) then
-    ksk.lootmemberid = nil
+  else
+    memberid = nil
     realmemberid = nil
-    en = false
   end
 
-  if (initdone and en ~= nil) then
-    ksk.qf.bidders.forcebid:SetEnabled (en and (ksk.biditem ~= nil))
+  qf.bidders.forcebid:SetEnabled (ksk:AmIML () and onoff and biditem ~= nil)
+end
+
+local function lloot_on_click (this)
+  local idx = this:GetID ()
+
+  if (IsModifiedClick ("CHATLINK")) then
+    ChatEdit_InsertLink ( ksk.bossloot[idx].ilink)
+    return
+  end
+
+  if (not ksk.AmIML ()) then
+    return
+  end
+
+  --
+  -- If we have a current bid or roll in progress, ignore this attempt to
+  -- change the item. If they want to cancel a bid or roll they can just
+  -- press Cancel and that will take care of things.
+  --
+  if (rolling or biditem) then
+    return
+  end
+
+  --
+  -- Ok we have a new loot item. Process it. Note that this could be
+  -- the same item that was previously selected. We want to process
+  -- it all over again in case they had messed with ranks, armor
+  -- class filters etc. By clicking on it we make the assumption the
+  -- user wanted to reset everything.
+  --
+  local loot = ksk.bossloot[idx]
+  local itemid = loot.itemid
+  local slot = loot.slot
+  local cf = nil
+  local role = 0
+  local slist = nil
+  local rank = 0
+  local strict = nil
+
+  if (ksk.iitems[itemid]) then
+    cf = ksk.iitems[itemid].cfilter
+  end
+
+  local ii = ksk.items[itemid]
+  if (ii) then
+    --
+    -- Ignore has already been taken care of, as items that are being
+    -- ignored will not make it into the bossloot list in the first
+    -- place. What we need to check for here are class loot filters,
+    -- role filters, and specific user assignments. We will always
+    -- send out a selection event with the filters, but we will deal
+    -- with specific user assignments right here and now, giving the
+    -- ML the option of actually assigning the loot if the user is
+    -- in the raid and eligible to receive the loot.
+    --
+    cf = ii.cfilter or cf
+    role = ii.role or role
+    slist = ii.list or slist
+    rank = ii.rank or rank
+  end
+
+  if (not slist and ksk.settings.def_list ~= "0") then
+    slist = ksk.settings.def_list
+  end
+
+  if (slist ~= nil) then
+    if (not rank and ksk.lists[slist].def_rank) then
+      rank = ksk.lists[slist].def_rank
+    end
+  else
+    if (lootlist) then
+      slist = lootlistid
+      if (not rank) then
+        rank = lootlist.def_rank
+      end
+    end
+  end
+
+  if (not rank and ksk.settings.def_rank) then
+    rank = ksk.settings.def_rank
+  end
+
+  if (not cf) then
+    if (qf.lootrules.strictarmour:GetChecked ()) then
+      cf = loot.strict
+    else
+      cf = loot.relaxed
+    end
+  end
+
+  --
+  -- We start out by enabling the loot control buttons here. However,
+  -- SelectLootItem may, in its ML-specific portion, disable them if it
+  -- switches to the autoassign panel for example. We also start out with
+  -- the main loot frame, which again can be switched out by SelectLootItem.
+  --
+  select_alf (ALF_LOOT)
+
+  if (slist) then
+    lootrules_setenabled (true)
+    lootbid_setenabled (true)
+    qf.bidders.mybid:SetEnabled (false)
+
+    ksk.SelectLootItem (idx, cf, role, slist, rank)
+    ksk.SendRaidAM("LISEL", "ALERT", idx, cf, role, slist, rank)
+    check_missing_members ()
   end
 end
 
@@ -943,7 +1385,7 @@ local function llist_newitem (objp, num)
   rf.text = text
 
   rf:SetScript ("OnEnter", function (this, evt, ...)
-    if (not ksk.isml or ksk.settings.tooltips) then
+    if (not ksk.AmIML () or ksk.settings.tooltips) then
       local idx = this:GetID ()
       GameTooltip:SetOwner (this, "ANCHOR_TOPLEFT", 150)
       GameTooltip:SetHyperlink (ksk.bossloot[idx].ilink)
@@ -958,92 +1400,7 @@ local function llist_newitem (objp, num)
     self.text:SetText (txt)
   end
 
-  rf:SetScript ("OnClick", function (this)
-    local idx = this:GetID ()
-    if (IsModifiedClick ("CHATLINK")) then
-      ChatEdit_InsertLink ( ksk.bossloot[idx].ilink)
-      return
-    end
-    if (not ksk.isml) then
-      return
-    end
-    --
-    -- If we have a current bid or roll in progress, ignore this attempt to
-    -- change the item. If they want to cancel a bid or roll they can now
-    -- press Cancel and that will take care of things.
-    --
-    if (ksk.rolling or ksk.biditem) then
-      return
-    end
-
-    --
-    -- Ok we have a new loot item. Process it. Note that this could be
-    -- the same item that was previously selected. We want to process
-    -- it all over again in case they had messed with ranks, armor
-    -- class filters etc. By clicking on it we make the assumption the
-    -- user wanted to reset everything.
-    --
-    local loot = ksk.bossloot[idx]
-    local itemid = loot.itemid
-    local slot = loot.slot
-    local cf = nil
-    local role = 0
-    local slist = nil
-    local rank = 999
-    if (ksk.iitems[itemid]) then
-      local ii = ksk.iitems[itemid]
-      cf = ii.cfilter or cf
-    end
-    if (ksk.items[itemid]) then
-      --
-      -- Ignore has already been taken care of, as items that are being
-      -- ignored will not make it into the bossloot list in the first
-      -- place. What we need to check for here are class loot filters,
-      -- role filters, and specific user assignments. We will always
-      -- send out a selection event with the filters, but we will deal
-      -- with specific user assignments right here and now, giving the
-      -- ML the option of actually assigning the loot if the user is
-      -- in the raid and eligible to receive the loot.
-      --
-      local ii = ksk.items[itemid]
-      cf = ii.cfilter or cf
-      role = ii.role or role
-      slist = ii.list or slist
-      rank = ii.rank or rank
-    end
-    if (not slist and ksk.settings.def_list and ksk.settings.def_list ~= "0") then
-      slist = ksk.settings.def_list
-    end
-    if (slist ~= nil) then
-      if (rank == 999 and ksk.lists[slist].def_rank and ksk.lists[slist].def_rank ~= 999) then
-        rank = ksk.lists[slist].def_rank
-      end
-      if (rank == 999 and ksk.settings.def_rank and ksk.settings.def_rank ~= 999) then
-        rank = ksk.settings.def_rank
-      end
-    else
-      if (ksk.lootlist) then
-        slist = ksk.lootlistid
-        if (rank == 999) then
-          rank = ksk.lootlist.def_rank
-        end
-      end
-    end
-
-    if (not cf) then
-      if (ksk.qf.lootrules.strictarmour:GetChecked ()) then
-        cf = loot.strict
-      else
-        cf = loot.relaxed
-      end
-    end
-    if (slot ~= 0) then
-      ksk:SetMLCandidates (slot)
-    end
-    ksk:SelectLootItem (idx, itemid, cf, role, slist, rank)
-    ksk.SendRaidAM("LISEL", "ALERT", idx, itemid, cf, role, slist, rank)
-    check_missing_members ()
-  end)
+  rf:SetScript ("OnClick", lloot_on_click)
 
   return rf
 end
@@ -1055,47 +1412,47 @@ local function llist_setitem (objp, idx, slot, btn)
 end
 
 local function llist_selectitem (objp, idx, slot, btn, onoff)
-  if (onoff) then
-    if (not ksk.selectedloot) then
-      return
-    end
-  elseif (onoff == nil) then
-    if (initdone) then
-      enable_ui_elements (false)
-      enable_bid_buttons (false)
-    end
+  local onoff = onoff or false
+
+  if (not onoff) then
+    lootrules_setenabled (false)
+    lootbid_setenabled (false)
   end
 end
 
 local function blist_selectitem (objp, idx, slot, btn, onoff)
-  local en = false
+  local onoff = onoff or false
+
   if (onoff) then
-    ksk.selectedbidder = idx
-    en = true
+    selectedbidder = idx
+    selectedbiduid = bidders[idx].uid
   else
-    ksk.selectedbidder = nil
+    selectedbidder = nil
+    selectedbiduid = nil
   end
 
-  if (initdone) then
-    ksk.qf.bidders.forceret:SetEnabled (en)
-  end
+  qf.bidders.forceret:SetEnabled (onoff)
 end
 
 local function setup_iinfo ()
-  if (ksk.itemid == nil) then
+  if (not selitemid) then
     return
   end
 
   local dcf = ""
-  local ii = ksk.items[ksk.itemid]
-  if (ksk.iitems[ksk.itemid]) then
-    if (ksk.iitems[ksk.itemid].cfilter) then
-      dcf = ksk.iitems[ksk.itemid].cfilter
+  local ii = ksk.items[selitemid]
+
+  if (ksk.iitems[selitemid]) then
+    if (ksk.iitems[selitemid].cfilter) then
+      dcf = ksk.iitems[selitemid].cfilter
     end
   end
+
   iinfo = { ilink = ii.ilink}
   iinfo.cfilter = {}
-  local ics = ksk.items[ksk.itemid].cfilter or dcf
+
+  local ics = ksk.items[selitemid].cfilter or dcf
+
   for k,v in pairs (K.IndexClass) do
     local n = tonumber(k)
     if (string.sub (ics, n, n) == "1") then
@@ -1104,9 +1461,10 @@ local function setup_iinfo ()
       iinfo.cfilter[k] = false
     end
   end
+
   iinfo.ignore = ii.ignore or false
   iinfo.list = ii.list or "0"
-  iinfo.rank = ii.rank or 999
+  iinfo.rank = ii.rank or 0
   iinfo.role = ii.role or 0
   iinfo.nextuser = ii.user or nil
   iinfo.nextdrop = iinfo.nextuser ~= nil
@@ -1124,52 +1482,37 @@ local function ilist_setitem (objp, idx, slot, btn)
 end
 
 local function enable_uvalues (io, en)
+  local en = en or false
+  classes_setenabled (io, en)
   io.speclist:SetEnabled (en)
   io.defrank:SetEnabled (en)
-  io.warrior:SetEnabled (en)
-  io.paladin:SetEnabled (en)
-  io.deathknight:SetEnabled (en)
-  io.hunter:SetEnabled (en)
-  io.shaman:SetEnabled (en)
-  io.druid:SetEnabled (en)
-  io.monk:SetEnabled (en)
-  io.rogue:SetEnabled (en)
-  io.mage:SetEnabled (en)
-  io.warlock:SetEnabled (en)
-  io.priest:SetEnabled (en)
-  io.demonhunter:SetEnabled (en)
   io.role:SetEnabled (en)
   io.nextdrop:SetEnabled (en)
   io.nextuser:SetEnabled (en and iinfo.nextdrop)
   io.seluser:SetEnabled (en and iinfo.nextdrop)
   io.autodel:SetEnabled (en and iinfo.nextdrop)
   io.suicidelist:SetEnabled (en and iinfo.nextdrop)
+
+  if (ksk.cfg.cfgtype == ksk.CFGTYPE_PUG) then
+    io.defrank:SetEnabled (false)
+  end
 end
 
 local function ilist_selectitem (objp, idx, slot, btn, onoff)
-  local io = ksk.qf.itemopts
-  local en = false
-
-  if (onoff) then
-    en = true
-  end
+  local io = qf.itemopts
+  local onoff = onoff or false
 
   local kids = { io:GetChildren () }
   for k,v in pairs (kids) do
     if (v.SetEnabled) then
-      v:SetEnabled (en)
+      v:SetEnabled (onoff)
     end
   end
 
   if (onoff) then
-    ksk.itemid = ksk.sorteditems[idx].id
+    selitemid = ksk.sorteditems[idx].id
     setup_iinfo ()
-
-    if (ksk.popupwindow) then
-      ksk.popupwindow:Hide ()
-      ksk.popupwindow = nil
-    end
-
+    hide_popup ()
 
     --
     -- Set the values from the current iinfo, which is copied when an item
@@ -1198,23 +1541,12 @@ local function ilist_selectitem (objp, idx, slot, btn, onoff)
     if (iinfo.automl) then
       io.autodench:SetEnabled (false)
     end
+    classes_cfilter (io, iinfo.cfilter)
     io.suicidelist:SetValue (slist)
     io.autodel:SetChecked (iinfo.autodel)
     io.nextuser:SetText (nuser)
     io.nextdrop:SetChecked (iinfo.nextdrop)
     io.role:SetValue (iinfo.role)
-    io.priest:SetChecked (iinfo.cfilter[K.CLASS_PRIEST])
-    io.warlock:SetChecked (iinfo.cfilter[K.CLASS_WARLOCK])
-    io.mage:SetChecked (iinfo.cfilter[K.CLASS_MAGE])
-    io.rogue:SetChecked (iinfo.cfilter[K.CLASS_ROGUE])
-    io.druid:SetChecked (iinfo.cfilter[K.CLASS_DRUID])
-    io.monk:SetChecked (iinfo.cfilter[K.CLASS_MONK])
-    io.shaman:SetChecked (iinfo.cfilter[K.CLASS_SHAMAN])
-    io.hunter:SetChecked (iinfo.cfilter[K.CLASS_HUNTER])
-    io.deathknight:SetChecked (iinfo.cfilter[K.CLASS_DEATHKNIGHT])
-    io.paladin:SetChecked (iinfo.cfilter[K.CLASS_PALADIN])
-    io.warrior:SetChecked (iinfo.cfilter[K.CLASS_WARRIOR])
-    io.demonhunter:SetChecked (iinfo.cfilter[K.CLASS_DEMONHUNTER])
     io.speclist:SetValue (iinfo.list)
     io.defrank:SetValue (iinfo.rank)
     io.ignore:SetChecked (iinfo.ignore)
@@ -1304,7 +1636,7 @@ local function hlist_setitem (objp, idx, slot, btn)
   local when,what,who,how = strsplit ("\7", hitem)
   local usr = who
   if (ksk.users[who]) then
-    usr = aclass (ksk.users[who])
+    usr = shortaclass (ksk.users[who])
   else
     local name,cls = strsplit("/", who)
     if (cls) then
@@ -1344,28 +1676,26 @@ local function iclass_filter_func (which, evt, val, cls, user)
 end
 
 local function class_filter_func (which, evt, val, cls, user)
-  ksk.lootitem.cfilter = ksk.lootitem.cfilter or {}
-  ksk.lootitem.cfilter[cls] = val
-  if (ksk.isml and user) then
+  lootitem.cfilter = lootitem.cfilter or {}
+  lootitem.cfilter[cls] = val
+  if (ksk.AmIML () and user) then
     ksk.SendRaidAM ("FLTCH", "ALERT", "C", cls, val)
   end
 end
 
 local nextuser_popup
+
 local function select_next(btn, lbl)
-  if (not ksk.itemid) then
+  if (not selitemid) then
     return
   end
 
-  if (ksk.popupwindow) then
-    ksk.popupwindow:Hide ()
-    ksk.popupwindow = nil
-  end
+  hide_popup ()
 
   local ulist = {}
 
   for k,v in pairs (ksk.users) do
-    tinsert (ulist, { text = aclass (v), value = k } )
+    tinsert (ulist, { text = shortaclass (v), value = k } )
   end
   tsort (ulist, function (a,b)
     return strlower(ksk.users[a.value].name) < strlower(ksk.users[b.value].name)
@@ -1374,15 +1704,14 @@ local function select_next(btn, lbl)
   local function pop_func (puid)
     local ulist = nextuser_popup.selectionlist
     changed (nil, true)
-    ksk.qf.ienextuserlbl:SetText (aclass (ksk.users[puid]))
-    ksk.popupwindow:Hide ()
-    ksk.popupwindow = nil
+    qf.ienextuserlbl:SetText (shortaclass (ksk.users[puid]))
+    hide_popup ()
     iinfo.nextdrop = true
     iinfo.nextuser = puid
   end
 
   if (not nextuser_popup) then
-    nextuser_popup = ksk:PopupSelectionList ("KSKNextUserPopup",
+    nextuser_popup = ksk.PopupSelectionList ("KSKNextUserPopup",
       ulist, nil, 220, 400, ksk.mainwin.tabs[ksk.LOOT_TAB].content,
       16, pop_func)
   else
@@ -1431,103 +1760,101 @@ end
 -- receive the loot, the item is assigned to that enchanter to be DE'd.
 --
 local function open_close_bids ()
-  if (ksk.rolling) then
-    ksk.rolling = 1
-    ksk.lootroll.endtime = GetTime() - 1
+  if (rolling) then
+    rolling = 1
+    lootroll.endtime = GetTime() - 1
     return
   end
 
-  if (ksk.biditem) then
-    -- We have an existing bid open. It is now being closed.
-    ksk.qf.lootwin.oclbids:SetText (L["Open Bids"])
-    ksk.qf.lootwin.remcancel:SetText (L["Remove"])
-    ksk.qf.lootwin.orpause:SetEnabled (true)
-    ksk.qf.lootwin.remcancel:SetEnabled (true)
-    ksk.SendRaidAM ("BIDND", "ALERT", ksk.biditem, timeout)
-    ksk.qf.bidders.mybid:SetEnabled (false)
-    ksk.qf.bidders.forcebid:SetEnabled (false)
-    ksk.qf.bidders.forceret:SetEnabled (false)
-    ksk.qf.bidders.mybid:SetText (L["Bid"])
-    ksk.qf.bidders.mybid.retract = nil
-
+  if (biditem) then
     --
     -- Lets see if we had any bidders. If we did, the highest one wins and
     -- we suicide them. If not we check the config options for what to do
     -- with the item.
     --
-    local n = ksk.qf.bidscroll.itemcount
-    if (n > 0) then
+    if (qf.bidscroll.itemcount > 0) then
       -- We have a winning bidder. Suicide them on the list they won on.
       -- In order to suicide properly we need to build up the ordered list
       -- of users who are in the raid on that list. We also need to include
       -- any users marked as reserved. This gets sent to the whole guild so
       -- all mod users can update their lists, but it is also stored as an
       -- event in the event log, and send to any / all co-admins.
-      local sulist = ksk:CreateRaidList (ksk.lootlistid)
-      local winname, winuid = ksk.bidders[1].name, ksk.bidders[1].uid
-      local wincls = ksk.bidders[1].class
-      local party = ksk.raid.members[ksk.raid.users[winuid]].party
-      local ilink = ksk.lootitem.loot.ilink
+      local sulist = ksk.CreateRaidList (lootlistid)
+      local winname, winuid = bidders[1].name, bidders[1].uid
+      local wincls = bidders[1].class
+      local party = KRP.players[winname].subgroup
+      local ilink = lootitem.loot.ilink
       local gpos = ""
-      local il, lp = ksk:UserInList (winuid, ksk.lootlistid)
+      local il, lp = ksk.UserInList (winuid, lootlistid)
+
       if (il) then
         gpos = strfmt ("[%d]", lp)
       end
-      ksk:SuicideUser (ksk.lootlistid, sulist, winuid, ksk.currentid, ilink, true)
-      ksk:AddLootHistory (nil, ksk:TimeStamp (), ilink, winuid, ksk.lootlistid)
 
-      local ts = strfmt (L["%s: %s%s (group %d) won %s. Grats!"], L["MODABBREV"], winname, gpos, party, ilink) 
+      ksk.SuicideUser (lootlistid, sulist, winuid, ksk.currentid, ilink, true)
+      ksk.AddLootHistory (nil, ksk.TimeStamp (), ilink, winuid, lootlistid)
+
+      local ts = strfmt (L["%s: %s%s (group %d) won %s. Grats!"],
+                         L["MODABBREV"], winname, gpos, party, ilink) 
+
       if (ksk.settings.ann_winners_raid) then
         ksk.SendRaidMsg (ts)
       end
+
       printf (icolor, "%s", ts)
+
       if (ksk.settings.ann_winners_guild) then
-        ksk.SendGuildMsg (strfmt (L["%s: %s%s won %s. Grats!"], L["MODABBREV"], winname, gpos, ilink))
+        ksk.SendGuildMsg (strfmt (L["%s: %s%s won %s. Grats!"],
+                                  L["MODABBREV"], winname, gpos, ilink))
       end
 
-      if (ksk.lootitem.loot.slot ~= 0 and ksk.settings.auto_loot and ksk.numlooters and ksk.numlooters > 0) then
-        local cname = aclass (winname, wincls)
-        ksk.qf.autoassign_msg:SetText (strfmt (L["AUTOLOOT"], cname, cname, cname))
+      if (lootitem.loot.slot ~= 0 and ksk.settings.auto_loot) then
+        local cname = shortaclass (winname, wincls)
+        qf.autoassign_msg:SetText (strfmt (L["AUTOLOOT"], cname, cname, cname))
         set_autoloot_win (winname)
       else
-        ksk:RemoveItemByIdx (ksk.selectedloot)
-        ksk.SendRaidAM ("BIREM", "ALERT", ksk.selectedloot)
+        ksk.RemoveItemByIdx (selectedloot, false)
       end
-      ksk:ResetBidders (true)
+
+      ksk.ResetBidders (true)
       return
-    else
+    else -- No bidders
       if (ksk.settings.ann_no_bids) then
-        ksk.SendRaidMsg (strfmt (L["%s: no successful bids for %s."], L["MODABBREV"], ksk.lootitem.loot.ilink))
+        ksk.SendRaidMsg (strfmt (L["%s: no successful bids for %s."],
+                                 L["MODABBREV"], lootitem.loot.ilink))
       end
-      if (boe_to_ml_or_de ()) then
+
+      if (boe_to_ml_or_de (false)) then
         return
       end
     end
-    ksk:RemoveItemByIdx (ksk.selectedloot)
-    ksk.SendRaidAM ("BIREM", "ALERT", ksk.selectedloot)
-    ksk:ResetBidders (true)
+    ksk.RemoveItemByIdx (selectedloot, false)
+    ksk.ResetBidders (true)
   else
-    if (not ksk.lootlist) then
+    -- We are starting a new bid.
+    if (not lootlist) then
       return
     end
-    -- We are starting a new bid.
-    ksk.biditem = ksk.selectedloot
-    ksk.bidders = {}
-    ksk.qf.bidders.mybid:SetEnabled (true)
-    ksk.qf.bidders.forcebid:SetEnabled (realmemberid ~= nil)
-    ksk.SendRaidAM ("BIDOP", "ALERT", ksk.biditem, timeout)
-    ksk.qf.lootwin.oclbids:SetText (L["Close Bids"])
-    ksk.qf.lootwin.remcancel:SetText (K.CANCEL_STR)
-    ksk.qf.lootwin.orpause:SetEnabled (false)
-    ksk.qf.lootwin.remcancel:SetEnabled (true)
-    ksk.SendRaidWarning (strfmt (L["Bids now open for %s on the %q list."], ksk.lootitem.loot.ilink, ksk.lootlist.name))
+
+    ksk.ResetBidders (true)
+    ksk.OpenBid (selectedloot)
+
+    qf.bidders.forcebid:SetEnabled (realmemberid ~= nil and true or false)
+    qf.lootwin.oclbids:SetText (L["Close Bids"])
+    qf.lootwin.remcancel:SetText (K.CANCEL_STR)
+    lootbid_setenabled (true)
+
+    ksk.SendRaidAM ("BIDOP", "ALERT", biditem, timeout)
+
+    ksk.SendRaidWarning (strfmt (L["Bids now open for %s on the %q list."], lootitem.loot.ilink, lootlist.name))
+
     if (ksk.settings.ann_bid_usage) then
-      ksk.SendRaidMsg (strfmt (L["%s: to bid on %s, whisper %s the word %q. For general help using %s, whisper an admin the word %q."], L["MODABBREV"], ksk.lootitem.loot.ilink, K.player.player, L["WHISPERCMD_BID"], L["MODABBREV"], L["WHISPERCMD_HELP"]))
+      ksk.SendRaidMsg (strfmt (L["%s: to bid on %s, whisper %s the word %q. For general help using %s, whisper an admin the word %q."], L["MODABBREV"], lootitem.loot.ilink, K.player.name, L["WHISPERCMD_BID"], L["MODABBREV"], L["WHISPERCMD_HELP"]))
     end
   end
 end
 
-function ksk:MakeCHITM (itemid, ii, cfg, send)
+function ksk.MakeCHITM (itemid, ii, cfg, send)
   local es = itemid .. ":"
 
   if (ii.ignore) then
@@ -1547,7 +1874,7 @@ function ksk:MakeCHITM (itemid, ii, cfg, send)
     es = es .. ii.list
   end
   es = es .. ":"
-  if (ii.rank and ii.rank ~= 999) then
+  if (ii.rank) then
     es = es .. tostring (ii.rank)
   end
   es = es .. ":"
@@ -1579,7 +1906,7 @@ function ksk:MakeCHITM (itemid, ii, cfg, send)
 end
 
 local function export_history_button ()
-  if (not ksk.exphistdlg) then
+  if (not exphistdlg) then
     local ypos = 0
     local arg = {
       x = "CENTER", y = "MIDDLE",
@@ -1591,6 +1918,7 @@ local function export_history_button ()
       canmove = true,
       canresize = false,
       escclose = true,
+      blackbg = true,
       okbutton = { text = K.ACCEPTSTR },
       cancelbutton = { text = K.CANCELSTR },
     }
@@ -1607,10 +1935,10 @@ local function export_history_button ()
       this:SetCursorPosition (0)
       if (newv ~= "") then
         this:SetFocus ()
-        ksk.exphistdlg.copymsg:Show ()
+        exphistdlg.copymsg:Show ()
       else
         this:ClearFocus ()
-        ksk.exphistdlg.copymsg:Hide ()
+        exphistdlg.copymsg:Hide ()
       end
     end)
     ypos = ypos - 30
@@ -1623,16 +1951,16 @@ local function export_history_button ()
     ypos = ypos - 24
 
     ret.OnAccept = function (this)
-      ksk.exphistdlg:Hide ()
+      exphistdlg:Hide ()
       ksk.mainwin:Show ()
     end
 
     ret.OnCancel = function (this)
-      ksk.exphistdlg:Hide ()
+      exphistdlg:Hide ()
       ksk.mainwin:Show ()
     end
 
-    ksk.exphistdlg = ret
+    exphistdlg = ret
   end
 
   local _, mo, dy, yr = CalendarGetDate ()
@@ -1735,14 +2063,14 @@ local function export_history_button ()
   end
 
   local fstr = strfmt ("<ksk date=%q time=%q><classes>%s</classes><users>%s</users><quals>%s</quals><items>%s</items><lists>%s</lists><history>%s</history></ksk>", dstr, tstr, tconcat (classes, ""), tconcat (ulist, ""), tconcat (iql, ""), tconcat (ilist, ""), tconcat (llist, ""), tconcat (ehl, ""))
-  ksk.exphistdlg.expstr:SetText (fstr)
+  exphistdlg.expstr:SetText (fstr)
 
   ksk.mainwin:Hide ()
-  ksk.exphistdlg:Show ()
+  exphistdlg:Show ()
 end
 
 local function undo_button ()
-  if (not ksk.undodlg) then
+  if (not undodlg) then
     local ypos = 0
     local arg = {
       x = "CENTER", y = "MIDDLE",
@@ -1754,6 +2082,7 @@ local function undo_button ()
       canmove = true,
       canresize = false,
       escclose = true,
+      blackbg = true,
       okbutton = { text = K.ACCEPTSTR },
       cancelbutton = { text = K.CANCELSTR },
     }
@@ -1795,7 +2124,7 @@ local function undo_button ()
     ret.item = KUI:CreateStringLabel (arg, ret)
 
     ret.OnAccept = function (this)
-      ksk.undodlg:Hide ()
+      undodlg:Hide ()
       ksk.mainwin:Show ()
 
       local cid = ksk.currentid
@@ -1803,17 +2132,17 @@ local function undo_button ()
       urec = tremove (csd.undo, 1)
       if (#csd.undo < 1) then
         csd.undo = nil
-        ksk.qf.undobutton:SetEnabled (false)
+        qf.undobutton:SetEnabled (false)
       end
-      ksk:UndoSuicide (cid, urec.listid, urec.movers, urec.uid, urec.ilink, false)
+      ksk.UndoSuicide (cid, urec.listid, urec.movers, urec.uid, urec.ilink, false)
     end
 
     ret.OnCancel = function (this)
-      ksk.undodlg:Hide ()
+      undodlg:Hide ()
       ksk.mainwin:Show ()
     end
 
-    ksk.undodlg = ret
+    undodlg = ret
   end
 
   local cid = ksk.currentid
@@ -1825,25 +2154,63 @@ local function undo_button ()
   end
 
   ksk.mainwin:Hide ()
-  ksk.undodlg:Show ()
+  undodlg:Show ()
 
   local ui = ksk.csdata[cid].undo[1]
 
-  ksk.undodlg.user:SetText (aclass (ksk.users[ui.uid]))
-  ksk.undodlg.list:SetText (ksk.lists[ui.listid].name)
-  ksk.undodlg.item:SetText (ui.ilink)
+  undodlg.user:SetText (aclass (ksk.users[ui.uid]))
+  undodlg.list:SetText (ksk.lists[ui.listid].name)
+  undodlg.item:SetText (ui.ilink)
 end
 
-function ksk:InitialiseLootGUI ()
+local function refresh_loot_lists ()
+  local oldlist = lootlistid or nil
+  local oldidx = nil
+
+  lootlistid = nil
+  for k,v in ipairs (ksk.sortedlists) do
+    if (v.id == oldlist) then
+      oldidx = k
+    end
+  end
+
+  qf.lists.itemcount = ksk.cfg.nlists
+  qf.lists:UpdateList ()
+  -- This will also update the members list.
+  qf.lists:SetSelected (oldidx, true, true)
+end
+
+local function set_classes_from_filter (filter)
+  for k,v in pairs (K.IndexClass) do
+    local n = tonumber (k)
+    local val = false
+    if (strsub (filter, n, n) == "1") then
+      val = true
+    end
+    qf.lootrules[v.w]:SetChecked (val)
+  end
+end
+
+function ksk.InitialiseLootUI ()
   local arg
+  local kmt = ksk.mainwin.tabs[ksk.LOOT_TAB]
+
+  kmt.onclick = function (main, sub)
+    qf.membersearch:SetEnabled (ksk:AmIML ())
+  end
+
+  -- First set up the quick access frames we will be using.
+  qf.assign = kmt.tabs[ksk.LOOT_ASSIGN_PAGE].content
+  qf.itemedit = kmt.tabs[ksk.LOOT_ITEMS_PAGE].content
+  qf.history = kmt.tabs[ksk.LOOT_HISTORY_PAGE].content
 
   --
-  -- Loot tab, Loot Assignment panel.
+  -- Loot tab, Loot Assignment page.
   --
   local ypos = 0
 
-  local cf = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ASSIGN_TAB].content
-  local tbf = ksk.mainwin.tabs[ksk.LOOT_TAB].topbar
+  local cf = qf.assign
+  local tbf = kmt.topbar
   local ls = cf.vsplit.leftframe
   local rs = cf.vsplit.rightframe
 
@@ -1873,7 +2240,7 @@ function ksk:InitialiseLootGUI ()
     end,
   }
   tl.slist = KUI:CreateScrollList (arg, tl)
-  ksk.qf.lootlists = tl.slist
+  qf.lists = tl.slist
 
   local bdrop = {
     bgFile = KUI.TEXTURE_PATH .. "TDF-Fill",
@@ -1894,7 +2261,7 @@ function ksk:InitialiseLootGUI ()
     end,
   }
   tbl.slist = KUI:CreateScrollList (arg, tbl)
-  ksk.qf.lootmembers = tbl.slist
+  qf.members = tbl.slist
   tbl.slist:SetBackdrop (bdrop)
 
   arg = {
@@ -1902,7 +2269,7 @@ function ksk:InitialiseLootGUI ()
     width = 170, tooltip = { title = L["User Search"], text = L["TIP099"] },
   }
   bbl.searchbox = KUI:CreateEditBox (arg, bbl)
-  ksk.qf.membersearch = bbl.searchbox
+  qf.membersearch = bbl.searchbox
   bbl.searchbox:Catch ("OnEnterPressed", function (this, evt, newv, user)
     this:SetText ("")
   end)
@@ -1921,7 +2288,7 @@ function ksk:InitialiseLootGUI ()
           end
           for kk,vv in ipairs (members) do
             if (vv.id == its) then
-              ksk.qf.lootmembers:SetSelected (kk, true)
+              qf.members:SetSelected (kk, true, true)
               break
             end
           end
@@ -1942,7 +2309,7 @@ function ksk:InitialiseLootGUI ()
   rs.hsplit = KUI:CreateHSplit (arg, rs)
   local tr = rs.hsplit.topframe
   local br = rs.hsplit.bottomframe
-  ksk.qf.lootwin = tr
+  qf.lootwin = tr
 
   arg = {
     inset = 0, height = 180, name = "KSKLootFilterHSplit",
@@ -1956,9 +2323,9 @@ function ksk:InitialiseLootGUI ()
   -- The loot rules frame doubles as both the loot rules and the "popup"
   -- frame when we auto-assign loot to someone. We do this so that we do
   -- not need to hide the main window and the loot master can see who is
-  -- in the raid and loot at the loot lists etc. So when we have an item
+  -- in the raid and look at the loot lists etc. So when we have an item
   -- that is auto-assigned to a user in the item database or when a user
-  -- has one a bid and we are auto-assigning loot, we hide the loot rules
+  -- has won a bid and we are auto-assigning loot, we hide the loot rules
   -- window and display the loot assignment window in its place. We need
   -- to be careful when showing the window again however. If the master
   -- looter closes the main KSK window, when they re-open it, we need the
@@ -1982,10 +2349,10 @@ function ksk:InitialiseLootGUI ()
   rlf:SetPoint ("BOTTOMRIGHT", bmf, "BOTTOMRIGHT", 0, 0)
   rlf:Hide ()
 
-  ksk.qf.lootrules = bm
-  ksk.qf.autoloot = alf
-  ksk.qf.lootroll = rlf
-  ksk.qf.bidders = bb
+  qf.lootrules = bm
+  qf.autoloot = alf
+  qf.lootroll = rlf
+  qf.bidders = bb
 
   --
   -- Populate the auto-assign frame first. Its pretty simple.
@@ -1997,7 +2364,7 @@ function ksk:InitialiseLootGUI ()
     justifyh = "CENTER",
   }
   alf.item = KUI:CreateStringLabel (arg, alf)
-  ksk.qf.autoassign_item = alf.item
+  qf.autoassign_item = alf.item
 
   arg = {
     x = 0, y = 0, width = 1, height = 1, autosize = false,
@@ -2010,7 +2377,7 @@ function ksk:InitialiseLootGUI ()
   alf.str:SetPoint ("BOTTOMRIGHT", alf, "BOTTOMRIGHT", -4, 28)
   alf.str.label:SetPoint ("TOPLEFT", alf.str, "TOPLEFT", 0, 0)
   alf.str.label:SetPoint ("BOTTOMRIGHT", alf.str, "BOTTOMRIGHT", 0, 0)
-  ksk.qf.autoassign_msg = alf.str
+  qf.autoassign_msg = alf.str
 
   arg = {
     x = 40, y = -154, width = 90, text = K.OK_STR,
@@ -2033,7 +2400,7 @@ function ksk:InitialiseLootGUI ()
   --
   local function rem_onclick (this, evt)
     local w = this.which
-    local nm = ksk.lootroll.sorted[w]
+    local nm = lootroll.sorted[w]
     player_rolled (nm, 1, 1, 1)
   end
 
@@ -2126,95 +2493,25 @@ function ksk:InitialiseLootGUI ()
   rlf.timerspark:SetWidth (20)
   rlf.timerspark:SetHeight (44)
 
-  local function rlf_onevent (this, evt, arg1, ...)
-    if (evt == "CHAT_MSG_SYSTEM") then
-      local plr, roll, minr, maxr = LibDeformat.Deformat (arg1, RANDOM_ROLL_RESULT)
-      if (plr and (not strfind (plr, "-", 1, true))) then
-        local ds = plr .. "-"
-        local ss, se
-        for k, v in pairs (ksk.raid.members) do
-          ss, se = strfind (v.name, ds, 1, true)
-          if (ss == 1) then
-            plr = v.name
-            break
-          end
-        end
-      end
-      local player = K.CanonicalName (plr, nil)
-      if (player and (not ksk.raid.players[player])) then
-        player = nil
-      end
-      if (player and roll and minr and maxr) then
-        if ((minr == 1 and maxr == 100) or
-            (ksk.settings.offspec_rolls and (minr == 101 and maxr == 200)) or
-            (minr == 1 and maxr == 1)) then
-          player_rolled (player, roll, minr, maxr)
-        else
-          if (ksk.settings.offspec_rolls) then
-            ksk.SendWhisper (strfmt (L["%s: invalid roll. Use '/roll' for main spec, '/roll 101-200' for off-spec or '/roll 1-1' to cancel a roll."], L["MODTITLE"]), player)
-          else
-            ksk.SendWhisper (strfmt (L["%s: invalid roll. Use '/roll' for main spec or '/roll 1-1' to cancel a roll."], L["MODTITLE"]), player)
-          end
-          return
-        end
-      end
-    end
-  end
-
   rlf.StartRoll = function (sroll)
-    --
-    -- We want to disable other roll trackers. This is the place to do it.
-    -- Currently I only know about LootHog. Add others here.
-    --
-    ksk.lootroll = {}
-    if (loothog_settings) then
-      if (loothog_settings["enable"]) then
-        if (loothog_turnoff) then
-          ksk.lootroll.lhdisabled = true
-          loothog_turnoff()
-        end
-      end
-    end
+    qf.lootwin.oclbids:SetText (L["End Roll"])
+    qf.lootwin.oclbids:SetEnabled (true)
+    qf.lootwin.orpause:SetText (L["Pause"])
+    qf.lootwin.orpause:SetEnabled (true)
+    qf.lootwin.remcancel:SetText (K.CANCEL_STR)
+    qf.lootwin.remcancel:SetEnabled (true)
 
-    -- Blank out any previous rollers
-    for i = 1,5 do
-      rlf["pos"..i]:SetText ("")
-      rlf["rem"..i]:SetEnabled (false)
-    end
-
-    ksk.lootroll.endtime = GetTime () + ksk.cfg.settings.roll_timeout + 1
-    ksk.lootroll.rollers = {}
-    ksk.lootroll.suicide = sroll
-    rlf.timerbarframe:SetScript ("OnUpdate", rolltimer_onupdate)
-    ksk.qf.lootwin.oclbids:SetText (L["End Roll"])
-    ksk.qf.lootwin.oclbids:SetEnabled (true)
-    ksk.qf.lootwin.remcancel:SetText (K.CANCEL_STR)
-    ksk.qf.lootwin.remcancel:SetEnabled (true)
-    rlf:RegisterEvent ("CHAT_MSG_SYSTEM")
-    rlf:SetScript ("OnEvent", rlf_onevent)
-    ksk:StartOpenRoll (ksk.lootitem.loot.ilink, ksk.cfg.settings.roll_timeout)
-    ksk.SendRaidAM ("OROLL", "ALERT", ksk.lootitem.loot.ilink, ksk.cfg.settings.roll_timeout)
+    ksk.StartOpenRoll (lootitem.loot.ilink, ksk.settings.roll_timeout)
+    lootroll.suicide = sroll
   end
 
   local function rlf_onhide ()
-    if (ksk.rolling == 0) then
-      ksk:CleanupLootRoll ()
-    elseif (ksk.rolling == 1) then
+    if (rolling == 1) then
       open_roll_or_pause ()
-    elseif (ksk.rolling == 2) then
-      ksk.rolling = 3
     end
   end
 
-  local function rlf_onshow ()
-    if (ksk.rolling == 2) then
-      open_roll_or_pause ()
-    elseif (ksk.rolling == 3) then
-      ksk.rolling = 2
-    end
-  end
   rlf:SetScript ("OnHide", rlf_onhide)
-  rlf:SetScript ("OnShow", rlf_onshow)
 
   --
   -- Now populate the actual loot rules frame
@@ -2350,10 +2647,11 @@ function ksk:InitialiseLootGUI ()
 
   bm.role = ksk.CreateRoleListDropdown ("LootRoleFilter", 0, ypos, bm)
   bm.role:SetEnabled (false)
-  ksk.loot_role = 0
   bm.role:Catch ("OnValueChanged", function (this, evt, newv, user)
-    ksk.loot_role = newv
-    if (ksk.isml and user) then
+    if (lootitem) then
+      lootitem.role = newv
+    end
+    if (ksk.AmIML () and user) then
       ksk.SendRaidAM ("FLTCH", "ALERT", "R", newv)
     end
   end)
@@ -2367,13 +2665,16 @@ function ksk:InitialiseLootGUI ()
     tooltip = { title = "$$", text = L["TIP051"], },
   }
   bm.rank = KUI:CreateDropDown (arg, bm)
-  ksk.loot_rank = 999
   bm.rank:Catch ("OnValueChanged", function (this, evt, newv, user)
-    ksk.loot_rank = newv
-    if (ksk.isml and user) then
+    if (lootitem) then
+      lootitem.rank = newv
+    end
+
+    if (ksk.AmIML () and user) then
       ksk.SendRaidAM ("FLTCH", "ALERT", "G", newv)
     end
   end)
+  -- Must remain visible in ksk.qf so the ranks can be updated from main.
   ksk.qf.lootrank = bm.rank
 
   arg = {
@@ -2383,13 +2684,11 @@ function ksk:InitialiseLootGUI ()
   bm.nextrank:ClearAllPoints ()
   bm.nextrank:SetPoint ("TOPLEFT", bm.rank.button, "TOPRIGHT", 2, -4)
   bm.nextrank:Catch ("OnClick", function (this, evt, ...)
-    if (ksk.loot_rank ~= 999) then
-      if (ksk.loot_rank < K.guild.numranks) then
-        ksk.loot_rank = ksk.loot_rank + 1
-        bm.rank:SetValue (ksk.loot_rank)
-        if (ksk.isml) then
-          ksk.SendRaidAM ("FLTCH", "ALERT", "G", ksk.loot_rank)
-        end
+    if (ksk.AmIML () and lootitem and lootitem.rank) then
+      if (lootitem.rank < K.guild.numranks) then
+        lootitem.rank = lootitem.rank + 1
+        bm.rank:SetValue (lootitem.rank)
+        ksk.SendRaidAM ("FLTCH", "ALERT", "G", lootitem.rank)
       end
     end
   end)
@@ -2403,9 +2702,14 @@ function ksk:InitialiseLootGUI ()
   }
   bm.strictarmour = KUI:CreateCheckBox (arg, bm)
   bm.strictarmour:Catch ("OnValueChanged", function (this, evt, val, user)
-    ksk.strictca = val
-    if (ksk.isml and user) then
+    if (ksk.AmIML () and user) then
+      if (val) then
+        set_classes_from_filter (lootitem.loot.strict)
+      else
+        set_classes_from_filter (lootitem.loot.relaxed)
+      end
       ksk.SendRaidAM ("FLTCH", "ALERT", "A", val)
+      lootitem.strictarmor = val
     end
   end)
 
@@ -2416,9 +2720,9 @@ function ksk:InitialiseLootGUI ()
   }
   bm.strictrole = KUI:CreateCheckBox (arg, bm)
   bm.strictrole:Catch ("OnValueChanged", function (this, evt, val, user)
-    ksk.strictrf = val
-    if (ksk.isml and user) then
+    if (ksk.AmIML () and user) then
       ksk.SendRaidAM ("FLTCH", "ALERT", "L", val)
+      lootitem.strictrole = val
     end
   end)
   ypos = ypos - 20
@@ -2446,6 +2750,8 @@ function ksk:InitialiseLootGUI ()
     end,
   }
   tr.slist = KUI:CreateScrollList (arg, tr.sframe)
+  -- Must expose in ksk.qf because it is accessed in KKonferSK.lua at the
+  -- very least, possibly elsewhere.
   ksk.qf.lootscroll = tr.slist
 
   ypos = -100
@@ -2497,14 +2803,14 @@ function ksk:InitialiseLootGUI ()
     newitem = function (objp, num)
       return KUI.NewItemHelper (objp, num, "KSKBLBidButton", 155, 16, nil, nil,
         function (this, idx)
-          if (not ksk.isml) then
+          if (not ksk.AmIML ()) then
             return true
           end
         end, nil)
       end,
     setitem = function (objp, idx, slot, btn)
         return KUI.SetItemHelper (objp, btn, idx, function (op, ix)
-          return aclass (ksk.bidders[ix])
+          return shortaclass (bidders[ix])
         end)
       end,
     selectitem = blist_selectitem,
@@ -2513,7 +2819,7 @@ function ksk:InitialiseLootGUI ()
     end,
   }
   bb.slist = KUI:CreateScrollList (arg, bb.sframe)
-  ksk.qf.bidscroll = bb.slist
+  qf.bidscroll = bb.slist
 
   ypos = 0
   local xpos = 190
@@ -2523,21 +2829,21 @@ function ksk:InitialiseLootGUI ()
   }
   bb.mybid = KUI:CreateButton (arg, bb)
   bb.mybid:Catch ("OnClick", function (this, evt, ...)
-    if (ksk.rolling) then
+    if (rolling) then
       RandomRoll (1, 100)
     elseif (bb.mybid.retract) then
-      if (ksk.isml) then
-        ksk:RetractBidder (K.player.player, ksk.biditem)
+      if (ksk.AmIML ()) then
+        ksk.RetractBidder (K.player.name)
       else
-        assert (ksk.mlname)
-        ksk.SendWhisperAM (ksk.mlname, "BIDRT", "ALERT", ksk.biditem)
+        assert (KRP.master_looter)
+        ksk.SendWhisperAM (KRP.master_looter, "BIDRT", "ALERT", biditem)
       end
     else
-      if (ksk.isml) then
-        ksk:NewBidder (K.player.player)
+      if (ksk.AmIML ()) then
+        ksk.NewBidder (K.player.name)
       else
-        assert (ksk.mlname)
-        ksk.SendWhisperAM (ksk.mlname, "BIDME", "ALERT", ksk.biditem)
+        assert (KRP.master_looter)
+        ksk.SendWhisperAM (KRP.master_looter, "BIDME", "ALERT", biditem)
       end
     end
   end)
@@ -2550,10 +2856,10 @@ function ksk:InitialiseLootGUI ()
   }
   bb.forcebid = KUI:CreateButton (arg, bb)
   bb.forcebid:Catch ("OnClick", function (this, evt, ...)
-    if (ksk.rolling) then
+    if (rolling) then
       RandomRoll (101, 200)
     else
-      ksk:NewBidder (ksk.users[realmemberid].name)
+      ksk.NewBidder (ksk.users[realmemberid].name)
     end
   end)
   ypos = ypos - 24
@@ -2565,10 +2871,10 @@ function ksk:InitialiseLootGUI ()
   }
   bb.forceret = KUI:CreateButton (arg, bb)
   bb.forceret:Catch ("OnClick", function (this, evt, ...)
-    if (ksk.rolling) then
+    if (rolling) then
       RandomRoll (1, 1)
     else
-      ksk:RetractBidder (ksk.bidders[ksk.selectedbidder].name)
+      ksk.RetractBidder (ksk.users[selectedbiduid].name)
     end
   end)
   ypos = ypos - 24
@@ -2583,16 +2889,17 @@ function ksk:InitialiseLootGUI ()
     undo_button ()
   end)
   ypos = ypos - 24
+  qf.undobutton = bb.undo
   ksk.qf.undobutton = bb.undo
 
   --
   -- Item editor tab. The left side is the scrolling list of loot items,
   -- and the right hand side contains the options for that item.
   --
-  local cf = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ITEMS_TAB].content
+  local cf = qf.itemedit
   local ls = cf.vsplit.leftframe
   local rs = cf.vsplit.rightframe
-  ksk.qf.itemopts = rs
+  qf.itemopts = rs
 
   arg = {
     name = "KSKItemScrollList",
@@ -2621,7 +2928,7 @@ function ksk:InitialiseLootGUI ()
     end,
   }
   ls.ilist = KUI:CreateScrollList (arg, ls)
-  ksk.qf.itemlist = ls.ilist
+  qf.itemlist = ls.ilist
 
   local function reset_uvalues (io)
     io.suicidelist:SetValue ("0")
@@ -2629,19 +2936,8 @@ function ksk:InitialiseLootGUI ()
     io.nextuser:SetText ("")
     io.nextdrop:SetChecked (false)
     io.role:SetValue (0)
-    io.priest:SetChecked (false)
-    io.warlock:SetChecked (false)
-    io.mage:SetChecked (false)
-    io.rogue:SetChecked (false)
-    io.druid:SetChecked (false)
-    io.monk:SetChecked (false)
-    io.shaman:SetChecked (false)
-    io.hunter:SetChecked (false)
-    io.deathknight:SetChecked (false)
-    io.paladin:SetChecked (false)
-    io.warrior:SetChecked (false)
-    io.demonhunter:SetChecked (false)
-    io.defrank:SetValue (999)
+    classes_setchecked (io, false)
+    io.defrank:SetValue (0)
     io.speclist:SetValue ("0")
   end
 
@@ -2653,7 +2949,7 @@ function ksk:InitialiseLootGUI ()
   }
   rs.ignore = KUI:CreateCheckBox (arg, rs)
   rs.ignore:Catch ("OnValueChanged", function (this, evt, val, user)
-    local io = ksk.qf.itemopts
+    local io = qf.itemopts
     if (not val) then
       iinfo.ignore = nil
     else
@@ -2680,7 +2976,7 @@ function ksk:InitialiseLootGUI ()
   }
   rs.autodench = KUI:CreateCheckBox (arg, rs)
   rs.autodench:Catch ("OnValueChanged", function (this, evt, val, user)
-    local io = ksk.qf.itemopts
+    local io = qf.itemopts
     if (not val) then
       iinfo.autodench = nil
     else
@@ -2705,7 +3001,7 @@ function ksk:InitialiseLootGUI ()
   }
   rs.automl = KUI:CreateCheckBox (arg, rs)
   rs.automl:Catch ("OnValueChanged", function (this, evt, val, user)
-    local io = ksk.qf.itemopts
+    local io = qf.itemopts
     if (not val) then
       iinfo.automl = nil
     else
@@ -2736,7 +3032,11 @@ function ksk:InitialiseLootGUI ()
     changed (nil, user)
     iinfo.list = newv
   end)
-  ksk.qf.itemlistdd = rs.speclist
+  --
+  -- The list items are updated by ksk.RefreshAllLists() in KSK-Lists.lua.
+  -- This in turn calls ksk.RefreshItemList () below.
+  --
+  qf.itemlistdd = rs.speclist
   ypos = ypos - 48
 
   arg = {
@@ -2747,6 +3047,7 @@ function ksk:InitialiseLootGUI ()
     tooltip = { title = "$$", text = L["TIP061"], },
   }
   rs.defrank = KUI:CreateDropDown (arg, rs)
+  -- Must remain visible in ksk.qf so it can be updated from main.
   ksk.qf.itemrankdd = rs.defrank
   rs.defrank:Catch ("OnValueChanged", function (this, evt, nv, user)
     changed (nil, user)
@@ -2906,7 +3207,7 @@ function ksk:InitialiseLootGUI ()
   rs.nextdrop = KUI:CreateCheckBox (arg, rs)
   rs.nextdrop:Catch ("OnValueChanged", function (this, evt, val, user)
     changed (nil, user)
-    local io = ksk.qf.itemopts
+    local io = qf.itemopts
     io.nextuser:SetEnabled (val)
     io.seluser:SetEnabled (val)
     io.autodel:SetEnabled (val)
@@ -2919,10 +3220,7 @@ function ksk:InitialiseLootGUI ()
       iinfo.autodel = false
       iinfo.suicide = "0"
       iinfo.nextuser = nil
-      if (ksk.popupwindow) then
-        ksk.popupwindow:Hide ()
-        ksk.popupwindow = nil
-      end
+      hide_popup ()
     else
       iinfo.nextdrop = true
       io.autodel:SetChecked (iinfo.autodel)
@@ -2935,7 +3233,7 @@ function ksk:InitialiseLootGUI ()
     enabled = false, autosize = false,
   }
   rs.nextuser = KUI:CreateStringLabel (arg, rs)
-  ksk.qf.ienextuserlbl = rs.nextuser
+  qf.ienextuserlbl = rs.nextuser
 
   arg = {
     x = 180, y = ypos+2, width = 65, height = 24, text = L["Select"],
@@ -2961,7 +3259,7 @@ function ksk:InitialiseLootGUI ()
   ypos = ypos - 20
 
   arg = {
-    x = 24, y = ypos, name = "KSKItemUserSuicideList", dwidth = 150,
+    x = 24, y = ypos, name = "KSKItemUserSuicideList", dwidth = 200,
     mode = "SINGLE", itemheight = 16, items = KUI.emptydropdown,
     label = { text = L["Suicide User on List"], pos = "TOP" },
     enabled = false,
@@ -2972,29 +3270,33 @@ function ksk:InitialiseLootGUI ()
     changed (nil, user)
     iinfo.suicide = newv
   end)
-  ksk.qf.suicidelistdd = rs.suicidelist
+  --
+  -- The list items are updated by ksk.RefreshAllLists() in KSK-Lists.lua.
+  -- This in turn calls ksk.RefreshItemList () below.
+  --
+  qf.suicidelistdd = rs.suicidelist
   ypos = ypos - 48
 
   arg = {
     x = 0, y = ypos, text = L["Update"], enabled = false,
   }
   rs.updatebtn = KUI:CreateButton (arg, rs)
-  ksk.qf.itemupdbtn = rs.updatebtn
+  qf.itemupdbtn = rs.updatebtn
   rs.updatebtn:Catch ("OnClick", function (this, evt)
     --
     -- Copy from the iinfo structure back to the stored item list in the
     -- configure structure. Do it manually as we check values as we go.
     --
     local ilink = iinfo.ilink
-    if (iinfo.ignore and iinfo.ignore == true) then
-      ksk.items[ksk.itemid] = { ilink = ilink, ignore = true }
+    if (iinfo.ignore) then
+      ksk.items[itemid] = { ilink = ilink, ignore = true }
     else
-      ksk.items[ksk.itemid] = { ilink = ilink }
+      ksk.items[itemid] = { ilink = ilink }
       local cs = {}
       local ns = 0
       for k,v in pairs (K.IndexClass) do
         local n = tonumber (k)
-        if (iinfo.cfilter[k] == true) then
+        if (iinfo.cfilter[k]) then
           cs[n] = "1"
           ns = ns + 1
         else
@@ -3003,50 +3305,50 @@ function ksk:InitialiseLootGUI ()
       end
       local fcs = tconcat (cs)
       if (ns > 0) then
-        ksk.items[ksk.itemid].cfilter = fcs
+        ksk.items[itemid].cfilter = fcs
       end
 
       if (iinfo.role and iinfo.role ~= 0) then
-        ksk.items[ksk.itemid].role = iinfo.role
+        ksk.items[itemid].role = iinfo.role
       end
 
       if (iinfo.list and iinfo.list ~= "" and iinfo.list ~= "0") then
-        ksk.items[ksk.itemid].list = iinfo.list
+        ksk.items[itemid].list = iinfo.list
       end
 
-      if (iinfo.rank and iinfo.rank ~= 999) then
-        ksk.items[ksk.itemid].rank = iinfo.rank
+      if (iinfo.rank) then
+        ksk.items[itemid].rank = iinfo.rank
       end
 
       if (iinfo.nextdrop and iinfo.nextdrop ~= false and iinfo.nextuser and iinfo.nextuser ~= "" and iinfo.nextuser ~= 0) then
-        ksk.items[ksk.itemid].user = iinfo.nextuser
+        ksk.items[itemid].user = iinfo.nextuser
         if (iinfo.suicide and iinfo.suicide ~= "0") then
-          ksk.items[ksk.itemid].suicide = iinfo.suicide
+          ksk.items[itemid].suicide = iinfo.suicide
         end
-        if (iinfo.autodel and iinfo.autodel == true) then
-          ksk.items[ksk.itemid].del = true
+        if (iinfo.autodel) then
+          ksk.items[itemid].del = true
         end
       end
 
       if (iinfo.autodench and iinfo.autodench ~= false) then
-        ksk.items[ksk.itemid].autodench = true
+        ksk.items[itemid].autodench = true
       end
 
       if (iinfo.automl and iinfo.automl ~= false) then
-        ksk.items[ksk.itemid].automl = true
+        ksk.items[itemid].automl = true
       end
     end
-    ksk:MakeCHITM (ksk.itemid, ksk.items[ksk.itemid], ksk.currentid, true)
-    ksk.qf.itemupdbtn:SetEnabled (false)
+    ksk.MakeCHITM (itemid, ksk.items[itemid], ksk.currentid, true)
+    qf.itemupdbtn:SetEnabled (false)
   end)
 
   arg.x = 100
   arg.text = L["Delete"]
   arg.tooltip = { title = "$$", text = L["TIP066"] }
   rs.deletebtn = KUI:CreateButton (arg, rs)
-  ksk.qf.itemdelbtn = rs.deletebtn
+  qf.itemdelbtn = rs.deletebtn
   rs.deletebtn:Catch ("OnClick", function (this, evt)
-    ksk:DeleteItem (ksk.itemid)
+    ksk.DeleteItem (itemid)
   end)
   ypos = ypos - 24
 
@@ -3054,7 +3356,7 @@ function ksk:InitialiseLootGUI ()
   -- History tab. We have a header, then the rest of the panel is a big
   -- scrolling list of loot history.
   --
-  local cf = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_HISTORY_TAB].content
+  local cf = qf.history
   local tf = cf.hsplit.topframe
   local bf = cf.hsplit.bottomframe
   ypos = 0
@@ -3069,7 +3371,7 @@ function ksk:InitialiseLootGUI ()
   bf.clearall = KUI:CreateButton (arg, bf)
   bf.clearall:Catch ("OnClick", function (this, evt, ...)
     ksk.cfg.history = {}
-    ksk:RefreshHistory ()
+    ksk.RefreshHistory ()
   end)
 
   arg = {
@@ -3078,7 +3380,7 @@ function ksk:InitialiseLootGUI ()
   }
   bf.clearweek = KUI:CreateButton (arg, bf)
   bf.clearweek:Catch ("OnClick", function (this, evt, ...)
-    local _, y, m, d = ksk:TimeStamp ()
+    local _, y, m, d = ksk.TimeStamp ()
     if (d >= 7) then
       d = d - 6
     else
@@ -3099,7 +3401,7 @@ function ksk:InitialiseLootGUI ()
         i = i + 1
       end
     end
-    ksk:RefreshHistory ()
+    ksk.RefreshHistory ()
   end)
 
   arg = {
@@ -3108,7 +3410,7 @@ function ksk:InitialiseLootGUI ()
   }
   bf.clearmonth = KUI:CreateButton (arg, bf)
   bf.clearmonth:Catch ("OnClick", function (this, evt, ...)
-    local _, y, m, d = ksk:TimeStamp ()
+    local _, y, m, d = ksk.TimeStamp ()
     if (m == 1) then
       y = y - 1
       m = 12
@@ -3124,7 +3426,7 @@ function ksk:InitialiseLootGUI ()
         i = i + 1
       end
     end
-    ksk:RefreshHistory ()
+    ksk.RefreshHistory ()
   end)
   ypos = ypos - 24
 
@@ -3170,67 +3472,24 @@ function ksk:InitialiseLootGUI ()
     end,
   }
   tf.slist = KUI:CreateScrollList (arg, tf.sframe)
-  ksk.qf.histscroll = tf.slist
-
-  initdone = true
-  ksk:RefreshLootLists ()
-  ksk:RefreshHistory ()
-  ksk:ResetBossLoot ()
+  qf.histscroll = tf.slist
 end
 
-function ksk:RefreshLootLists ()
-  if (not initdone) then
-    return
-  end
-
-  local vt = {}
-
-  local oldlist = ksk.lootlistid or ""
-  local oldidx = 0
-
-  ksk.lootlistid = nil
-  for k,v in ipairs (ksk.sortedlists) do
-    if (v.id ==  oldlist) then
-      oldidx = k
-    end
-  end
-  if (oldidx == 0) then
-    oldidx = 1
-  end
-
-  ksk.qf.lootlists.itemcount = ksk.cfg.nlists
-  if (ksk.qf.lootlists.itemcount > 0) then
-    ksk.qf.lootlists:UpdateList ()
-    ksk.lootlistid = ksk.sortedlists[oldidx].id
-    ksk.lootlist = ksk.lists[ksk.lootlistid]
-    ksk.qf.lootlists:SetSelected (oldidx)
-  else
-    ksk.lootlistid = nil
-    ksk.lootlist = nil
-    ksk.qf.lootlists:UpdateList ()
-  end
-
-  ksk:RefreshLootMembers ()
-end
-
-function ksk:RefreshItemList ()
-  if (not initdone) then
-    return
-  end
-
-  local kids = { ksk.qf.itemopts:GetChildren () }
+function ksk.RefreshItemList ()
+  local kids = { qf.itemopts:GetChildren () }
   for k,v in pairs (kids) do
     if (v.SetEnabled) then
       v:SetEnabled (false)
     end
   end
-  ksk.qf.itemopts.cflabel:SetEnabled (true)
+  qf.itemopts.cflabel:SetEnabled (true)
 
   local vt = {}
-  local olditem = ksk.itemid or ""
-  local oldidx = 0
+  local olditem = selitemid or 0
+  local oldidx = nil
+
   ksk.sorteditems = {}
-  ksk.itemid = nil
+  selitemid = nil
 
   local istr = ""
 
@@ -3249,45 +3508,73 @@ function ksk:RefreshItemList ()
   for k,v in pairs (ksk.sorteditems) do
     if (v.id == olditem) then
       oldidx = k
+      break
     end
   end
 
-  ksk.qf.itemlist.itemcount = ksk.cfg.nitems
-  ksk.qf.itemlist:UpdateList ()
-  ksk.qf.itemlist:SetSelected (nil)
-
-  if (oldidx ~= 0) then
-    ksk.itemid = ksk.sorteditems[oldidx].id
-    ksk.qf.itemlist:SetSelected (oldidx)
-  end
+  qf.itemlist.itemcount = ksk.cfg.nitems
+  qf.itemlist:UpdateList ()
+  qf.itemlist:SetSelected (oldidx, true, true)
 end
 
-function ksk:RefreshLootMembers ()
-  if (not initdone) then
+--
+-- Refreshes the bid scroll list. Attempts to preserve the currently selected
+-- bidder. Checks to make sure that all bidders are actually members of the
+-- current list, as this could have changed. Removes any bidders that aren't.
+--
+local function refresh_bidders ()
+  local olduid = selectedbiduid or nil
+
+  selectedbidder = nil
+  selectedbiduid = nil
+
+  qf.bidscroll.itemcount = 0
+  if (bidders) then
+    local newbidders = {}
+
+    for k,v in ipairs (bidders) do
+      if (ksk.UserInList (v.uid, lootlistid, nil)) then
+        tinsert (newbidders, v)
+      end
+    end
+
+    bidders = newbidders
+    qf.bidscroll.itemcount = #bidders
+
+    if (olduid) then
+      for k,v in ipairs (bidders) do
+        if (v.uid == olduid) then
+          selectedbidder = k
+          break
+        end
+      end
+    end
+  end
+
+  qf.bidscroll:UpdateList ()
+  qf.bidscroll:SetSelected (selectedbidder, true, true)
+end
+
+function ksk.RefreshLootMembers (listid)
+  local oldmember = memberid or nil
+  local oldidx = nil
+
+  if (listid and lootlistid and listid ~= lootlistid) then
     return
   end
 
+  memberid = nil
+  realmemberid = nil
   members = nil
 
-  if (not ksk.lootlistid) then
-    ksk.lootmemberid = nil
-    realmemberid = nil
-    ksk.qf.lootmembers.itemcount = 0
-    ksk.qf.lootmembers:UpdateList ()
-  else
-    if (ksk.lootlist.nusers > 0) then
-      local oldmember = ksk.lootmemberid or ""
-      local oldidx = 0
-      ksk.lootmemberid = nil
-      realmemberid = nil
-      ksk.lootmembers = ksk.lootlist.users
-
+  if (lootlistid) then
+    if (lootlist.nusers > 0) then
       members = {}
-      for k,v in ipairs(ksk.lootmembers) do
+      for k,v in ipairs(lootlist.users) do
         local usr = ksk.users[v]
 
-        if (ksk.inraid and ksk.settings.hide_absent) then
-          if (ksk.raid.users[v]) then
+        if (ksk.raid and ksk.settings.hide_absent) then
+          if (ksk.raid.users and ksk.raid.users[v]) then
             tinsert (members, {id = v, idx = k})
           end
         else
@@ -3296,8 +3583,8 @@ function ksk:RefreshLootMembers ()
 
         if (ksk.cfg.tethered and usr.alts) then
           for kk,vv in pairs (usr.alts) do
-            if (ksk.inraid and ksk.settings.hide_absent) then
-              if (ksk.raid.users[vv]) then
+            if (ksk.raid and ksk.settings.hide_absent) then
+              if (ksk.raid.users and ksk.raid.users[vv]) then
                 tinsert (members, {id = vv, idx = k, isalt = true, main = v})
               end
             else
@@ -3312,65 +3599,72 @@ function ksk:RefreshLootMembers ()
           oldidx = k
         end
       end
-
-      ksk.qf.lootmembers.itemcount = #members
-      ksk.qf.lootmembers:UpdateList ()
-      if (oldidx > 0) then
-        ksk.lootmemberid = members[oldidx].id
-        realmemberid = ksk.lootmemberid
-        ksk.qf.lootmembers:SetSelected (oldidx)
-      else
-        ksk.qf.lootmembers:SetSelected (nil)
-      end
-    else
-      ksk.lootmemberid = nil
-      realmemberid = nil
-      ksk.qf.lootmembers.itemcount = 0
-      ksk.qf.lootmembers:UpdateList ()
-      ksk.qf.lootmembers:SetSelected (nil)
     end
   end
-end
 
-function ksk:ResetBidList ()
-  ksk.bidders = {}
-  ksk.selectedbidder = nil
-  ksk.qf.bidscroll.itemcount = 0
-  ksk.qf.bidscroll:UpdateList ()
-  ksk.qf.bidscroll:SetSelected (nil)
-  ksk.qf.bidders.mybid:SetText (L["Bid"])
-  ksk.qf.bidders.mybid.retract = nil
-end
-
-function ksk:ResetBidders (send)
-  if (ksk.isml and send and ksk.biditem) then
-    ksk.SendRaidAM ("BIDCL", "ALERT", ksk.biditem)
+  if (members) then
+    qf.members.itemcount = #members
+  else
+    qf.members.itemcount = 0
   end
-  ksk:ResetBidList ()
-  ksk.bidders = nil
-  ksk.biditem = nil
-  ksk.qf.lootwin.oclbids:SetText (L["Open Bids"])
-  ksk.qf.lootwin.orpause:SetText (L["Open Roll"])
-  ksk.qf.lootwin.remcancel:SetText (L["Remove"])
-  ksk.qf.bidders.mybid:SetEnabled (false)
-  ksk.qf.lootmembers:SetSelected (nil)
+  qf.members:UpdateList ()
+
+  qf.members:SetSelected (oldidx, true, true)
+  refresh_bidders ()
 end
 
-function ksk:ResetBossLoot ()
-  ksk:ResetBidders ()
-  ksk.selectedloot = nil
+function ksk.ResetBidList ()
+  bidders = nil
+  selectedbidder = nil
+  selectedbiduid = nil
+  qf.bidscroll.itemcount = 0
+  qf.bidscroll:UpdateList ()
+  qf.bidscroll:SetSelected (nil, false, true)
+  qf.bidders.mybid:SetText (L["Bid"])
+  qf.bidders.mybid.retract = nil
+end
+
+function ksk.ResetBidders (send)
+  if (ksk.AmIML () and send and biditem) then
+    ksk.SendRaidAM ("BIDCL", "ALERT", biditem)
+  end
+
+  ksk.ResetBidList ()
+
+  biditem = nil
+
+  qf.lootwin.oclbids:SetText (L["Open Bids"])
+  qf.lootwin.orpause:SetText (L["Open Roll"])
+  qf.lootwin.remcancel:SetText (L["Remove"])
+  lootbid_setenabled (false)
+  qf.bidders.mybid:SetEnabled (false)
+  qf.bidders.forcebid:SetEnabled (false)
+  qf.bidders.forceret:SetEnabled (false)
+end
+
+function ksk.RefreshBossLoot (idx)
   ksk.qf.lootscroll.itemcount = 0
+  if (ksk.bossloot) then
+    ksk.qf.lootscroll.itemcount = #ksk.bossloot
+  end
   ksk.qf.lootscroll:UpdateList ()
-  ksk.bossloot = nil
-  enable_ui_elements (false)
-  enable_bid_buttons (false)
-  ksk.qf.autoloot:Hide ()
-  ksk.qf.lootroll:Hide ()
-  ksk.qf.lootrules:Show ()
+  ksk.qf.lootscroll:SetSelected (idx, true, true)
 end
 
-function ksk:SelectLootListByID (list)
-  local lid = 0
+function ksk.ResetBossLoot ()
+  ksk.EndOpenRoll ()
+  ksk.ResetBidders (true)
+  selectedloot = nil
+  lootitem = nil
+  ksk.bossloot = nil
+  ksk.RefreshBossLoot (nil)
+  lootrules_setenabled (false)
+  lootbid_setenabled (false)
+  select_alf (ALF_LOOT)
+end
+
+function ksk.SelectLootListByID (list)
+  local lid = nil
 
   for k,v in ipairs (ksk.sortedlists) do
     if (v.id == list) then
@@ -3378,55 +3672,64 @@ function ksk:SelectLootListByID (list)
       break
     end
   end
-  if (lid ~= 0) then
-    if (ksk.lootlistid ~= list) then
-      ksk.lootlistid = list
-      ksk.lootlist = ksk.cfg.lists[list]
-      ksk.qf.lootlists:SetSelected (lid)
-    end
-    ksk:RefreshLootMembers ()
+
+  qf.lists:SetSelected (lid, true, true)
+
+  if (lid) then
     return true
   else
     return false
   end
 end
 
-function ksk:SetClassesFromFilter (filter)
-  for k,v in pairs (K.ClassIndex) do
-    local wn = strlower (k)
-    local n = tonumber (v)
-    local val = false
-    if (strsub (filter, n, n) == "1") then
-      val = true
-    end
-    ksk.qf.lootrules[wn]:SetChecked (val)
-  end
+--
+-- Called by the OnClick handler for the loot list. Also called from the
+-- comms module in response to an LISEL. Sets up selectedloot and lootitem.
+-- Because this can be called from comms, this is the wrong place to enable
+-- or disable the loot buttons. The enabling of the loot control buttons
+-- should be done in the onclick handler, which is only run by the ML.
+--
+function ksk.SelectLootItem (idx, filter, role, list, rank)
+  local loot = ksk.bossloot[idx]
 
-end
+  selectedloot = idx
+  lootitem = { idx = idx, filter = filter, role = role,
+               list = list, rank = rank, loot = loot }
 
-function ksk:SelectLootItem (idx, itemid, filter, role, list, rank)
-  ksk.selectedloot = idx
-  ksk.qf.lootscroll:SetSelected (idx)
-  ksk.lootitem = { idx = idx, itemid = itemid, filter = filter, role = role, list = list, rank = rank}
-  ksk.lootitem.loot = ksk.bossloot[ksk.selectedloot]
-  local loot = ksk.bossloot[ksk.selectedloot]
+  ksk.qf.lootscroll:SetSelected (idx, true, true)
 
   --
   -- If the item specified a specific list, then select that list now.
   --
   if (list and list ~= "0") then
-    if (not ksk:SelectLootListByID (list)) then
-      if (ksk.isml) then
-        printf (ecolor, "item %s wanted non-existent list %q", loot.ilink, tostring(list))
+    if (not ksk.SelectLootListByID (list)) then
+      if (ksk.AmIML ()) then
+        err ("item %s wanted non-existent list %q", loot.ilink, tostring(list))
       end
+      list = lootlistid
+      lootitem.list = list
     end
   end
 
-  rank = rank or 999
+  lootitem.strictarmor = ksk.lists[list].strictcfilter
+  lootitem.strictrole = ksk.lists[list].strictrfilter
+
   -- Set up the various filters
-  ksk.qf.lootrules.role:SetValue (role)
-  ksk.qf.lootrules.rank:SetValue (rank)
-  ksk:SetClassesFromFilter (filter)
+  set_classes_from_filter (filter)
+  qf.lootrules.role:SetValue (role)
+  qf.lootrules.rank:SetValue (rank)
+
+  qf.bidders.mybid:SetText (L["Bid"])
+  qf.bidders.mybid.retract = nil
+  qf.bidders.forcebid:SetText (L["Force Bid"])
+  qf.bidders.forceret:SetText (L["Force Retract"])
+
+  -- Everything else is only relevant to the master looter.
+  if (not ksk.AmIML ()) then
+    lootrules_setenabled (false)
+    lootbid_setenabled (false)
+    return
+  end
 
   --
   -- Before we set up the bidding buttons, check to see if the item is
@@ -3435,88 +3738,66 @@ function ksk:SelectLootItem (idx, itemid, filter, role, list, rank)
   -- and if they verify it, assign the item now and remove it from the
   -- list of items to be bid on.
   local autoloot = false
-  if (ksk.isml and ksk.items[itemid]) then
+  local uname = nil
+
+  if (loot.slot and itemid and ksk.items[itemid]) then
     local ii = ksk.items[itemid]
     if (ii.user and ksk.raid and ksk.raid.users[ii.user]) then
-      if (ksk.numlooters and ksk.numlooters > 0) then
-        if (ksk.looters[ksk.users[ii.user].name]) then
-          autoloot = true
-        end
-      else
+      uname = ksk.raid.users[ii.user]
+      if (KLD.items[loot.slot].candidates[uname]) then
         autoloot = true
       end
     end
+
     if (autoloot) then
-      local cuser = class (ksk.users[ii.user])
-      local uname = ksk.users[ii.user].name
+      local cuser = shortclass (ksk.users[ii.user])
       local ts = strfmt (L["AUTOASSIGN"], cuser, cuser)
+
       if (ii.suicide) then
         ts = ts .. " " .. strfmt (L["AUTOSUICIDE"], cuser, white (ksk.lists[ii.suicide].name))
       end
-      if (not ksk.numlooters or ksk.numlooters == 0) then
-        ts = ts .. "\n\n" .. white (L["Note: player will need to pick item up manually."])
-        ksk.qf.autoloot.target = nil
-      else
-        ksk.qf.autoloot.target = ksk.looters[uname].mlidx
-      end
-      ksk.qf.autoassign_msg:SetText (ts)
-      ksk.qf.autoassign_item:SetText (ksk.lootitem.loot.ilink)
-      ksk.qf.autoloot.slot = ksk.bossloot[ksk.selectedloot].slot
-      ksk.qf.autoloot.loot = ksk.selectedloot
-      ksk.qf.autoloot.uname = uname
-      ksk.qf.autoloot.uid = ii.user
-      ksk.qf.autoloot.party = ksk.raid.members[ksk.raid.users[ii.user]].party
-      ksk.qf.autoloot.ilink = ksk.lootitem.loot.ilink
-      ksk.qf.autoloot.suicide = ii.suicide
-      ksk.qf.autoloot.autodel = ii.del
-      ksk.qf.autoloot.announce = true
-      ksk.qf.autoloot.leaveloot = false
-      ksk.qf.autoloot.denched = false
-      ksk.qf.autoloot.rolled = false
+
+      set_autoloot_win (uname) -- Changes to ALF_CONFIRM
+      lootrules_setenabled (false)
+      lootbid_setenabled (false)
+      qf.autoassign_msg:SetText (ts)
+      qf.autoloot.autodel = ii.del
+      qf.autoloot.announce = true
+      return
     end
   end
 
-  if (ksk.isml == true) then
-    enable_ui_elements (true)
-    local en
-
-    if (autoloot) then
-      ksk.qf.lootrules:Hide ()
-      ksk.qf.lootroll:Hide ()
-      ksk.qf.autoloot:Show ()
-      en = false
-    else
-      ksk.qf.autoloot:Hide ()
-      ksk.qf.lootroll:Hide ()
-      ksk.qf.lootrules:Show ()
-      en = true
-    end
-
-    ksk.qf.lootwin.oclbids:SetEnabled (en)
-    ksk.qf.lootwin.orpause:SetEnabled (en)
-    ksk.qf.lootwin.remcancel:SetEnabled (en)
-  end
+  lootrules_setenabled (true)
+  lootbid_setenabled (true)
+  qf.bidders.mybid:SetEnabled (false)
 end
 
-function ksk:RemoveItemByIdx (idx)
-  ksk.qf.lootscroll:SetSelected (nil)
-  if (ksk.selectedloot == idx) then
-    ksk.selectedloot = nil
-    ksk.lootitem = nil
+function ksk.RemoveItemByIdx (idx, nocmd)
+  ksk.qf.lootscroll:SetSelected (nil, false, true)
+
+  if (selectedloot == idx) then
+    selectedloot = nil
+    lootitem = nil
   end
+
   tremove (ksk.bossloot, idx)
   ksk.qf.lootscroll.itemcount = #ksk.bossloot
   ksk.qf.lootscroll:UpdateList ()
+  ksk.qf.lootscroll:SetSelected (nil, false, true)
+
+  if (not nocmd) then
+    ksk.SendRaidAM ("BIREM", "ALERT", idx)
+  end
 end
 
-function ksk:RefreshBidders()
-  ksk.selectedbidder = nil
-  ksk.qf.bidscroll.itemcount = 0
-  if (ksk.bidders) then
-    ksk.qf.bidscroll.itemcount = #ksk.bidders
-  end
-  ksk.qf.bidscroll:UpdateList ()
-  ksk.qf.bidscroll:SetSelected (nil)
+function ksk.OpenBid (idx)
+  biditem = idx
+  bidders = {}
+  qf.bidscroll.itemcount = 0
+  qf.bidscroll:UpdateList ()
+  qf.bidscroll:SetSelected (nil, false, true)
+  qf.bidders.mybid:SetText (L["Bid"])
+  qf.bidders.mybid:SetEnabled (true)
 end
 
 --
@@ -3529,29 +3810,31 @@ end
 -- order). If the user fails any of the filter requirements or is not eligible
 -- to receive loot, whisper them that fact (and why).
 --
-function ksk:NewBidder (u)
+function ksk.NewBidder (u)
   -- First check. Am I the master looter?
-  if (not ksk.isml) then
-    if (ksk.mlname) then
-      ksk.SendWhisper (strfmt (L["%s: I am not the master looter - %q is."], L["MODTITLE"], ksk.mlname), u)
+  if (not ksk.AmIML ()) then
+    if (KRP.master_looter) then
+      ksk.SendWhisper (strfmt (L["%s: I am not the master looter - %q is."], L["MODTITLE"], KRP.master_looter), u)
     else
       ksk.SendWhisper (strfmt (L["%s: I am not the master looter."], L["MODTITLE"]), u)
     end
     return
   end
 
-  local uid = ksk:FindUser (u)
+  -- Second check. Do we even have a current bid going?
+  if (not biditem) then
+    ksk.SendWhisper (strfmt (L["%s: there is no item currently open for bids."], L["MODTITLE"]), u)
+    return
+  end
+
+  local uid = ksk.FindUser (u)
+
   if (not uid) then
     ksk.SendWhisper (strfmt (L["%s: you were not found in the user list. Contact an admin for help."], L["MODTITLE"]), u)
     return
   end
-  local usr = ksk.users[uid]
 
-  -- Second check. Do we even have a current bid going?
-  if (not ksk.biditem) then
-    ksk.SendWhisper (strfmt (L["%s: there is no item currently open for bids."], L["MODTITLE"]), u)
-    return
-  end
+  local usr = ksk.users[uid]
 
   --
   -- Third check. Are they eligible to receive loot?
@@ -3559,10 +3842,14 @@ function ksk:NewBidder (u)
   -- the raid leader had the wrong loot type set and has just changed it
   -- to master looter.
   --
-  if (ksk.numlooters and ksk.numlooters > 0 and  not ksk.looters[u]) then
+  local slot = ksk.bossloot[biditem].slot
+  local kldi = KLD.items[slot]
+
+  if (not kldi or not kldi.candidates or not kldi.candidates[u]) then
     ksk.SendWhisper (strfmt (L["%s: you are not eligible to receive loot - %s ignored."], L["MODTITLE"], L["bid"]), u)
     return
   end
+
   local found = false
   local minfo = nil
   for k,v in pairs (members) do
@@ -3572,17 +3859,18 @@ function ksk:NewBidder (u)
       break
     end
   end
+
   if (not found) then
     info (L["%q attempted to bid on the %q list but is not a member."],
-      aclass (ksk.users[uid]), white (ksk.lootlist.name))
-    ksk.SendWhisper (strfmt (L["%s: you are not a member of the %q list - bid ignored."], L["MODTITLE"], ksk.lootlist.name), u)
+      shortaclass (ksk.users[uid]), white (lootlist.name))
+    ksk.SendWhisper (strfmt (L["%s: you are not a member of the %q list - bid ignored."], L["MODTITLE"], lootlist.name), u)
     return
   end
 
   -- Fourth check. Have they already bid?
-  for k,v in pairs (ksk.bidders) do
+  for k,v in pairs (bidders) do
     if (v.uid == uid) then
-      ksk.SendWhisper (strfmt (L["%s: you have already bid on that item. Whisper %s the word %q to retract your bid."], L["MODTITLE"], ksk.mlname, L["WHISPERCMD_RETRACT"]), u)
+      ksk.SendWhisper (strfmt (L["%s: you have already bid on that item. Whisper %s the word %q to retract your bid."], L["MODTITLE"], KRP.master_looter, L["WHISPERCMD_RETRACT"]), u)
       return
     end
   end
@@ -3595,39 +3883,30 @@ function ksk:NewBidder (u)
   end
 
   local grprio = 1
-  if (ksk.cfg.cfgtype == ksk.CFGTYPE_GUILD) then
-    local rquery = "raid" .. tostring (ksk.raid.players[u])
-    local gn, _, ri = GetGuildInfo (rquery)
-    --
-    -- If the GetGuildInfo() call fails for some reason (and I have seen it
-    -- fail in testing) we don't really have much choice but to assume the
-    -- user is in the guild. As to what we do with rank, we will just assume
-    -- the user is the lowest rank. Also PUG members who are not in the
-    -- guild will also be assumed to be of the lowest rank.
-    --
-    if (not gn or gn ~= K.player.guild) then
-      ri = K.guild.numranks - 1
+
+  if (ksk.cfg.cfgtype == ksk.CFGTYPE_GUILD and K.player.is_guilded) then
+    local gi = K.guild.roster.name[u]
+    local ri = K.guild.numranks
+
+    if (gi) then
+      ri = K.guild.roster.id[gi].rank
     end
 
-    if (ksk.loot_rank ~= 999) then
-      if (ri > (ksk.loot_rank - 1)) then
-        ksk.SendWhisper (strfmt (L["%s: you do not meet the current guild rank requirement (%q) - %s ignored."], L["MODTITLE"], K.guild.ranks[ksk.loot_rank], L["bid"]), u)
-        return
-      end
+    if (lootitem.rank and lootitem.rank > 0 and (ri > lootitem.rank)) then
+      ksk.SendWhisper (strfmt (L["%s: you do not meet the current guild rank requirement (%q) - %s ignored."], L["MODTITLE"], K.guild.ranks[lootitem.rank], L["bid"]), u)
+      return
     end
 
-    grprio = ksk.settings.rank_prio[ri+1] or 1
+    grprio = ksk.settings.rank_prio[ri] or 1
   end
 
-  if (ksk.qf.lootrules.strictrole:GetChecked ()) then
-    if (ksk.loot_role > 0) then
-      if (usr.role ~= ksk.loot_role) then
-        if (usr.role ~= 0) then
-          ksk.SendWhisper (strfmt (L["%s: you do not meet the current role requirement (%q). Your current role is %q - %s ignored."], L["MODTITLE"], ksk.rolenames[ksk.loot_role], ksk.rolenames[usr.role], L["bid"]), u)
-          return
-        else
-          info (L["%s: user %q has no role defined - permitting %s."], L["MODTITLE"], aclass (usr), L["bid"])
-        end
+  if (lootitem.strictrole and lootitem.role ~= ksk.ROLE_UNSET) then
+    if (usr.role ~= lootitem.role) then
+      if (usr.role ~= ksk.ROLE_UNSET) then
+        ksk.SendWhisper (strfmt (L["%s: you do not meet the current role requirement (%q). Your current role is %q - %s ignored."], L["MODTITLE"], ksk.rolenames[lootitem.role], ksk.rolenames[usr.role], L["bid"]), u)
+        return
+      else
+        info (L["user %q has no role defined - permitting %s."], shortaclass (usr), L["bid"])
       end
     end
   end
@@ -3638,10 +3917,11 @@ function ksk:NewBidder (u)
   -- a bid has taken place (but not who has bid). Otherwise, broadcast to the
   -- raid the bidder info so uses can update their mod's view of the bidders.
   --
-  ksk:AddBidder (usr.name, usr.class, minfo.idx, uid, grprio, ksk.cfg.cfgtype == ksk.CFGTYPE_GUILD and ksk.settings.use_ranks, true)
+  ksk.AddBidder (usr.name, usr.class, minfo.idx, uid, grprio,
+    ksk.cfg.cfgtype == ksk.CFGTYPE_GUILD and ksk.settings.use_ranks, true)
 end
 
-function ksk:AddBidder (name, cls, idx, uid, prio, useprio, announce)
+function ksk.AddBidder (name, cls, idx, uid, prio, useprio, announce)
   --
   -- Ignore the IDX value passed in and recalculate it from the current
   -- loot members list. Helps prevent a timing issue where a user may
@@ -3658,8 +3938,8 @@ function ksk:AddBidder (name, cls, idx, uid, prio, useprio, announce)
   end
 
   local ti = { name = name, class = cls, idx = idx, uid = uid, prio = prio }
-  tinsert (ksk.bidders, ti)
-  tsort (ksk.bidders, function (a, b)
+  tinsert (bidders, ti)
+  tsort (bidders, function (a, b)
     if (not useprio) then
       return (a.idx < b.idx)
     end
@@ -3675,19 +3955,19 @@ function ksk:AddBidder (name, cls, idx, uid, prio, useprio, announce)
     return false
   end)
 
-  ksk:RefreshBidders ()
+  refresh_bidders ()
 
   --
   -- If it was me that was just added as a bidder, change my bid button to
   -- retract in case I want to do that.
   --
-  if (name == K.player.player) then
-    ksk.qf.bidders.mybid:SetText (L["Retract"])
-    ksk.qf.bidders.mybid.retract = true
+  if (name == K.player.name) then
+    qf.bidders.mybid:SetText (L["Retract"])
+    qf.bidders.mybid.retract = true
   end
 
-  if (ksk.isml) then
-    info (strfmt (L["%s %s on %s on the %s list."], aclass (name, cls), L["bid"], ksk.lootitem.loot.ilink, white (ksk.lists[ksk.lootlistid].name)))
+  if (ksk.AmIML ()) then
+    info (strfmt (L["%s %s on %s on the %s list."], shortaclass (name, cls), L["bid"], lootitem.loot.ilink, white (lootlist.name)))
   end
 
   if (not announce) then
@@ -3696,20 +3976,24 @@ function ksk:AddBidder (name, cls, idx, uid, prio, useprio, announce)
 
   if (ksk.settings.silent_bid) then
     if (ksk.settings.ann_bid_progress) then
-      ksk.SendRaidMsg (strfmt (L["%s: new bid received. Number of bidders: %d."], L["MODTITLE"], #ksk.bidders))
+      ksk.SendRaidMsg (strfmt (L["%s: new bid received. Number of bidders: %d."], L["MODTITLE"], #bidders))
     end
   else
     if (ksk.settings.ann_bid_progress) then
-      ksk.SendRaidMsg (strfmt (L["%s: %s (position %d) has bid (highest bidder is %s)."], L["MODABBREV"], name, idx, ksk.bidders[1].name))
+      ksk.SendRaidMsg (strfmt (L["%s: %s (position %d) has bid (highest bidder is %s)."], L["MODABBREV"], K.ShortName (name), idx, K.ShortName(bidders[1].name)))
     end
     ksk.SendRaidAM ("BIDER", "ALERT", name, cls, idx, uid, prio, useprio)
   end
 end
 
-function ksk:RetractBidder (u)
+function ksk.RetractBidder (u)
   local found
 
-  if (ksk.rolling) then
+  if (not ksk.AmIML ()) then
+    return
+  end
+
+  if (rolling) then
     --
     -- If we are rolling for an item and someone retracts, we need to remove
     -- them from the list of rollers.
@@ -3717,7 +4001,7 @@ function ksk:RetractBidder (u)
     return
   end
 
-  for k,v in ipairs (ksk.bidders) do
+  for k,v in ipairs (bidders) do
     if (v.name == u) then
       found = k
       break
@@ -3725,40 +4009,42 @@ function ksk:RetractBidder (u)
   end
 
   if (found) then
-    ksk:DeleteBidder (u, true)
+    ksk.DeleteBidder (u, true)
   end
 end
 
-function ksk:DeleteBidder (name, announce)
+function ksk.DeleteBidder (name, announce)
   local class
-  if (not ksk.bidders) then
+
+  if (not bidders) then
     return
   end
-  for k,v in ipairs (ksk.bidders) do
+
+  for k,v in ipairs (bidders) do
     if (v.name == name) then
       class = v.class
-      tremove (ksk.bidders, k)
+      tremove (bidders, k)
       break
     end
   end
 
-  ksk:RefreshBidders ()
+  refresh_bidders ()
 
   --
   -- If it was me that just retracted, change my rettract button to
   -- bid in case I want to do that again.
   --
-  if (name == K.player.player) then
-    ksk.qf.bidders.mybid:SetText (L["Bid"])
-    ksk.qf.bidders.mybid.retract = nil
+  if (name == K.player.name) then
+    qf.bidders.mybid:SetText (L["Bid"])
+    qf.bidders.mybid.retract = nil
   end
 
   if (not class) then
     return
   end
 
-  if (ksk.isml) then
-    info (strfmt (L["%s %s on %s on the %s list."], aclass (name, class), L["retracted"], ksk.lootitem.loot.ilink, white (ksk.lootlist.name)))
+  if (ksk.AmIML ()) then
+    info (strfmt (L["%s %s on %s on the %s list."], shortaclass (name, class), L["retracted"], lootitem.loot.ilink, white (lootlist.name)))
   end
 
   if (not announce) then
@@ -3767,12 +4053,12 @@ function ksk:DeleteBidder (name, announce)
 
   if (ksk.settings.silent_bid) then
     if (ksk.settings.ann_bid_progress) then
-      ksk.SendRaidMsg (strfmt (L["%s: bid retracted. Number of bidders: %d."], L["MODTITLE"], #ksk.bidders))
+      ksk.SendRaidMsg (strfmt (L["%s: bid retracted. Number of bidders: %d."], L["MODTITLE"], #bidders))
     end
   else
-    if (ksk.qf.bidscroll.itemcount > 0) then
+    if (qf.bidscroll.itemcount > 0) then
       if (ksk.settings.ann_bid_progress) then
-        ksk.SendRaidMsg (strfmt (L["%s: %s has retracted (highest bidder is %s)."], L["MODABBREV"], name, ksk.bidders[1].name))
+        ksk.SendRaidMsg (strfmt (L["%s: %s has retracted (highest bidder is %s)."], L["MODABBREV"], name, bidders[1].name))
       end
     else
       if (ksk.settings.ann_bid_progress) then
@@ -3783,13 +4069,16 @@ function ksk:DeleteBidder (name, announce)
   end
 end
 
-function ksk:SuicideUser (listid, rlist, uid, cfgid, ilink, chain)
+function ksk.SuicideUser (listid, rlist, uid, cfgid, ilink, chain)
   local cfgid = cfgid or ksk.currentid
-  local ia, ruid = ksk:UserIsAlt (uid, nil, cfgid)
+
+  local ia, ruid = ksk.UserIsAlt (uid, nil, cfgid)
+
   if (not ia or not ksk.configs[cfgid].tethered) then
     ruid = uid
   end
-  ksk:SuicideUserLowLevel (listid, rlist, ruid, cfgid, ilink)
+
+  ksk.SuicideUserLowLevel (listid, rlist, ruid, cfgid, ilink)
 
   local es = strfmt ("%s:%s:%s", listid, tconcat (rlist, ""), ruid)
   ksk.AddEvent (cfgid, "SULST", es, true)
@@ -3797,16 +4086,17 @@ function ksk:SuicideUser (listid, rlist, uid, cfgid, ilink, chain)
   if (chain) then
     local ll = ksk.configs[cfgid].lists[listid]
     if (ll.extralist and ll.extralist ~= "0") then
-      local trlist = ksk:CreateRaidList (ll.extralist)
-      ksk:SuicideUserLowLevel (ll.extralist, trlist, ruid, cfgid, ilink)
+      local trlist = ksk.CreateRaidList (ll.extralist)
+      ksk.SuicideUserLowLevel (ll.extralist, trlist, ruid, cfgid, ilink)
       local es = strfmt ("%s:%s:%s", ll.extralist, tconcat (trlist, ""), ruid)
       ksk.AddEvent (cfgid, "SULST", es, true)
     end
   end
 end
 
-function ksk:DeleteItem (itemid, cfgid, nocmd)
+function ksk.DeleteItem (itemid, cfgid, nocmd)
   local cfg = cfgid or ksk.currentid
+
   if (not ksk.configs[cfg]) then
     return
   end
@@ -3819,10 +4109,10 @@ function ksk:DeleteItem (itemid, cfgid, nocmd)
   il[itemid] = nil
   ksk.configs[cfg].nitems = ksk.configs[cfg].nitems - 1
   if (cfg == ksk.currentid) then
-    if (ksk.itemid == itemid) then
-      ksk.itemid = nil
+    if (itemid == selitemid) then
+      selitemid = nil
     end
-    ksk:RefreshItemList ()
+    ksk.RefreshItemList ()
   end
 
   if (not nocmd) then
@@ -3830,7 +4120,7 @@ function ksk:DeleteItem (itemid, cfgid, nocmd)
   end
 end
 
-function ksk:AddItem (itemid, itemlink, cfgid, nocmd)
+function ksk.AddItem (itemid, itemlink, cfgid, nocmd)
   local cfg = cfgid or ksk.currentid
 
   if (not ksk.configs[cfg]) then
@@ -3842,15 +4132,15 @@ function ksk:AddItem (itemid, itemlink, cfgid, nocmd)
     return
   end
 
-  local ifs = ksk.GetItemClassFilter (itemlink)
-  if (ifs == ksk.allclasses) then
+  local ifs = K.GetItemClassFilter (itemlink)
+  if (ifs == K.classfilters.allclasses) then
     local _, _, _, _, _, _, _, _, slot, _, _, icls, isubcls = GetItemInfo (itemlink)
-    if (icls == ksk.classfilters.weapon) then
-      ifs = ksk.classfilters.weapons[isubcls]
-    elseif (icls == ksk.classfilters.armor) then
-      ifs = ksk.classfilters.strict[isubcls]
+    if (icls == K.classfilters.weapon) then
+      ifs = K.classfilters.weapons[isubcls]
+    elseif (icls == K.classfilters.armor) then
+      ifs = K.classfilters.strict[isubcls]
       if (slot == "INVTYPE_CLOAK") then
-        ifs = ksk.classfilters.relaxed[isubcls]
+        ifs = K.classfilters.relaxed[isubcls]
       end
     end
   end
@@ -3864,26 +4154,28 @@ function ksk:AddItem (itemid, itemlink, cfgid, nocmd)
   end
 
   if (cfg == ksk.currentid) then
-    ksk:RefreshItemList ()
+    ksk.RefreshItemList ()
   end
 end
 
-function ksk:RefreshHistory ()
-  ksk.qf.histscroll.itemcount = 0
+function ksk.RefreshHistory ()
+  qf.histscroll.itemcount = 0
+
   if (ksk.cfg.history) then
-    ksk.qf.histscroll.itemcount = #ksk.cfg.history
+    qf.histscroll.itemcount = #ksk.cfg.history
   end
-  if (ksk.qf.histscroll.itemcount > 0) then
+
+  if (qf.histscroll.itemcount > 0) then
     -- Resort the list as we may have receieved new loot info
     tsort (ksk.cfg.history, function (a, b)
       return tonumber(strsub (a, 1, 12)) > tonumber(strsub (b, 1, 12))
     end)
   end
-  ksk.qf.histscroll:UpdateList ()
-  ksk.qf.histscroll:SetSelected (nil)
+  qf.histscroll:UpdateList ()
+  qf.histscroll:SetSelected (nil, false, true)
 end
 
-function ksk:AddLootHistory (cfg, when, what, who, how, norefresh, nocmd)
+function ksk.AddLootHistory (cfg, when, what, who, how, norefresh, nocmd)
   local cfg = cfg or ksk.currentid
   --
   -- IMPORTANT: If this changes, change KSK-Users.lua too in DeleteUser
@@ -3895,7 +4187,7 @@ function ksk:AddLootHistory (cfg, when, what, who, how, norefresh, nocmd)
   end
 
   if (not norefresh and cfg == ksk.currentid) then
-    ksk:RefreshHistory ()
+    ksk.RefreshHistory ()
   end
 
   if (not nocmd) then
@@ -3904,14 +4196,15 @@ function ksk:AddLootHistory (cfg, when, what, who, how, norefresh, nocmd)
   end
 end
 
-function ksk:AddLoot (ilink, nocmd)
+function ksk.AddLoot (ilink, nocmd)
   local added = false
+
   if (ksk.bossloot) then
     added = true
   end
-  ksk:AddItemToBossLoot (ilink, 1)
-  ksk.qf.lootscroll.itemcount = #ksk.bossloot
-  ksk.qf.lootscroll:UpdateList ()
+
+  ksk.AddItemToBossLoot (ilink, 1, 0)
+  ksk.RefreshBossLoot (selectedloot)
 
   if (not added) then
     --
@@ -3919,12 +4212,12 @@ function ksk:AddLoot (ilink, nocmd)
     -- a faked OLOOT event (if we are sending events)
     --
     if (not nocmd) then
-      ksk.SendRaidAM ("OLOOT", "ALERT", K.player.player, "0", false, { { ilink, 1 } })
+      ksk.SendRaidAM ("OLOOT", "ALERT", K.player.name, "0", false, { { ilink, 1 } })
       if (not ksk.mainwin:IsVisible ()) then
         ksk.autoshown = true
       end
       ksk.mainwin:Show ()
-      ksk.mainwin:SetTab (ksk.LOOT_TAB, ksk.LOOT_ASSIGN_TAB)
+      ksk.mainwin:SetTab (ksk.LOOT_TAB, ksk.LOOT_ASSIGN_PAGE)
     end
   else
     if (not nocmd) then
@@ -3933,12 +4226,13 @@ function ksk:AddLoot (ilink, nocmd)
   end
 end
 
-function ksk:UndoSuicide (cfg, listid, movers, uid, ilink, nocmd)
-  ksk:AddLoot (ilink, nocmd)
-  ksk:AddLootHistory (cfg, ksk:TimeStamp (), ilink, uid, "U")
+function ksk.UndoSuicide (cfg, listid, movers, uid, ilink, nocmd)
+  ksk.AddLoot (ilink, nocmd)
+  ksk.AddLootHistory (cfg, ksk.TimeStamp (), ilink, uid, "U")
+
   local mpos = {}
   for k,v in ipairs (movers) do
-    local il, lp = ksk:UserInList (v, listid)
+    local il, lp = ksk.UserInList (v, listid)
     assert (il)
     tinsert (mpos, lp)
   end
@@ -3955,11 +4249,16 @@ function ksk:UndoSuicide (cfg, listid, movers, uid, ilink, nocmd)
 
   local ncount = #movers
   local lu = ksk.configs[cfg].lists[listid].users
+
   for i = ncount, 2, -1 do
     lu[mpos[i-1]] = movers[i]
   end
+
   lu[mpos[ncount]] = uid
-  ksk:RefreshLists ()
+
+  if (cfg == ksk.currentid) then
+    ksk.RefreshAllMemberLists ()
+  end
 
   if (not nocmd) then
     local es = strfmt ("%s:%s:%s:%s", listid, tconcat (movers, ""), uid, gsub (ilink, ":", "\7"))
@@ -3967,57 +4266,170 @@ function ksk:UndoSuicide (cfg, listid, movers, uid, ilink, nocmd)
   end
 end
 
-function ksk:CleanupLootRoll ()
-  if (ksk.rolling) then
-    ksk:EndOpenRoll ()
-    if (ksk:AmIMasterLooter ()) then
+function ksk.StartOpenRoll (ilink, timeout)
+  local isml = ksk.AmIML ()
+
+  if (ksk.AmIML () and send and biditem) then
+    ksk.SendRaidAM ("BIDCL", "ALERT", biditem)
+  end
+
+  ksk.ResetBidList ()
+
+  biditem = nil
+
+  lootroll = {}
+  lootroll.rollers = {}
+
+  rolling = 1
+
+  qf.bidders.mybid:SetEnabled (true)
+  qf.bidders.forcebid:SetEnabled (ksk.settings.offspec_rolls)
+  qf.bidders.forceret:SetEnabled (true)
+  qf.bidders.mybid:SetText (L["Roll (main)"])
+  qf.bidders.forcebid:SetText (L["Roll (offspec)"])
+  qf.bidders.forceret:SetText (L["Cancel Roll"])
+
+  -- Blank out any previous rollers
+  for i = 1,5 do
+    qf.lootroll["pos"..i]:SetText ("")
+    qf.lootroll["rem"..i]:SetEnabled (false)
+    if (isml) then
+      qf.lootroll["rem"..i]:SetShown (true)
+    else
+      qf.lootroll["rem"..i]:SetShown (false)
+    end
+  end
+
+  lootroll.timeout = timeout
+  lootroll.endtime = GetTime () + timeout + 1
+
+  if (isml) then
+    qf.lootroll:RegisterEvent ("CHAT_MSG_SYSTEM")
+    qf.lootroll:SetScript ("OnEvent", rlf_onevent)
+    qf.lootroll.timerbar:SetScript ("OnUpdate", rolltimer_onupdate_ml)
+    ksk.SendRaidAM ("OROLL", "ALERT", lootitem.loot.ilink, timeout)
+  else
+    qf.lootroll.timerbar:SetScript ("OnUpdate", rolltimer_onupdate_user)
+  end
+
+  select_alf (ALF_ROLL)
+end
+
+function ksk.EndOpenRoll (noswitch)
+  if (rolling) then
+    if (ksk.AmIML ()) then
       ksk.SendRaidAM ("EROLL", "ALERT")
     end
   end
-  local rlf = ksk.qf.lootroll
-  rlf:UnregisterEvent ("CHAT_MSG_SYSTEM")
-  rlf:SetScript ("OnEvent", nil)
-  rlf.timerbar:SetScript ("OnUpdate", nil)
-  if (ksk.lootroll and ksk.lootroll.lhdisabled) then
-    loothog_turnoff()
-  end
-  ksk.rolling = nil
-  ksk.lootroll = nil
-  ksk.qf.lootwin.oclbids:SetText (L["Open Bids"])
-  ksk.qf.lootwin.orpause:SetText (L["Open Roll"])
-  ksk.qf.lootwin.remcancel:SetText (L["Remove"])
+
+  rolling = nil
+  lootroll = nil
+
+  qf.bidders.mybid:SetEnabled (false)
+  qf.bidders.forcebid:SetEnabled (false)
+  qf.bidders.forceret:SetEnabled (false)
+
+  qf.lootwin.oclbids:SetText (L["Open Bids"])
+  qf.lootwin.orpause:SetText (L["Open Roll"])
+  qf.lootwin.remcancel:SetText (L["Remove"])
+  qf.bidders.mybid:SetText (L["Bid"])
+  qf.bidders.forcebid:SetText (L["Force Bid"])
+  qf.bidders.forceret:SetText (L["Force Retract"])
+
+  qf.lootroll:UnregisterEvent ("CHAT_MSG_SYSTEM")
+  qf.lootroll:SetScript ("OnEvent", nil)
+  qf.lootroll.timerbar:SetScript ("OnUpdate", nil)
+
   local en = false
-  if (ksk.csd.isadmin ~= nil) and (ksk.isml == true) and ksk.selectedloot then
+  if (ksk.AmIML () and selectedloot) then
     en = true
   end
-  ksk.qf.lootwin.oclbids:SetEnabled (en)
-  ksk.qf.lootwin.orpause:SetEnabled (en)
-  ksk.qf.lootwin.remcancel:SetEnabled (en)
-end
 
-function ksk:StartOpenRoll (ilink)
-  ksk.qf.bidders.mybid:SetEnabled (true)
-  ksk.qf.bidders.forcebid:SetEnabled (true)
-  ksk.qf.bidders.forceret:SetEnabled (true)
-  ksk.qf.bidders.forcebid:SetShown (true)
-  ksk.qf.bidders.forceret:SetShown (true)
-  ksk.qf.bidders.mybid:SetText (L["Roll (main)"])
-  ksk.qf.bidders.forcebid:SetText (L["Roll (offspec)"])
-  ksk.qf.bidders.forceret:SetText (L["Cancel Roll"])
-end
+  qf.lootwin.oclbids:SetEnabled (en)
+  qf.lootwin.orpause:SetEnabled (en)
+  qf.lootwin.remcancel:SetEnabled (en)
 
-function ksk:EndOpenRoll ()
-  local en = false
-  if (ksk.csd.isadmin) then
-    en = true
+  if (not noswitch) then
+    select_alf (ALF_LOOT)
   end
-  ksk.qf.bidders.mybid:SetEnabled (false)
-  ksk.qf.bidders.forcebid:SetEnabled (false)
-  ksk.qf.bidders.forceret:SetEnabled (false)
-  ksk.qf.bidders.forcebid:SetShown (en)
-  ksk.qf.bidders.forceret:SetShown (en)
-  ksk.qf.bidders.mybid:SetText (L["Bid"])
-  ksk.qf.bidders.forcebid:SetText (L["Force Bid"])
-  ksk.qf.bidders.forceret:SetText (L["Force Retract"])
+end
+
+function ksk.ChangeLootFilter (what, v1, v2)
+  if (what == "C") then
+    local w = K.IndexClass[v1].w
+    qf.lootrules[w]:SetChecked (v2)
+  elseif (what == "R") then
+    qf.lootrules.role:SetValue (v1)
+  elseif (what == "G") then
+    qf.lootrules.rank:SetValue (v1)
+  elseif (what == "A") then
+    qf.lootrules.strictarmour:SetChecked (v1)
+  elseif (what == "L") then
+    qf.lootrules.strictrole:SetChecked (v1)
+  end
+end
+
+--
+-- Called when the list of possible loot lists has changed. We will need to
+-- change any dropdowns that contain a list of lists, as well as the list
+-- scroll itself. If the current list that is selected has been removed we
+-- will need to clear the members list and bidders list too.
+--
+function ksk.RefreshLootLists (llist)
+  qf.itemlistdd:UpdateItems (llist)
+  qf.suicidelistdd:UpdateItems (llist)
+
+  local val
+
+  val = "0"
+  if (selitemid) then
+    val = ksk.items[selitemid].speclist or "0"
+  end
+  qf.itemlistdd:SetValue (val)
+
+  val = "0"
+  if (selitemid) then
+    val = ksk.items[selitemid].suicide or "0"
+  end
+  qf.suicidelistdd:SetValue (val)
+
+  refresh_loot_lists ()
+end
+
+function ksk.CloseLoot ()
+  ksk.EndOpenRoll ()
+  ksk.ResetBossLoot ()
+end
+
+function ksk.RefreshLootUI (reset)
+  if (reset) then
+    lootlistid = nil
+    lootlist = nil
+    members = nil
+    memberid = nil
+    realmemberid = nil
+    selitemid = nil
+    lootroll = nil
+    selectedbidder = nil
+    selectedbiduid = nil
+
+    hide_popup ()
+    select_alf (ALF_LOOT)
+
+    ksk.ResetBossLoot ()
+  end
+
+  refresh_loot_lists ()
+  refresh_bidders ()
+  ksk.RefreshHistory ()
+  ksk.RefreshItemList ()
+  ksk.RefreshLootMembers (nil)
+  ksk.RefreshBossLoot (selectedloot)
+
+  if (ksk.csd.undo and #ksk.csd.undo > 0 and ksk.AmIML ()) then
+    qf.undobutton:SetEnabled (true)
+  else
+    qf.undobutton:SetEnabled (false)
+  end
 end
 

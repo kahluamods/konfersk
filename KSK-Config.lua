@@ -1,12 +1,13 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
      WWW: http://kahluamod.com/ksk
-     SVN: http://kahluamod.com/svn/konfersk
+     Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
      E-mail: cruciformer@gmail.com
+
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2017 James Kean Johnston. All rights reserved.
+   Copyright 2008-2018 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -63,11 +64,42 @@ local debug = ksk.debug
 local info = ksk.info
 local err = ksk.err
 
-local admincfg
-local sortedconfigs
-local coadsel
-local sortedadmins
-local initdone = false
+local CFGTYPE_GUILD = ksk.CFGTYPE_GUILD
+local CFGTYPE_PUG   = ksk.CFGTYPE_PUG
+
+--[[
+This file implements the configuration UI and provides functions for
+manipulating various config options and refreshing the data. Most of
+this code can only be run by an administrator although anyone can switch
+active configurations.
+
+The main UI creation function is ksk.InitialiseConfigUI() and it creates the
+config tab contents and the three pages. The main data refresh function is
+ksk.RefreshConfigUI(). However, there are a number of sub refresh functions
+which reset only portions of the UI or stored data, all of which are called by
+ksk.RefreshConfigUI ().
+
+ksk.RefreshConfigLootUI (reset)
+  Refreshes the loot distribution options page of the config tab.
+
+ksk.RefreshConfigRollUI (reset)
+  Refreshes the loot rolling options page of the config tab.
+
+ksk.RefreshConfigAdminUI (reset)
+  Refreshes the config admin page of the config tab.
+]]
+
+local admincfg = nil
+local sortedconfigs = nil
+local coadmin_selected = nil
+local sortedadmins = nil
+local newcfgdlg = nil
+local copycfgdlg = nil
+local orankdlg = nil
+local coadmin_popup = nil
+local silent_delete = false
+
+local qf = {}
 
 --
 -- We have a finite number of admins, in order to ensure that unique user
@@ -91,104 +123,177 @@ local adminidseq = "0123456789abcdefghijklmnopqrstuvwxyz"
 --
 
 local function config_setenabled (onoff)
-  if (ksk.qf.cfgopts) then
-    if (ksk.qf.cfgopts.cfgowner) then
-      ksk.qf.cfgopts.cfgowner:SetEnabled (onoff)
+  local onoff = onoff or false
+
+  if (qf.cfgopts) then
+    local en = false
+
+    qf.cfgopts.cfgowner:SetEnabled (onoff)
+    qf.cfgopts.tethered:SetEnabled (onoff)
+    qf.cfgopts.cfgtype:SetEnabled (onoff)
+
+    if (onoff and K.player.is_guilded and K.player.is_gm) then
+      en = true
     end
-    if (ksk.qf.cfgopts.tethered) then
-      ksk.qf.cfgopts.tethered:SetEnabled (onoff)
-    end
-    if (ksk.qf.cfgopts.cfgtype) then
-      ksk.qf.cfgopts.cfgtype:SetEnabled (onoff)
-    end
-    if ksk.qf.cfgopts.orankedit then
-      if (K.player.isguilded and K.player.isgm) then
-        ksk.qf.cfgopts.orankedit:SetEnabled (onoff)
-      else
-        ksk.qf.cfgopts.orankedit:SetEnabled (false)
-      end
-    end
-  end
-  if (ksk.qf.cfgdelbutton) then
-    ksk.qf.cfgdelbutton:SetEnabled (onoff)
-  end
-  if (ksk.qf.cfgrenbutton) then
-    ksk.qf.cfgrenbutton:SetEnabled (onoff)
-  end
-  if (ksk.qf.cfgcopybutton) then
-    ksk.qf.cfgcopybutton:SetEnabled (onoff)
-  end
-  if (ksk.qf.coadadd) then
-    ksk.qf.coadadd:SetEnabled (onoff)
+
+    qf.cfgopts.orankedit:SetEnabled (en)
+
+    qf.cfgdelbutton:SetEnabled (onoff)
+    qf.cfgrenbutton:SetEnabled (onoff)
+    qf.cfgcopybutton:SetEnabled (onoff)
+    qf.coadadd:SetEnabled (onoff)
   end
 end
 
+local function refresh_coadmins ()
+  if (not admincfg) then
+    qf.coadminscroll.itemcount = 0
+    qf.coadminscroll:UpdateList ()
+    return
+  end
+
+  local newadmins = {}
+  local ownerlist = {}
+  local tc = ksk.frdb.configs[admincfg]
+  local ul = ksk.frdb.configs[admincfg].users
+
+  coadmin_selected = nil
+
+  for k,v in pairs (tc.admins) do
+    tinsert (newadmins, k)
+  end
+  tsort (newadmins, function (a, b)
+    return ul[a].name < ul[b].name
+  end)
+
+  for k,v in pairs (newadmins) do
+    tinsert (ownerlist, { text = aclass (ul[v]), value = v })
+  end
+
+  sortedadmins = newadmins
+
+  qf.coadminscroll.itemcount = #sortedadmins
+  qf.coadminscroll:UpdateList ()
+  qf.coadminscroll:SetSelected (nil)
+
+  qf.cfgownerdd:UpdateItems (ownerlist)
+  -- Don't throw an OnValueChanged event as that could have been what called us
+  -- and we don't want to create an infinite loop.
+  qf.cfgownerdd:SetValue (tc.owner, true)
+end
+
+--
+-- This is a helper function for when a configuration is selected from the
+-- list of possible configurations in the admin screen. It updates and
+-- populates the admin options on the right side panel.
+--
 local function config_selectitem (objp, idx, slot, btn, onoff)
+  local onoff = onoff or false
+
+  config_setenabled (onoff)
+
   if (onoff) then
-    config_setenabled (true)
     admincfg = sortedconfigs[idx].id
     local lcf = ksk.frdb.configs[admincfg]
-    ksk.qf.cfgopts.cfgowner:SetValue (lcf.owner)
-    ksk.qf.cfgopts.tethered:SetChecked (lcf.tethered)
-    ksk.qf.cfgopts.cfgtype:SetValue (lcf.cfgtype)
-    local en = ksk.csdata[admincfg].isadmin == 2 and true or false
-    ksk.qf.cfgopts.cfgowner:SetEnabled (en)
-    ksk.qf.cfgopts.tethered:SetEnabled (en)
-    if (lcf.cfgtype == ksk.CFGTYPE_GUILD and K.player.isguilded and K.player.isgm) then
-      ksk.qf.cfgopts.orankedit:SetEnabled (en)
-    else
-      ksk.qf.cfgopts.orankedit:SetEnabled (false)
+    local en
+
+    qf.cfgopts.cfgowner:SetValue (lcf.owner)
+    qf.cfgopts.tethered:SetChecked (lcf.tethered)
+    qf.cfgopts.cfgtype:SetValue (lcf.cfgtype)
+
+    en = ksk.csdata[admincfg].is_admin == 2 and true or false
+
+    qf.cfgopts.cfgowner:SetEnabled (en)
+    qf.cfgopts.tethered:SetEnabled (en)
+
+    if (lcf.cfgtype ~= CFGTYPE_GUILD) then
+      qf.cfgopts.orankedit:SetEnabled (false)
     end
-    ksk.qf.coadadd:SetEnabled (en and lcf.nadmins < 36)
-    ksk.qf.cfgrenbutton:SetEnabled (en)
-    local foo = ksk:CanChangeConfigType ()
-    if (not foo) then
+
+    qf.coadadd:SetEnabled (en and lcf.nadmins < 36)
+    qf.cfgrenbutton:SetEnabled (en)
+
+    if (not ksk.CanChangeConfigType ()) then
       en = false
     end
-    ksk.qf.cfgopts.cfgtype:SetEnabled (en)
+    qf.cfgopts.cfgtype:SetEnabled (en)
+
     if (ksk.frdb.nconfigs > 1) then
-      ksk.qf.cfgdelbutton:SetEnabled (true)
+      qf.cfgdelbutton:SetEnabled (true)
     else
-      ksk.qf.cfgdelbutton:SetEnabled (false)
+      qf.cfgdelbutton:SetEnabled (false)
     end
-    ksk:RefreshCoadmins ()
   else
-    config_setenabled (false)
     admincfg = nil
-    if (initdone) then
-      ksk.qf.coadminscroll.itemcount = 0
-      ksk.qf.coadminscroll:UpdateList ()
-    end
+  end
+
+  if (admincfg and admincfg == ksk.currentid) then
+    refresh_coadmins ()
   end
 end
 
-local function coad_setenabled (onoff)
-  if (ksk.qf.coaddel) then
-    ksk.qf.coaddel:SetEnabled (onoff)
-  end
-end
+--
+-- Helper function for dealing with the selected item in the coadmin scroll
+-- list.
+--
+local function coadmin_list_selectitem (objp, idx, slot, btn, onoff)
+  local en = false
+  local onoff = onoff or false
 
-local function clist_selectitem (objp, idx, slot, btn, onoff)
-  if (onoff) then
-    coad_setenabled (true)
-    coadsel = sortedadmins[idx]
+  if (onoff and admincfg) then
     local lcf = ksk.frdb.configs[admincfg]
-    local en = ksk.csdata[admincfg].isadmin == 2 and true or false
-    if (coadsel == lcf.owner) then
-      en = false
+
+    coadmin_selected = sortedadmins[idx]
+
+    if (coadmin_selected ~= lcf.owner) then
+      en = ksk.csdata[admincfg].is_admin == 2 and true
     end
-    ksk.qf.coaddel:SetEnabled (en)
   else
-    coad_setenabled (false)
-    coadsel = nil
+    coadmin_selected = nil
   end
+
+  qf.coaddel:SetEnabled (en)
+end
+
+-- Low level helper function to add a new co-admin
+local function add_coadmin (uid, cfgid)
+  assert (uid)
+  assert (cfgid)
+
+  local pcc = ksk.frdb.configs[cfgid]
+
+  if (not pcc) then
+    return
+  end
+
+  local newid
+  for i = 1, 36 do
+    local id = strsub (adminidseq, i, i)
+    local found = false
+    for k,v in pairs (pcc.admins) do
+      if (v.id == id) then
+        found = true
+        break
+      end
+    end
+    if (not found) then
+      newid = id
+      break
+    end
+  end
+  assert (newid, "fatal logic bug somewhere!")
+
+  -- Must add the event BEFORE we add the admin
+  ksk.AddEvent (cfgid, "MKADM", uid, newid)
+  pcc.nadmins = pcc.nadmins + 1
+  pcc.admins[uid] = { id = newid }
 end
 
 local function new_space_button()
   local box
 
-  if (not ksk.newconfig) then
-    ksk.newconfig, box = ksk:SingleStringInputDialog ("KSKSetupNewSpace",
+  if (not newcfgdlg) then
+    newcfgdlg, box = ksk.SingleStringInputDialog ("KSKSetupNewSpace",
       L["Create Configuration"], L["NEWMSG"], 400, 165)
 
     local function verify_with_create (objp, val)
@@ -198,55 +303,40 @@ local function new_space_button()
         objp.ebox:SetFocus ()
         return true
       end
-      ksk:CreateNewConfig (val, false)
-      ksk.newconfig:Hide ()
+      ksk.CreateNewConfig (val, false)
+      newcfgdlg:Hide ()
       ksk.mainwin:Show ()
       return false
     end
 
-    ksk.newconfig:Catch ("OnAccept", function (this, evt)
+    newcfgdlg:Catch ("OnAccept", function (this, evt)
       local rv = verify_with_create (this, this.ebox:GetText ())
       return rv
     end)
 
-    ksk.newconfig:Catch ("OnCancel", function (this, evt)
-      ksk.newconfig:Hide ()
+    newcfgdlg:Catch ("OnCancel", function (this, evt)
+      newcfgdlg:Hide ()
       ksk.mainwin:Show ()
       return false
     end)
 
     box:Catch ("OnEnterPressed", function (this, evt, val)
-      local rv = verify_with_create (this, val)
-      return rv
+      return verify_with_create (this, val)
     end)
   else
-    box = ksk.newconfig.ebox
+    box = newcfgdlg.ebox
   end
 
   box:SetText("")
 
   ksk.mainwin:Hide ()
-  ksk.newconfig:Show ()
+  newcfgdlg:Show ()
   box:SetFocus ()
 end
 
 local function rename_space_button (cfgid)
   local function rename_helper (newname, old)
-    local found = false
-    local lname = string.lower (newname)
-
-    for k,v in pairs (ksk.frdb.configs) do
-      if (string.lower(ksk.frdb.configs[k].name) == lname) then
-        found = true
-      end
-    end
-
-    if (found) then
-      err (L["configuration %q already exists. Try again."], white (newname))
-      return true
-    end
-
-    local rv = ksk:RenameConfig (old, newname)
+    local rv = ksk.RenameConfig (old, newname)
     if (rv) then
       return true
     end
@@ -254,17 +344,13 @@ local function rename_space_button (cfgid)
     return false
   end
 
-  ksk:RenameDialog (L["Rename Configuration"], L["Old Name"],
+  ksk.RenameDialog (L["Rename Configuration"], L["Old Name"],
     ksk.frdb.configs[cfgid].name, L["New Name"], 32, rename_helper,
     cfgid, true)
-
-  ksk.mainwin:Hide ()
-  ksk.renamedlg:Show ()
-  ksk.renamedlg.input:SetFocus ()
 end
 
 local function copy_space_button (cfgid, newname, newid, shown)
-  if (not ksk.copyspacedlg) then
+  if (not copycfgdlg) then
     local ypos = 0
     local arg = {
       x = "CENTER", y = "MIDDLE",
@@ -276,6 +362,7 @@ local function copy_space_button (cfgid, newname, newid, shown)
       canmove = true,
       canresize = false,
       escclose = true,
+      blackbg = true,
       okbutton = { text = K.ACCEPTSTR },
       cancelbutton = { text = K.CANCELSTR },
     }
@@ -320,7 +407,7 @@ local function copy_space_button (cfgid, newname, newid, shown)
     ret.dest:ClearAllPoints ()
     ret.dest:SetPoint ("TOPLEFT", ret.str3, "TOPRIGHT", 12, 0)
     ret.dest:Catch ("OnValueChanged", function (this, evt, newv)
-      ksk.copyspacedlg.newname = newv
+      copycfgdlg.newname = newv
     end)
     arg = {}
     ypos = ypos - 24
@@ -340,7 +427,7 @@ local function copy_space_button (cfgid, newname, newid, shown)
     }
     ret.copyadm = KUI:CreateCheckBox (arg, ret)
     ret.copyadm:Catch ("OnValueChanged", function (this, evt, val)
-      ksk.copyspacedlg.do_copyadm = val
+      copycfgdlg.do_copyadm = val
     end)
     arg = {}
     ypos = ypos - 24
@@ -350,7 +437,7 @@ local function copy_space_button (cfgid, newname, newid, shown)
     }
     ret.copyflags = KUI:CreateCheckBox (arg, ret)
     ret.copyflags:Catch ("OnValueChanged", function (this, evt, val)
-      ksk.copyspacedlg.do_copyflags = val
+      copycfgdlg.do_copyflags = val
     end)
     arg = {}
     ypos = ypos - 24
@@ -360,7 +447,7 @@ local function copy_space_button (cfgid, newname, newid, shown)
     }
     ret.copycfg = KUI:CreateCheckBox (arg, ret)
     ret.copycfg:Catch ("OnValueChanged", function (this, evt, val)
-      ksk.copyspacedlg.do_copycfg = val
+      copycfgdlg.do_copycfg = val
     end)
     arg = {}
     ypos = ypos - 24
@@ -370,89 +457,88 @@ local function copy_space_button (cfgid, newname, newid, shown)
     }
     ret.copyitem = KUI:CreateCheckBox (arg, ret)
     ret.copyitem:Catch ("OnValueChanged", function (this, evt, val)
-      ksk.copyspacedlg.do_copyitems = val
+      copycfgdlg.do_copyitems = val
     end)
     arg = {}
     ypos = ypos - 24
 
-    ksk.copyspacedlg = ret
+    copycfgdlg = ret
 
     ret.OnAccept = function (this)
       --
       -- First things first, see if we need to create the new configuration
       -- or if we are copying into it.
       --
-      if (not ksk.copyspacedlg.newname or ksk.copyspacedlg.newname == "") then
+      if (not copycfgdlg.newname or copycfgdlg.newname == "") then
         err (L["invalid configuration name. Please try again."])
         return
       end
-      if (ksk.copyspacedlg.newid == 0) then
-        ksk.copyspacedlg.newid = ksk:FindConfig (ksk.copyspacedlg.newname) or 0
+      if (copycfgdlg.newid == 0) then
+        copycfgdlg.newid = ksk.FindConfig (copycfgdlg.newname) or 0
       end
 
-      if (ksk.copyspacedlg.newid == 0) then
-        local rv, ni = ksk:CreateNewConfig (ksk.copyspacedlg.newname, false)
+      if (copycfgdlg.newid == 0) then
+        local rv, ni = ksk.CreateNewConfig (copycfgdlg.newname, false)
         if (rv) then
           return
         end
-        ksk.copyspacedlg.newid = ni
+        copycfgdlg.newid = ni
       end
 
-      local newid = ksk.copyspacedlg.newid
-      local cfgid = ksk.copyspacedlg.cfgid
+      local newid = copycfgdlg.newid
+      local cfgid = copycfgdlg.cfgid
       assert (ksk.frdb.configs[newid])
 
       local dc = ksk.frdb.configs[newid]
       local sc = ksk.frdb.configs[cfgid]
 
       --
-      -- First things first, copy the users. We cannot do a blind copy of
-      -- the user ID's as the user may already exist in the configuration
-      -- with a different ID, so we have to search the new configuration
-      -- for each user. We go through the list twice, the first time
-      -- skipping alts, the second time just dealing with alts. For the
-      -- various user flags, we have to do them individually, as we may
-      -- need to send out events for each change to the new user.
+      -- Copy the users. We cannot do a blind copy of the user ID's as the user
+      -- may already exist in the configuration with a different ID, so we have
+      -- to search the new configuration for each user. We go through the list
+      -- twice, the first time skipping alts, the second time just dealing with
+      -- alts. For the various user flags, we have to do them individually, as
+      -- we may need to send out events for each change to the new user.
       --
       for k,v in pairs (sc.users) do
         if (not v.main) then
-          local du = ksk:FindUser (v.name, newid)
+          local du = ksk.FindUser (v.name, newid)
           if (not du) then
-            du = ksk:CreateNewUser (v.name, v.class, newid, true, true)
+            du = ksk.CreateNewUser (v.name, v.class, newid, true, true)
           end
-          if (ksk.copyspacedlg.do_copyflags) then
+          if (copycfgdlg.do_copyflags) then
             local fs
-            fs = ksk:UserIsEnchanter (k, v.flags, cfgid)
-            ksk:SetUserEnchanter (du, fs, newid)
-            fs = ksk:UserIsFrozen (k, v.flags, cfgid)
-            ksk:SetUserFrozen (du, fs, newid)
+            fs = ksk.UserIsEnchanter (k, v.flags, cfgid)
+            ksk.SetUserEnchanter (du, fs, newid)
+            fs = ksk.UserIsFrozen (k, v.flags, cfgid)
+            ksk.SetUserFrozen (du, fs, newid)
           end
         end
       end
 
       for k,v in pairs (sc.users) do
         if (v.main) then
-          local du = ksk:FindUser (v.name, newid)
+          local du = ksk.FindUser (v.name, newid)
           if (not du) then
-            du = ksk:CreateNewUser (v.name, v.class, newid, true, true)
+            du = ksk.CreateNewUser (v.name, v.class, newid, true, true)
           end
           if (copyflags) then
             local fs
-            fs = ksk:UserIsEnchanter (k, v.flags, cfgid)
-            ksk:SetUserEnchanter (du, fs, newid)
-            fs = ksk:UserIsFrozen (k, v.flags, cfgid)
-            ksk:SetUserFrozen (du, fs, newid)
+            fs = ksk.UserIsEnchanter (k, v.flags, cfgid)
+            ksk.SetUserEnchanter (du, fs, newid)
+            fs = ksk.UserIsFrozen (k, v.flags, cfgid)
+            ksk.SetUserFrozen (du, fs, newid)
           end
-          local mu = ksk:FindUser (sc.users[v.main].name, newid)
+          local mu = ksk.FindUser (sc.users[v.main].name, newid)
           assert (mu)
-          ksk:SetUserIsAlt (du, true, mu, newid)
+          ksk.SetUserIsAlt (du, true, mu, newid)
         end
       end
 
       --
       -- Now copy the roll lists (if any) we have been asked to copy.
       --
-      for k,v in pairs (ksk.copyspacedlg.copylist) do
+      for k,v in pairs (copycfgdlg.copylist) do
         if (v == true) then
           --
           -- We can use the handy SMLST event to set the member list.
@@ -462,36 +548,36 @@ local function copy_space_button (cfgid, newname, newid, shown)
           -- recreate lists or anything like that.
           --
           local sl = sc.lists[k]
-          local dlid = ksk:FindList (sl.name, newid)
+          local dlid = ksk.FindList (sl.name, newid)
           if (not dlid) then
             --
             -- Need to create the list
             --
-            local rv, ri = ksk:CreateNewList (sl.name, newid)
+            local rv, ri = ksk.CreateNewList (sl.name, newid)
             assert (not rv)
             dlid = ri
           end
           local dul = {}
           for kk,vv in ipairs (sl.users) do
             -- Find the user in the new config
-            local du = ksk:FindUser (sc.users[vv].name, newid)
+            local du = ksk.FindUser (sc.users[vv].name, newid)
             assert (du)
             tinsert (dul, du)
           end
           local dus = tconcat (dul, "")
-          ksk:SetMemberList (dus, dlid, newid)
+          ksk.SetMemberList (dus, dlid, newid)
 
           --
           -- Copy the list options and prepare a CHLST event
           --
-          if (ksk.copyspacedlg.do_copycfg) then
+          if (copycfgdlg.do_copycfg) then
             local dl = dc.lists[dlid]
             dl.sortorder = sl.sortorder
             dl.def_rank = sl.def_rank
             dl.strictcfilter = sl.strictcfilter
             dl.strictrfilter = sl.strictrfilter
             if (sl.extralist ~= "0") then
-              dl.extralist = ksk:FindList (sc.lists[sl.extralist].name, newid) or "0"
+              dl.extralist = ksk.FindList (sc.lists[sl.extralist].name, newid) or "0"
             end
             -- If this changes MUST change in KSK-Comms.lua(CHLST)
             local es = strfmt ("%s:%d:%d:%s:%s:%s", dlid,
@@ -507,24 +593,24 @@ local function copy_space_button (cfgid, newname, newid, shown)
       -- We only copy items that do not exist. If the item exists in the
       -- new config we leave it completely untouched.
       --
-      if (ksk.copyspacedlg.do_copyitems) then
+      if (copycfgdlg.do_copyitems) then
         local sil = sc.items
         local dil = dc.items
 
         for k,v in pairs (sil) do
           if (not dil[k]) then
             local es = k .. ":"
-            ksk:AddItem (k, v.ilink, newid)
+            ksk.AddItem (k, v.ilink, newid)
             K.CopyTable (v, dil[k])
             --
             -- Obviously the UID for assign to next user will be
             -- different, so we adjust for that.
             --
             if (v.user) then
-              dil[k].user = ksk:FindUser (sc.users[v.user].name, newid)
+              dil[k].user = ksk.FindUser (sc.users[v.user].name, newid)
               assert (dil[k].user)
             end
-            ksk:MakeCHITM (k, dil[k], newid, true)
+            ksk.MakeCHITM (k, dil[k], newid, true)
           end
         end
       end
@@ -534,102 +620,101 @@ local function copy_space_button (cfgid, newname, newid, shown)
       -- copy them over now, but we will have to adjust the disenchanter
       -- UIDs.
       --
-      if (ksk.copyspacedlg.do_copycfg) then
+      if (copycfgdlg.do_copycfg) then
         K.CopyTable (sc.settings, dc.settings)
         for k,v in pairs (sc.settings.denchers) do
           if (v) then
-            dc.settings.denchers[k] = ksk:FindUser (sc.users[v].name, newid)
+            dc.settings.denchers[k] = ksk.FindUser (sc.users[v].name, newid)
           end
         end
         dc.tethered = sc.tethered
         dc.cfgtype = sc.cfgtype
-        dc.owner = ksk:FindUser (sc.users[sc.owner].name, newid)
+        dc.owner = ksk.FindUser (sc.users[sc.owner].name, newid)
         dc.oranks = sc.oranks
       end
 
       --
       -- If they want to copy co-admins do so now.
       --
-      if (ksk.copyspacedlg.do_copyadm) then
+      if (copycfgdlg.do_copyadm) then
         for k,v in pairs (sc.admins) do
-          local uid = ksk:FindUser (sc.users[k].name, newid)
+          local uid = ksk.FindUser (sc.users[k].name, newid)
           assert (uid)
           if (not dc.admins[uid]) then
-            ksk:AddAdmin (uid, newid)
+            add_coadmin (uid, newid)
           end
         end
       end
 
-      ksk:FullRefresh ()
+      ksk.FullRefresh (true)
 
-      ksk.copyspacedlg:Hide ()
-      if (ksk.copyspacedlg.isshown) then
+      copycfgdlg:Hide ()
+      if (copycfgdlg.isshown) then
         ksk.mainwin:Show ()
       end
     end
 
     ret.OnCancel = function (this)
-      ksk.copyspacedlg:Hide ()
-      if (ksk.copyspacedlg.isshown) then
+      copycfgdlg:Hide ()
+      if (copycfgdlg.isshown) then
         ksk.mainwin:Show ()
       end
     end
   end
 
-  ksk.copyspacedlg.do_copyadm = false
-  ksk.copyspacedlg.do_copyflags = true
-  ksk.copyspacedlg.do_copycfg = true
-  ksk.copyspacedlg.do_copyraid = false
-  ksk.copyspacedlg.do_copyitems = false
-  ksk.copyspacedlg.copylist = {}
-  ksk.copyspacedlg.newname = newname or ""
-  ksk.copyspacedlg.newid = newid or 0
-  ksk.copyspacedlg.cfgid = cfgid
+  copycfgdlg.do_copyadm = false
+  copycfgdlg.do_copyflags = true
+  copycfgdlg.do_copycfg = true
+  copycfgdlg.do_copyraid = false
+  copycfgdlg.do_copyitems = false
+  copycfgdlg.copylist = {}
+  copycfgdlg.newname = newname or ""
+  copycfgdlg.newid = newid or 0
+  copycfgdlg.cfgid = cfgid
 
   --
   -- Each time we are called we need to populate the dropdown list so that
   -- it has the correct list of lists.
   --
   local function set_list (btn)
-    ksk.copyspacedlg.copylist[btn.value] = btn.checked
+    copycfgdlg.copylist[btn.value] = btn.checked
   end
 
   local items = {}
   for k,v in pairs (ksk.frdb.configs[cfgid].lists) do
     local ti = { text = v.name, value = k, keep = true, func = set_list }
     ti.checked = function ()
-      return ksk.copyspacedlg.copylist[k]
+      return copycfgdlg.copylist[k]
     end
     tinsert (items, ti)
   end
   tsort (items, function (a,b)
     return strlower (a.text) < strlower (b.text)
   end)
-  ksk.copyspacedlg.ltocopy:UpdateItems (items)
+  copycfgdlg.ltocopy:UpdateItems (items)
 
-  ksk.copyspacedlg.copyadm:SetChecked (ksk.copyspacedlg.do_copyadm)
-  ksk.copyspacedlg.copyflags:SetChecked (ksk.copyspacedlg.do_copyflags)
-  ksk.copyspacedlg.copycfg:SetChecked (ksk.copyspacedlg.do_copycfg)
-  ksk.copyspacedlg.copyitem:SetChecked (ksk.copyspacedlg.do_copyitems)
+  copycfgdlg.copyadm:SetChecked (copycfgdlg.do_copyadm)
+  copycfgdlg.copyflags:SetChecked (copycfgdlg.do_copyflags)
+  copycfgdlg.copycfg:SetChecked (copycfgdlg.do_copycfg)
+  copycfgdlg.copyitem:SetChecked (copycfgdlg.do_copyitems)
 
-  ksk.copyspacedlg.isshown = shown
-  ksk.mainwin:Hide ()
-  ksk.copyspacedlg:Show ()
-
-
-  if (not ksk.copyspacedlg.newid or ksk.copyspacedlg.newid == 0) then
-    ksk.copyspacedlg.str4:Hide ()
-    ksk.copyspacedlg.dest:Show ()
-    ksk.copyspacedlg.dest:SetText (ksk.copyspacedlg.newname)
+  if (not copycfgdlg.newid or copycfgdlg.newid == 0) then
+    copycfgdlg.str4:Hide ()
+    copycfgdlg.dest:Show ()
+    copycfgdlg.dest:SetText (copycfgdlg.newname)
   else
-    ksk.copyspacedlg.dest:Hide ()
-    ksk.copyspacedlg.str4:Show ()
-    ksk.copyspacedlg.str4:SetText (ksk.copyspacedlg.newname)
+    copycfgdlg.dest:Hide ()
+    copycfgdlg.str4:Show ()
+    copycfgdlg.str4:SetText (copycfgdlg.newname)
   end
-  ksk.copyspacedlg.str2:SetText (ksk.frdb.configs[cfgid].name)
+  copycfgdlg.str2:SetText (ksk.frdb.configs[cfgid].name)
+
+  copycfgdlg.isshown = shown
+  ksk.mainwin:Hide ()
+  copycfgdlg:Show ()
 end
 
-function ksk:CopyConfigSpace (cfgid, newname, newid)
+function ksk.CopyConfigSpace (cfgid, newname, newid)
   copy_space_button (cfgid, newname, newid, ksk.mainwin:IsShown ())
 end
 
@@ -650,12 +735,12 @@ local function select_dencher (btn, lbl, num)
   tinsert (ulist, { value = 0, text = L["None"] })
   for k,v in ipairs (ksk.sortedusers) do
     local ok = true
-    for i = 1,6 do
+    for i = 1, ksk.MAX_DENCHERS do
       if (ksk.settings.denchers[i] == v.id) then
         ok = false
       end
     end
-    if (ok and ksk:UserIsEnchanter (v.id)) then
+    if (ok and ksk.UserIsEnchanter (v.id)) then
       local ti = { value = v.id, text = aclass (ksk.users[v.id]) }
       tinsert (ulist, ti)
     end
@@ -675,9 +760,9 @@ local function select_dencher (btn, lbl, num)
     --
     -- If we're in raid, refresh the raid's notion of possible denchers.
     --
-    if (ksk.inraid) then
+    if (ksk.raid) then
       ksk.raid.denchers = {}
-      for i = 1,6 do
+      for i = 1, ksk.MAX_DENCHERS do
         local duid = ksk.settings.denchers[i]
         if (duid) then
           if (ksk.raid.users[duid]) then
@@ -691,7 +776,7 @@ local function select_dencher (btn, lbl, num)
   end
 
   if (not dencher_popup) then
-    dencher_popup = ksk:PopupSelectionList ("KSKDencherPopup",
+    dencher_popup = ksk.PopupSelectionList ("KSKDencherPopup",
       ulist, L["Select Enchanter"], 225, 400, btn, 16, 
       function (idx) pop_func (idx) end)
   end
@@ -703,8 +788,10 @@ local function select_dencher (btn, lbl, num)
 end
 
 local function change_cfg (which, val)
-  if (ksk.settings[which] ~= val) then
-    ksk.settings[which] = val
+  if (ksk.settings) then
+    if (ksk.settings[which] ~= val) then
+      ksk.settings[which] = val
+    end
   end
 end
 
@@ -721,6 +808,7 @@ local function rank_editor ()
       canmove = true,
       canresize = false,
       escclose = true,
+      blackbg = true,
       okbutton = { text = K.ACCEPTSTR },
       cancelbutton = { text = K.CANCELSTR },
     }
@@ -764,7 +852,7 @@ local function rank_editor ()
     ret.OnAccept = function (this)
       ksk.settings.rank_prio = {}
       for i = 1, K.guild.numranks do
-        local rpe = "rankprio" .. tostring(i)
+        local rpe = "rankprio" .. tostring (i)
         local tv = ret[rpe]:GetText ()
         if (tv == "") then
           tv = "1"
@@ -807,10 +895,8 @@ local function rank_editor ()
   rp:Show ()
 end
 
-local coadmin_popup
-
 local function orank_edit_button ()
-  if (not ksk.orankdialog) then
+  if (not orankdlg) then
     local arg = {
       x = "CENTER", y = "MIDDLE",
       name = "KSKiOfficerRankEditDlg",
@@ -821,6 +907,7 @@ local function orank_edit_button ()
       canmove = true,
       canresize = false,
       escclose = true,
+      blackbg = true,
       okbutton = { text = K.ACCEPTSTR },
       cancelbutton = {text = K.CANCELSTR },
     }
@@ -864,10 +951,10 @@ local function orank_edit_button ()
       ksk.mainwin:Show ()
     end
 
-    ksk.orankdialog = ret
+    orankdlg = ret
   end
 
-  local rp = ksk.orankdialog
+  local rp = orankdlg
   local lcf = ksk.frdb.configs[admincfg]
   rp:SetHeight (((K.guild.numranks + 1) * 28) + 10)
 
@@ -886,16 +973,21 @@ local function orank_edit_button ()
   rp:Show ()
 end
 
-function ksk:InitialiseConfigGUI ()
+function ksk.InitialiseConfigUI ()
   local arg
+  local kmt = ksk.mainwin.tabs[ksk.CONFIG_TAB]
+
+  -- First set up the quick access frames we will be using.
+  qf.lootopts = kmt.tabs[ksk.CONFIG_LOOT_PAGE].content
+  qf.rollopts = kmt.tabs[ksk.CONFIG_ROLLS_PAGE].content
+  qf.cfgadmin = kmt.tabs[ksk.CONFIG_ADMIN_PAGE].content
 
   --
   -- Config panel, loot tab
   --
   local ypos = 0
 
-  local cf = ksk.qf.lootopts
-  local tbf = ksk.mainwin.tabs[ksk.CONFIG_TAB].topbar
+  local cf = qf.lootopts
 
   arg = {
     x = 0, y = ypos,
@@ -938,7 +1030,7 @@ function ksk:InitialiseConfigGUI ()
   cf.chatfilter:Catch ("OnValueChanged", function (this, evt, val)
     change_cfg ("chat_filter", val)
     -- This will cause the chat filters to be reset
-    ksk:UpdateUserSecurity ()
+    ksk.UpdateUserSecurity ()
   end)
   arg = {}
 
@@ -951,7 +1043,7 @@ function ksk:InitialiseConfigGUI ()
     change_cfg ("history", val)
     if (usr and not val) then
       ksk.cfg.history = {}
-      ksk:RefreshHistory ()
+      ksk.RefreshHistory ()
     end
   end)
   arg = {}
@@ -981,7 +1073,10 @@ function ksk:InitialiseConfigGUI ()
   arg = {}
 
   local function oaf_checked (this)
-    return ksk.settings[this.value]
+    if (ksk.settings) then
+      return ksk.settings[this.value]
+    end
+    return false
   end
 
   local function oaf_func (this)
@@ -1041,17 +1136,21 @@ function ksk:InitialiseConfigGUI ()
 
   arg = {
     x = 4, y = ypos, name = "KSKDefListDropdown", mode = "SINGLE",
-    dwidth = 175, items = KUI.emptydropdown, itemheight = 16,
+    dwidth = 200, items = KUI.emptydropdown, itemheight = 16,
     label = { text = L["Use Default Roll List"], pos = "LEFT" },
     tooltip = { title = "$$", text = L["TIP010"] },
   }
   cf.deflist = KUI:CreateDropDown (arg, cf)
-  ksk.qf.deflistdd = cf.deflist
   cf.deflist:Catch ("OnValueChanged", function (this, evt, nv)
     change_cfg ("def_list", nv)
   end)
   arg = {}
   ypos = ypos - 28
+  --
+  -- The list items are updated by ksk.RefreshListDropdowns() in KSK-Lists.lua.
+  -- This in turns calls ksk.RefreshConfigListDropdowns() below.
+  --
+  qf.deflistdd = cf.deflist
 
   arg = {
     x = 4, y = ypos, name = "KSKGDefRankDropdown", mode = "SINGLE",
@@ -1060,6 +1159,7 @@ function ksk:InitialiseConfigGUI ()
     tooltip = { title = "$$", text = L["TIP011"] },
   }
   cf.gdefrank = KUI:CreateDropDown (arg, cf)
+  -- Must remain visible in ksk.qf so it can be updated from main.
   ksk.qf.gdefrankdd = cf.gdefrank
   cf.gdefrank:Catch ("OnValueChanged", function (this, evt, nv)
     change_cfg ("def_rank", nv)
@@ -1074,7 +1174,7 @@ function ksk:InitialiseConfigGUI ()
   cf.hideabsent = KUI:CreateCheckBox (arg, cf)
   cf.hideabsent:Catch ("OnValueChanged", function (this, evt, val)
     change_cfg ("hide_absent", val)
-    ksk:RefreshLootMembers ()
+    ksk.RefreshLootMembers ()
   end)
   arg = {}
   ypos = ypos - 24
@@ -1101,7 +1201,7 @@ function ksk:InitialiseConfigGUI ()
     tooltip = { title = "$$", text = L["TIP095"] },
   }
   cf.threshold = KUI:CreateDropDown (arg, cf)
-  cf.threshold:Catch ("OnValueChanged", function (this, evt, newv, usr)
+  cf.threshold:Catch ("OnValueChanged", function (this, evt, newv)
     change_cfg ("bid_threshold", newv)
     cf.denchbelow:SetEnabled (newv ~= 0)
   end)
@@ -1124,6 +1224,9 @@ function ksk:InitialiseConfigGUI ()
   }
   cf.rankprio = KUI:CreateCheckBox (arg, cf)
   cf.rankprio:Catch ("OnValueChanged", function (this, evt, val)
+    if (ksk.cfg.cfgtype == CFGTYPE_PUG) then
+      val = false
+    end
     change_cfg ("use_ranks", val)
     cf.rankedit:SetEnabled (val)
   end)
@@ -1181,18 +1284,10 @@ function ksk:InitialiseConfigGUI ()
   cf.dench = KUI:CreateCheckBox (arg, cf)
   cf.dench:Catch ("OnValueChanged", function (this, evt, val)
     change_cfg ("disenchant", val)
-    cf.dencher1:SetEnabled (val)
-    cf.denchbut1:SetEnabled (val)
-    cf.dencher2:SetEnabled (val)
-    cf.denchbut2:SetEnabled (val)
-    cf.dencher3:SetEnabled (val)
-    cf.denchbut3:SetEnabled (val)
-    cf.dencher4:SetEnabled (val)
-    cf.denchbut4:SetEnabled (val)
-    cf.dencher5:SetEnabled (val)
-    cf.denchbut5:SetEnabled (val)
-    cf.dencher6:SetEnabled (val)
-    cf.denchbut6:SetEnabled (val)
+    for i = 1, ksk.MAX_DENCHERS do
+      cf["dencher" .. i]:SetEnabled (val)
+      cf["denchbut" .. i]:SetEnabled (val)
+    end
   end)
   arg = {}
   ypos = ypos - 24
@@ -1237,25 +1332,6 @@ function ksk:InitialiseConfigGUI ()
   cf.denchbut4:Catch ("OnClick", function (this, evt)
     select_dencher (this, cf.dencher4, 4)
   end)
-
-  ypos = ypos - 24
-  arg.x = 25
-  arg.y = ypos
-  barg.x = 180
-  barg.y = ypos+2
-  cf.dencher5 = KUI:CreateStringLabel (arg, cf)
-  cf.denchbut5 = KUI:CreateButton (barg, cf)
-  cf.denchbut5:Catch ("OnClick", function (this, evt)
-    select_dencher (this, cf.dencher5, 5)
-  end)
-
-  arg.x = 250
-  barg.x = 405
-  cf.dencher6 = KUI:CreateStringLabel (arg, cf)
-  cf.denchbut6 = KUI:CreateButton (barg, cf)
-  cf.denchbut6:Catch ("OnClick", function (this, evt)
-    select_dencher (this, cf.dencher6, 6)
-  end)
   arg = {}
   barg = {}
   ypos = ypos - 24
@@ -1263,7 +1339,7 @@ function ksk:InitialiseConfigGUI ()
   --
   -- Config panel, roll options tab
   --
-  local cf = ksk.qf.rollopts
+  local cf = qf.rollopts
   ypos = 0
 
   arg = {
@@ -1345,7 +1421,7 @@ function ksk:InitialiseConfigGUI ()
   --
   -- Config panel, admin tab
   --
-  local cf = ksk.qf.cfgadmin
+  local cf = qf.cfgadmin
   local ls = cf.vsplit.leftframe
   local rs = cf.vsplit.rightframe
 
@@ -1369,7 +1445,9 @@ function ksk:InitialiseConfigGUI ()
   arg = {}
   local tr = rs.hsplit.topframe
   local br = rs.hsplit.bottomframe
-  ksk.qf.cfgopts = tr
+
+  -- Dont set qf.cfgopts to tr just yet. Wait until all of the other child
+  -- elements have been added to it.
 
   arg = {
     height = 35,
@@ -1380,7 +1458,6 @@ function ksk:InitialiseConfigGUI ()
   arg = {}
   local about = br.hsplit.bottomframe
   local coadmins = br.hsplit.topframe
-  ksk.qf.coadmins = coadmins
 
   arg = {
     x = 0, y = 0, width = 80, height = 24, text = L["Create"],
@@ -1398,10 +1475,10 @@ function ksk:InitialiseConfigGUI ()
   }
   bl.deletebutton = KUI:CreateButton (arg, bl)
   bl.deletebutton:Catch ("OnClick", function (this, evt)
-    ksk:DeleteConfig (admincfg, true)
+    ksk.DeleteConfig (admincfg, true)
   end)
   arg = {}
-  ksk.qf.cfgdelbutton = bl.deletebutton
+  qf.cfgdelbutton = bl.deletebutton
 
   arg = {
     x = 0, y = -25, width = 80, height = 24, text = L["Rename"],
@@ -1412,7 +1489,7 @@ function ksk:InitialiseConfigGUI ()
     rename_space_button (admincfg)
   end)
   arg = {}
-  ksk.qf.cfgrenbutton = bl.renamebutton
+  qf.cfgrenbutton = bl.renamebutton
 
   arg = {
     x = 95, y = -25, width = 80, height = 24, text = L["Copy"],
@@ -1423,7 +1500,7 @@ function ksk:InitialiseConfigGUI ()
     copy_space_button (admincfg, nil, nil, true)
   end)
   arg = {}
-  ksk.qf.cfgcopybutton = bl.copybutton
+  qf.cfgcopybutton = bl.copybutton
 
   --
   -- We make the config space panel a scrolling list in case they have lots
@@ -1448,7 +1525,7 @@ function ksk:InitialiseConfigGUI ()
     end,
   }
   tl.slist = KUI:CreateScrollList (arg, tl)
-  ksk.qf.cfglist = tl.slist
+  qf.cfglist = tl.slist
   arg = {}
 
   local bdrop = {
@@ -1471,33 +1548,13 @@ function ksk:InitialiseConfigGUI ()
     tooltip = { title = "$$", text = L["TIP023"] },
   }
   tr.cfgowner = KUI:CreateDropDown (arg, tr)
-  ksk.qf.cfgownerdd = tr.cfgowner
-  tr.cfgowner:Catch ("OnValueChanged", function (this, evt, newv, user)
-    if (user) then
-      local lcf = ksk.frdb.configs[admincfg]
-      lcf.owner = newv
-      ksk:UpdateUserSecurity ()
-      ksk:RefreshCSData ()
-      local en = ksk.csdata[admincfg].isadmin == 2 and true or false
-      tr.cfgowner:SetEnabled (en)
-      tr.tethered:SetEnabled (en)
-      if (not ksk:CanChangeConfigType ()) then
-        en = false
-      end
-      tr.cfgtype:SetEnabled (en)
-      en = ksk.csdata[admincfg].isadmin == 2 and true or false
-      if (en and lcf.cfgtype == ksk.CFGTYPE_GUILD) then
-        if (K.player.isguilded and K.player.isgm and K.guild.gmname == newv)  then
-          en = true
-        else
-          en = false
-        end
-      else
-        en = false
-      end
-      tr.orankedit:SetEnabled (en)
-      ksk:RefreshConfigSpaces ()
-    end
+  qf.cfgownerdd = tr.cfgowner
+  tr.cfgowner:Catch ("OnValueChanged", function (this, evt, newv)
+    local lcf = ksk.frdb.configs[admincfg]
+    lcf.owner = newv
+    ksk.UpdateUserSecurity ()
+    ksk.RefreshCSData ()
+    ksk.RefreshConfigAdminUI (false)
   end)
   arg = {}
 
@@ -1509,8 +1566,8 @@ function ksk:InitialiseConfigGUI ()
   tr.tethered:Catch ("OnValueChanged", function (this, evt, val)
     local lcf = ksk.frdb.configs[admincfg]
     lcf.tethered = val
-    ksk:FixupLists (admincfg)
-    ksk:RefreshLists ()
+    ksk.FixupLists (admincfg)
+    ksk.RefreshListsUI (false)
   end)
   arg = {}
 
@@ -1520,18 +1577,29 @@ function ksk:InitialiseConfigGUI ()
     dwidth = 100, mode = "SINGLE", width = 75,
     tooltip = { title = "$$", text = L["TIP025"] },
     items = {
-      { text = L["Guild"], value = ksk.CFGTYPE_GUILD },
-      { text = L["PUG"], value = ksk.CFGTYPE_PUG },
+      { text = L["Guild"], value = CFGTYPE_GUILD },
+      { text = L["PUG"], value = CFGTYPE_PUG },
     },
   }
   tr.cfgtype = KUI:CreateDropDown (arg, tr)
   tr.cfgtype:Catch ("OnValueChanged", function (this, evt, newv)
     local lcf = ksk.frdb.configs[admincfg]
+    local en
     lcf.cfgtype = newv
-    if (lcf.cfgtype == ksk.CFGTYPE_GUILD and K.player.isguilded and K.player.isgm) then
-      ksk.qf.cfgopts.orankedit:SetEnabled (true)
+    if (newv == CFGTYPE_GUILD and K.player.is_guilded and K.player.is_gm) then
+      qf.cfgopts.orankedit:SetEnabled (true)
     else
-      ksk.qf.cfgopts.orankedit:SetEnabled (false)
+      qf.cfgopts.orankedit:SetEnabled (false)
+    end
+    if (newv == CFGTYPE_PUG) then
+      lcf.settings.def_rank = 0
+      lcf.settings.use_ranks = false
+      lcf.settings.ann_winners_guild = false
+      lcf.settings.rank_prio = {}
+      for k, v in pairs (lcf.lists) do
+        v.def_rank = 0
+      end
+      ksk.RefreshConfigLootUI (false)
     end
   end)
   arg = {}
@@ -1544,14 +1612,17 @@ function ksk:InitialiseConfigGUI ()
   }
   tr.orankedit = KUI:CreateButton (arg, tr)
   tr.orankedit:Catch ("OnClick", function (this, evt)
-    local lcf = ksk.frdb.configs[admincfg]
-    if (lcf.cfgtype == ksk.CFGTYPE_GUILD and K.player.isguilded and K.player.isgm) then
+    local ct = ksk.frdb.configs[admincfg].cfgtype
+    if (ct == CFGTYPE_GUILD and K.player.is_guilded and K.player.is_gm) then
       ksk.mainwin:Hide ()
       K:UpdatePlayerAndGuild ()
       orank_edit_button ()
     end
   end)
   arg = {}
+
+  -- NOW we can set qf.cfgopts
+  qf.cfgopts = tr
 
   arg = {
     x = 0, y = 2, height = 12, font = "GameFontNormalSmall",
@@ -1616,14 +1687,14 @@ function ksk:InitialiseConfigGUI ()
     end
 
     local function pop_func (cauid)
-      ksk:AddAdmin (cauid, admincfg)
+      add_coadmin (cauid, admincfg)
       ksk.popupwindow:Hide ()
       ksk.popupwindow = nil
-      ksk:RefreshCoadmins ()
+      ksk.RefreshConfigAdminUI (false)
     end
 
     if (not coadmin_popup) then
-      coadmin_popup = ksk:PopupSelectionList ("KSKCoadminAddPopup",
+      coadmin_popup = ksk.PopupSelectionList ("KSKCoadminAddPopup",
         ulist, L["Select Co-admin"], 200, 400, this, 16, pop_func)
     else
       coadmin_popup:UpdateList (ulist)
@@ -1634,7 +1705,7 @@ function ksk:InitialiseConfigGUI ()
     coadmin_popup:Show ()
   end)
   arg = {}
-  ksk.qf.coadadd = coadmins.add
+  qf.coadadd = coadmins.add
 
   arg = {
     x = 200, y = -48, text = L["Delete"], width = 90, height = 24,
@@ -1643,13 +1714,13 @@ function ksk:InitialiseConfigGUI ()
   }
   coadmins.del = KUI:CreateButton (arg, coadmins)
   coadmins.del:Catch ("OnClick", function (this, evt, ...)
-    if (not coadsel or not admincfg) then
+    if (not coadmin_selected or not admincfg) then
       return
     end
-    ksk:DeleteAdmin (coadsel, admincfg)
+    ksk.DeleteAdmin (coadmin_selected, admincfg)
   end)
   arg = {}
-  ksk.qf.coaddel = coadmins.del
+  qf.coaddel = coadmins.del
 
   local sframe = MakeFrame ("Frame", nil, coadmins)
   coadmins.sframe = sframe
@@ -1672,169 +1743,15 @@ function ksk:InitialiseConfigGUI ()
           return aclass(ul[sortedadmins[ix]])
         end)
       end,
-    selectitem = clist_selectitem,
+    selectitem = coadmin_list_selectitem,
     highlightitem = function (objp, idx, slot, btn, onoff)
       return KUI.HighlightItemHelper (objp, idx, slot, btn, onoff)
     end,
   }
   coadmins.slist = KUI:CreateScrollList (arg, coadmins.sframe)
   arg = {}
-  ksk.qf.coadminscroll = coadmins.slist
-
-  initdone = true
+  qf.coadminscroll = coadmins.slist
 end
-
-function ksk:RefreshCoadmins ()
-  if (not initdone) then
-    return
-  end
-  if (not admincfg) then
-    ksk.qf.coadminscroll.itemcount = 0
-    ksk.qf.coadminscroll:UpdateList ()
-    return
-  end
-
-  sortedadmins = {}
-  ownerlist = {}
-  coadsel = nil
-
-  local tc = ksk.frdb.configs[admincfg]
-  local ul = ksk.frdb.configs[admincfg].users
-
-  for k,v in pairs (tc.admins) do
-    tinsert (sortedadmins, k)
-  end
-  tsort (sortedadmins, function (a, b)
-    return ul[a].name < ul[b].name
-  end)
-
-  for k,v in pairs (sortedadmins) do
-    tinsert (ownerlist, { text = aclass (ul[v]), value = v })
-  end
-
-  ksk.qf.coadminscroll.itemcount = #sortedadmins
-  ksk.qf.coadminscroll:UpdateList ()
-  ksk.qf.coadminscroll:SetSelected (nil)
-
-  ksk.qf.cfgownerdd:UpdateItems (ownerlist)
-  ksk.qf.cfgownerdd:SetValue (tc.owner)
-  ksk:RefreshSyncers ()
-end
-
-function ksk:RefreshConfigSpaces ()
-  local vt = {}
-  sortedconfigs = {}
-  ksk.currentid = ksk.frdb.defconfig
-  ksk.cfg = ksk.frdb.configs[ksk.currentid]
-  ksk.users = ksk.frdb.configs[ksk.currentid].users
-  ksk.settings = ksk.frdb.configs[ksk.currentid].settings
-  ksk.lists = ksk.frdb.configs[ksk.currentid].lists
-  ksk.items = ksk.frdb.configs[ksk.currentid].items
-  ksk:RefreshCSData ()
-  ksk.csd = ksk.csdata[ksk.currentid]
-  ksk:UpdateUserSecurity ()
-
-  local oldid = admincfg or ""
-  local oldidx = nil
-  admincfg = nil
-
-  for k,v in pairs(ksk.frdb.configs) do
-    local ent = {id = k }
-    tinsert (sortedconfigs, ent)
-  end
-  tsort (sortedconfigs, function (a, b)
-    return strlower(ksk.frdb.configs[a.id].name) < strlower(ksk.frdb.configs[b.id].name)
-  end)
-
-  for k,v in ipairs(sortedconfigs) do
-    vt[k] = { text = ksk.frdb.configs[v.id].name, value = v.id }
-    if (ksk.csdata[v.id].isadmin == 2) then
-      vt[k].color = {r = 0, g = 1, b = 0 }
-    else
-      vt[k].color = {r = 1, g = 1, b = 1 }
-    end
-    if (v.id == oldid) then
-      oldidx = k
-    end
-  end
-
-  ksk.qf.cfgsel:UpdateItems (vt)
-  vt = nil
-
-  ksk.qf.cfglist.itemcount = ksk.frdb.nconfigs
-  ksk.qf.cfglist:UpdateList ()
-  ksk.qf.cfglist:SetSelected (oldidx)
-
-  for k,v in pairs (ksk.csdata) do
-    if (not ksk.frdb.configs[k]) then
-      ksk.csdata[k] = nil
-    end
-  end
-
-  ksk:SetDefaultConfig (ksk.currentid, true, true)
-  --
-  -- This will cause ksk:SetDefaultConfig() to be called. However, it does
-  -- not "force" the config change, so SetDefaultConfig will bail early
-  -- since we just called it above with force set.
-  --
-  ksk.qf.cfgsel:SetValue (ksk.currentid)
-end
-
-function ksk:SetDefaultConfig (cfgid, silent, force)
-  if (ksk.frdb.defconfig ~= cfgid or force) then
-    ksk.frdb.defconfig = cfgid
-    ksk.currentid = cfgid
-    ksk.cfg = ksk.frdb.configs[cfgid]
-    ksk.settings = ksk.frdb.configs[cfgid].settings
-    if (ksk.initialised) then
-      ksk.qf.synctopbar:SetCurrentCRC ()
-    end
-    ksk.settings = ksk.frdb.configs[cfgid].settings
-    ksk.users = ksk.frdb.configs[cfgid].users
-    ksk.lists = ksk.frdb.configs[cfgid].lists
-    ksk.items = ksk.frdb.configs[cfgid].items
-    ksk.list = nil
-    ksk.members = nil
-    ksk.listid = nil
-    ksk.memberid = nil
-    ksk.userid = nil
-    ksk.itemid = nil
-    ksk.lootmemberid = nil
-    ksk.lootmembers = nil
-    ksk.lootlistid = nil
-    ksk.lootlist = nil
-    ksk.sortedlists = nil
-    ksk:RefreshCSData ()
-    ksk.csd = ksk.csdata[cfgid]
-    ksk:UpdateUserSecurity ()
-    ksk.missing = {}
-    ksk.nmissing = 0
-
-    if (ksk.initialised) then
-      if (not silent) then
-        ksk.info (L["NOTICE: default configuration changed to %q."],
-          white (ksk.frdb.configs[cfgid].name))
-      end
-
-      ksk:RefreshUsers ()
-      ksk:UpdateUserSecurity ()
-      ksk:RefreshLists ()
-      ksk:RefreshItemList ()
-      ksk:RefreshHistory ()
-      ksk:UpdateAllConfigSettings ()
-      ksk:RefreshMembership ()
-      ksk:RefreshSyncers (true)
-      ksk:RefreshRaid (true)
-      if (not ksk.csd.isadmin) then
-        if (not silent) then
-          ksk.info (L["you are not an administrator of this configuration. Your access to it is read-only."])
-        end
-      end
-    end
-  end
-end
-
-local silent_delete = false
 
 local function real_delete_config (cfgid)
   if (not silent_delete) then
@@ -1846,17 +1763,17 @@ local function real_delete_config (cfgid)
   ksk.frdb.nconfigs = ksk.frdb.nconfigs - 1
   if (ksk.frdb.defconfig == cfgid) then
     local nid = next(ksk.frdb.configs)
-    ksk:SetDefaultConfig (nid, ksk.frdb.tempcfg)
+    ksk.SetDefaultConfig (nid, false, true)
     admincfg = nid
   end
 
   if (admincfg == cfgid) then
     admincfg = nil
   end
-  ksk:FullRefresh ()
+  ksk.FullRefresh (true)
 end
 
-function ksk:DeleteConfig (cfgid, show, private)
+function ksk.DeleteConfig (cfgid, show, private)
   if (ksk.frdb.nconfigs == 1 and not private) then
     err (L["cannot delete configuration %q - KonferSK requires at least one configuration."], white (ksk.frdb.configs[cfgid].name))
     return true
@@ -1873,13 +1790,13 @@ function ksk:DeleteConfig (cfgid, show, private)
   local isshown = show or ksk.mainwin:IsShown ()
   ksk.mainwin:Hide ()
 
-  ksk:ConfirmationDialog (L["Delete Configuration"], L["DELMSG"],
+  ksk.ConfirmationDialog (L["Delete Configuration"], L["DELMSG"],
     ksk.frdb.configs[cfgid].name, real_delete_config, cfgid, isshown)
 
   return false
 end
 
-function ksk:CreateNewConfig (name, initial, new, nouser, mykey)
+function ksk.CreateNewConfig (name, initial, nouser, mykey)
   local lname = strlower(name)
 
   if (strfind (name, ":")) then
@@ -1900,7 +1817,7 @@ function ksk:CreateNewConfig (name, initial, new, nouser, mykey)
   if (mykey) then
     newkey = mykey
   else
-    newkey = ksk:CreateNewID (name)
+    newkey = ksk.CreateNewID (name)
   end
   ksk.frdb.configs[newkey] = {}
   ksk.csdata[newkey] = {}
@@ -1908,7 +1825,7 @@ function ksk:CreateNewConfig (name, initial, new, nouser, mykey)
   local sp = ksk.frdb.configs[newkey]
   sp.name = name
   sp.tethered = false
-  sp.cfgtype = ksk.CFGTYPE_PUG
+  sp.cfgtype = CFGTYPE_PUG
   sp.oranks = "1000000000"
   sp.settings = {}
   sp.history = {}
@@ -1924,10 +1841,10 @@ function ksk:CreateNewConfig (name, initial, new, nouser, mykey)
   sp.lastevent = 0
   sp.syncing = false
 
-  K.CopyTable (self.defaults, sp.settings)
+  K.CopyTable (ksk.defaults, sp.settings)
   if (not nouser) then
     sp.nusers = 1
-    sp.users["0001"] = { name = K.player.player, class = K.player.class,
+    sp.users["0001"] = { name = K.player.name, class = K.player.class,
       role = 0, flags = "" }
     sp.owner = "0001"
     ksk.csdata[newkey].myuid = uid
@@ -1936,16 +1853,13 @@ function ksk:CreateNewConfig (name, initial, new, nouser, mykey)
     sp.admins["0001"] = { id = "0" }
   end
 
-  if (new) then
-    ksk:SetDefaultConfig (newkey, ksk.frdb.tempcfg)
-  end
-
   if (initial) then
+    ksk.SetDefaultConfig (newkey, ksk.frdb.tempcfg, ksk.frdb.tempcfg)
     return false, newkey
   end
 
   if (ksk.frdb.tempcfg) then
-    ksk:SetDefaultConfig (newkey, true, true)
+    ksk.SetDefaultConfig (newkey, true, true)
     silent_delete = true
     real_delete_config ("1")
     silent_delete = false
@@ -1956,24 +1870,24 @@ function ksk:CreateNewConfig (name, initial, new, nouser, mykey)
   -- If we have no guild configs, and we are the GM, make this
   -- a guild config initially. They can change it immediately if this is wrong.
   --
-  if (K.player.isgm) then
+  if (K.player.is_gm) then
     local ng = 0
     for k,v in pairs (ksk.frdb.configs) do
-      if (v.cfgtype == ksk.CFGTYPE_GUILD) then
+      if (v.cfgtype == CFGTYPE_GUILD) then
         ng = ng + 1
       end
     end
     if (ng == 0) then
-      sp.cfgtype = ksk.CFGTYPE_GUILD
+      sp.cfgtype = CFGTYPE_GUILD
     end
   end
 
-  ksk:FullRefresh ()
+  ksk.FullRefresh (true)
   return false, newkey
 end
 
-function ksk:RenameConfig (cfgid, newname)
-  if (ksk:CheckPerm ()) then
+function ksk.RenameConfig (cfgid, newname)
+  if (ksk.CheckPerm (cfgid)) then
     return true
   end
 
@@ -1981,16 +1895,30 @@ function ksk:RenameConfig (cfgid, newname)
     return true
   end
 
+  local found = false
+  local lname = strlower (newname)
+
+  for k,v in pairs (ksk.frdb.configs) do
+    if (strlower(ksk.frdb.configs[k].name) == lname) then
+      found = true
+    end
+  end
+
+  if (found) then
+    err (L["configuration %q already exists. Try again."], white (newname))
+    return true
+  end
+
   local oldname = ksk.frdb.configs[cfgid].name
   info (L["NOTICE: configuration %q renamed to %q."], white (oldname),
     white (newname))
   ksk.frdb.configs[cfgid].name = newname
-  ksk:FullRefresh ()
+  ksk.FullRefresh ()
 
   return false
 end
 
-function ksk:FindConfig (name)
+function ksk.FindConfig (name)
   local lname = strlower(name)
   for k,v in pairs (ksk.frdb.configs) do
     if (strlower(v.name) == lname) then
@@ -2000,41 +1928,18 @@ function ksk:FindConfig (name)
   return nil
 end
 
-function ksk:AddAdmin (uid, cfgid, nocmd)
-  assert (uid)
-  assert (cfgid)
-
-  local pcc = ksk.frdb.configs[cfgid]
-  local newid
-  for i = 1, 36 do
-    local id = strsub (adminidseq, i, i)
-    local found = false
-    for k,v in pairs (pcc.admins) do
-      if (v.id == id) then
-        found = true
-        break
-      end
-    end
-    if (not found) then
-      newid = id
-      break
-    end
-  end
-  assert (newid, "fatal logic bug somewhere!")
-
-  -- Must add the event BEFORE we add the admin
-  ksk.AddEvent (cfgid, "MKADM", uid, newid)
-  pcc.nadmins = pcc.nadmins + 1
-  pcc.admins[uid] = { id = newid }
-end
-
-function ksk:DeleteAdmin (uid, cfg, nocmd)
+function ksk.DeleteAdmin (uid, cfg, nocmd)
   local cfg = cfg or ksk.currentid
   local cp = ksk.frdb.configs[cfg]
+
+  if (not cp) then
+    return
+  end
 
   if (not cp.admins[uid]) then
     return
   end
+
   cp.nadmins = cp.nadmins - 1
   cp.admins[uid] = nil
   if (cp.nadmins == 1) then
@@ -2048,5 +1953,224 @@ function ksk:DeleteAdmin (uid, cfg, nocmd)
     ksk.AddEvent (cfg, "RMADM", uid, true)
   end
 
-  ksk:RefreshCoadmins ()
+  if (admincfg and admincfg == ksk.currentid) then
+    refresh_coadmins ()
+  end
 end
+
+--
+-- Function: ksk.SetDefaultConfig (cfgid, silent, force)
+-- Purpose : Set up all of the various global aliases and make the specified
+--           config the default one. If the current config is already the
+--           specified config, do nothing unless FORCE is set to true. If
+--           the work should be silent, set SILENT to true, otherwise a
+--           message indicating the default change is displayed.
+-- Returns : Nothing
+--
+function ksk.SetDefaultConfig (cfgid, silent, force)
+  if (not cfgid or not ksk.configs or not ksk.configs[cfgid]) then
+    return
+  end
+
+  if (not ksk.csdata or not ksk.csdata[cfgid]) then
+    return
+  end
+
+  if (ksk.frdb.defconfig ~= cfgid or force) then
+    ksk.frdb.defconfig = cfgid
+    ksk.currentid = cfgid
+    ksk.cfg = ksk.frdb.configs[cfgid]
+
+    if (ksk.initialised) then
+      ksk.qf.synctopbar:SetCurrentCRC ()
+    end
+
+    ksk.settings = ksk.frdb.configs[cfgid].settings
+    ksk.users = ksk.frdb.configs[cfgid].users
+    ksk.lists = ksk.frdb.configs[cfgid].lists
+    ksk.items = ksk.frdb.configs[cfgid].items
+
+    if (ksk.initialised) then
+      -- If we're not initialised yet then this will just have been called.
+      ksk.RefreshCSData ()
+    end
+    ksk.csd = ksk.csdata[cfgid]
+
+    ksk.sortedlists = nil
+    ksk.missing = {}
+    ksk.nmissing = 0
+
+    ksk.UpdateUserSecurity (cfgid)
+
+    if (ksk.initialised) then
+      ksk.FullRefresh (true)
+      ksk.mainwin:SetTab (ksk.LOOT_TAB, ksk.LOOT_ASSIGN_PAGE)
+      ksk.mainwin:SetTab (ksk.LISTS_TAB, ksk.LISTS_MEMBERS_PAGE)
+      ksk.SelectListByIdx (1)
+
+      if (not ksk.frdb.tempcfg) then
+        local sidx = nil
+        for k,v in pairs (sortedconfigs) do
+          if (v.id == cfgid) then
+            sidx = k
+            break
+          end
+        end
+        qf.cfglist:SetSelected (sidx, true, true)
+      end
+
+      if (not silent) then
+        ksk.info (L["NOTICE: default configuration changed to %q."],
+          white (ksk.frdb.configs[cfgid].name))
+        if (not ksk.csd.is_admin) then
+          ksk.info (L["you are not an administrator of this configuration. Your access to it is read-only."])
+        end
+      end
+    end
+  end
+end
+
+function ksk.RefreshConfigLists (llist)
+  qf.deflistdd:UpdateItems (llist)
+  qf.deflistdd:SetValue (ksk.settings.def_list or "0")
+end
+
+function ksk.RefreshConfigLootUI (reset)
+  local i
+  local settings = ksk.settings
+  local cf = qf.lootopts
+  local en = true
+
+  cf.autobid:SetChecked (settings.auto_bid)
+  cf.silentbid:SetChecked (settings.silent_bid)
+  cf.tooltips:SetChecked (settings.tooltips)
+  cf.chatfilter:SetChecked (settings.chat_filter)
+  cf.history:SetChecked (settings.history)
+  cf.announcewhere:SetValue (settings.announce_where)
+  cf.deflist:SetValue (settings.def_list)
+  cf.gdefrank:SetValue (settings.def_rank)
+  cf.hideabsent:SetChecked (settings.hide_absent)
+  cf.autoloot:SetChecked (settings.auto_loot)
+  cf.threshold:SetValue (settings.bid_threshold)
+  cf.denchbelow:SetChecked (settings.disenchant_below)
+  cf.rankprio:SetChecked (settings.use_ranks)
+  cf.boetoml:SetChecked (settings.boe_to_ml)
+  cf.tryroll:SetChecked (settings.try_roll)
+  cf.dench:SetChecked (settings.disenchant)
+
+  if (ksk.cfg.cfgtype == CFGTYPE_PUG) then
+    en = false
+  end
+  cf.gdefrank:SetEnabled (en)
+  cf.rankprio:SetEnabled (en)
+  ksk.qf.lootrank:SetEnabled (en)
+  ksk.qf.defrankdd:SetEnabled (en)
+  ksk.qf.gdefrankdd:SetEnabled (en)
+  ksk.qf.itemrankdd:SetEnabled (en)
+
+  for i = 1, ksk.MAX_DENCHERS do
+    if (settings.denchers[i]) then
+      cf["dencher"..i]:SetText (aclass (ksk.users[settings.denchers[i]]))
+    else
+      cf["dencher"..i]:SetText ("")
+    end
+  end
+end
+
+function ksk.RefreshConfigRollUI (reset)
+  local i
+  local settings = ksk.settings
+  local cf = qf.rollopts
+
+  cf.rolltimeout:SetValue (settings.roll_timeout)
+  cf.rollextend:SetValue (settings.roll_extend)
+  cf.enableoffspec:SetChecked (settings.offspec_rolls)
+  cf.suicideroll:SetChecked (settings.suicide_rolls)
+  cf.rollusage:SetChecked (settings.ann_roll_usage)
+  cf.countdown:SetChecked (settings.ann_countdown)
+  cf.ties:SetChecked (settings.ann_roll_ties)
+end
+
+function ksk.RefreshConfigAdminUI (reset)
+  if (ksk.frdb.tempcfg) then
+    qf.cfglist.itemcount = 0
+    qf.cfglist:UpdateList ()
+    return
+  end
+
+  local vt = {}
+  local newconfs = {}
+  local oldid = admincfg or ksk.currentid
+  local oldidx = nil
+
+  admincfg = nil
+
+  for k,v in pairs(ksk.frdb.configs) do
+    local ent = {id = k }
+    tinsert (newconfs, ent)
+  end
+  tsort (newconfs, function (a, b)
+    return strlower(ksk.configs[a.id].name) < strlower(ksk.configs[b.id].name)
+  end)
+
+  for k,v in ipairs(newconfs) do
+    vt[k] = { text = ksk.frdb.configs[v.id].name, value = v.id }
+    if (ksk.csdata[v.id].is_admin == 2) then
+      vt[k].color = {r = 0, g = 1, b = 0 }
+    elseif (ksk.csdata[v.id].is_admin == 1) then
+      vt[k].color = {r = 0, g = 1, b = 1 }
+    else
+      vt[k].color = {r = 1, g = 1, b = 1 }
+    end
+    if (v.id == oldid) then
+      oldidx = k
+    end
+  end
+
+  sortedconfigs = newconfs
+
+  ksk.mainwin.cfgselector:UpdateItems (vt)
+  -- Don't fire an OnValueChanged event when we set this.
+  ksk.mainwin.cfgselector:SetValue (ksk.currentid, true)
+
+  qf.cfglist.itemcount = #newconfs
+  qf.cfglist:UpdateList ()
+
+  --
+  -- There is some magic happening here. By forcing the selection (3rd arg
+  -- true) we force the widget's selectitem function to run. This results
+  -- in config_selectitem() being called. This has a few side effects. The
+  -- first and foremost is, it sets the "admincfg" local variable to the
+  -- selected configuration (if any). Secondly, it forces a refresh of the
+  -- data on the right hand panel that is related to the selected config.
+  -- This includes updating the list of coadmins. That leaves us with a choice
+  -- on how we want to deal with the co-admin list when we have sync events
+  -- or other things changing the coadmin list. We can either have a special
+  -- refresh and reset function just for co-admins, or we can leave it up
+  -- to this code to result in the refresh. It provides better data protection
+  -- and encapsulate usage if we go with the latter, so we no longer have a
+  -- special co-admin update function. Instead, if anything changes the list
+  -- of co-admins it should call this function (RefreshConfigAdminUI).
+  --
+  qf.cfglist:SetSelected (oldidx, true, true)
+end
+
+--
+-- Refresh the config tab UI elements, optionally resetting all state
+-- variables. This will only ever really impact admins as they are the only
+-- ones that can see the tab. However, we do this for everybody to simplify
+-- the overall logic of the mod. For non-admins this will just be a little
+-- bit of busy work that will happen so quickly they won't even notice it.
+--
+function ksk.RefreshConfigUI (reset)
+  if (not ksk.currentid) then
+    return
+  end
+
+  ksk.mainwin.cfgselector:SetValue (ksk.currentid)
+
+  ksk.RefreshConfigLootUI (reset)
+  ksk.RefreshConfigRollUI (reset)
+  ksk.RefreshConfigAdminUI (reset)
+end
+

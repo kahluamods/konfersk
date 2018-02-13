@@ -1,9 +1,9 @@
 Welcome to KahLua Konfer, Suicide Kings Edition. KahLua Konfer is part of a
 larger suite of addons called "KahLua". There are several versions of the
 Konfer module, each which deals with different loot distribution systems.
-This one implements the Suicide Kings system, with optional decay. KonferDKP
-implements classic and bidding DKP, and KonferEPGP implements the EP/GP
-loot system.
+This one implements the Suicide Kings system.  KonferEPGP implements the EP/GP
+loot system, KPUG is a tool for pugs, and Konfer Kouncil is a tool to assist
+loot councils.
 
 KSK is fully documented at http://kahluamod.com/ksk.
 
@@ -14,7 +14,7 @@ The basic command for accessing KSK is simply /ksk. There are a number of
 arguments you can give this command, which are discussed briefly below.
 
 KSK can manage multiple "configuration spaces". Think of a configuration
-space (hereafter efered to simply as a config) as a totally unique instance
+space (hereafter refered to simply as a config) as a totally unique instance
 of the mod. It has its own user lists, roll lists, loot lists, administrators
 and event history. Only one configuration can be the "active" one at a time,
 although if you do have multiple configurations, you can still receive events
@@ -95,9 +95,6 @@ Config (/ksk config)
 
 KNOWN LIMITATIONS AND PROBLEMS
 ==============================
-
-o  Automatic list decay and the raid tracker are not working yet and
-   are disabled.
 
 o  Multiple admins adding users when other admins are offline can
    cause conflicts. It is possible to end up with the same user in the

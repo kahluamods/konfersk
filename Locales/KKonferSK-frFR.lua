@@ -93,6 +93,9 @@ L["WHISPERCMD_HELP"] = "ksk"
 -- Main localisation strings start here
 --
 
+L["VCTITLE"] = "%s %s Version Check"
+L["Version"] = "Version"
+L["In Raid"] = "In Raid"
 L["NEWMSG"] = "Entrez le nom du nouvel espace de configuration ci-dessous. Notez bien que ce nouvel espace ne partage absolument pas de donn\195\169es avec un autre espace de configuration. Cette nouvelle configuration sera trait\195\169e come si c'\195\169tait une copie enti\195\168re de Konfer qui tournait."
 L["DELMSG"] = "Etes-vous vraiment s\195\187r de supprimer cette configuration ? Il n'est pas possible d'annuler cette op\195\169ration, et toutes les listes, permissions joueurs, historique de raid et 'user loot information' associ\195\169 avec cette configuration seront perdus. Si vous \195\170tes le possesseur de cette configuration et avez partag\195\169e celle-ci avec d'autres joueurs, vous devriez attendre que vous ayez transf\195\169r\195\169 la possession \195\160 un autre joueur, sinon ils ne pourront pas \195\169diter les configurations li\195\169es \195\160 la s\195\169curit\195\169 sur la liste. Soyez s\195\187r que la bonne liste est affich\195\169e ci-dessus avant de r\195\169aliser ceci."
 L["DELUSER"] = "Etes-vous vraiment s\195\187r de vouloir supprimer ce joueur ? Il n'est pas possible d'annuler cette op\195\169ration ; tout l'historique du joueur et ses informations seront perdues, et le joueur sera supprim\195\169 de toutes les listes dans toutes les configurations, pas seulement dans celle active. Si ce joueur est un main et qu'il a des rerolls d\195\169finis, ils seront supprim\195\169s \195\169galement. Soyez bien s\195\187r que le bon joueur est affich\195\169 ci-dessus avant de r\195\169aliser ceci."
@@ -359,7 +362,7 @@ L["%s: I am not the master looter."] = "%s: je ne suis pas le ma\195\174tre du b
 L["%s: loot method is not master looter, there is no bidding."] = "%s : Le type de butin n'est pas le ma\195\174tre du butin, il n'y a pas de mises aux ench\195\168res." 
 L["%s: you were not found in the user list. Contact an admin for help."] = "%s : Vous n'avez pas \195\169t\195\169 trouv\195\169 dans la liste. Contactez un administrateur pour de l'aide."
 L["%s: you are not in my guild - bid ignored."] = "%s : Vous n'\195\170tes pas dans la guilde - ench\195\168re ignor\195\169e."
-L["%s: user %q has no role defined - permitting %s."] = "%s : Le joueur %q n'a pas de r\195\180le d\195\169fini - permitting %s." -- WTF ?
+L["user %q has no role defined - permitting %s."] = "Le joueur %q n'a pas de r\195\180le d\195\169fini - permitting %s." -- WTF ?
 L["%s: you are not a member of the %q list - bid ignored."] = "%s : Vous ne faites pas partie de la liste %q - ench\195\168re ignor\195\169e."
 L["%q attempted to bid on the %q list but is not a member."] = "%q a essay\195\169 d'ench\195\169rir sur la liste %q mais il n'en fait pas partie."
 L["%s: you have already bid on that item. Whisper %s the word %q to retract your bid."] = "%s : Vous avez d\195\169j\195\160 ench\195\169ri sur cet objet. Chuchotez à %s le mot %q pour vous r\195\169tracter."
@@ -475,7 +478,7 @@ L["Auto-disenchant Items Below Threshold"] = "D\195\169senchanter automatiquemen
 L["Auto-assign to Enchanter"] = "Auto-attribuer \195\160 un enchanteur"
 L["Auto-assign to Master Looter"] = "Auto-attribuer au ma\195\174tre du butin"
 L["Raiders Not on Current List"] = "Raideurs qui ne sont pas sur la liste actuelle"
-L["%s: users not on the %q list: %s"] = "%s : joueurs qui ne sont pas sur la liste %q : %s"
+L["users not on the %q list: %s"] = "joueurs qui ne sont pas sur la liste %q : %s"
 L["User Search"] = "Rechercher un joueur"
 L["Edit Officer Ranks"] = "Edit Officer Ranks"
 L["Set Guild Officer Ranks"] = "Set Guild Officer Ranks"

@@ -55,17 +55,14 @@ local printf = K.printf
 local ucolor = K.ucolor
 local ecolor = K.ecolor
 local icolor = K.icolor
-local debug
-local frdb, curcfg, settings
-local info
-local err
+local renamedialog
 
 --
 -- This file contains functions that can be used in more than one place,
 -- such as the rename dialog and others.
 --
 
-function ksk:ConfirmationDialog (ttxt, msg, val, func, farg, isshown, height, option)
+function ksk.ConfirmationDialog (ttxt, msg, val, func, farg, isshown, height, option)
   height = height or 240
   if (not ksk.confirmdlg) then
     local arg = {
@@ -78,6 +75,7 @@ function ksk:ConfirmationDialog (ttxt, msg, val, func, farg, isshown, height, op
       canmove = true,
       canresize = false,
       escclose = false,
+      blackbg = true,
       okbutton = { text = K.OK_STR },
       cancelbutton = { text = K.CANCEL_STR },
     }
@@ -151,8 +149,8 @@ function ksk:ConfirmationDialog (ttxt, msg, val, func, farg, isshown, height, op
   ksk.confirmdlg:Show ()
 end
 
-function ksk:RenameDialog (ttxt, oldlbl, oldval, newlbl, len, func, farg, shown)
-  if (not ksk.renamedlg) then
+function ksk.RenameDialog (ttxt, oldlbl, oldval, newlbl, len, func, farg, shown)
+  if (not renamedialog) then
     local arg = {
       x = "CENTER", y = "MIDDLE",
       name = "KSKRenameDialog",
@@ -163,6 +161,7 @@ function ksk:RenameDialog (ttxt, oldlbl, oldval, newlbl, len, func, farg, shown)
       canmove = true,
       canresize = false,
       escclose = true,
+      blackbg = true,
       okbutton = { text = K.OK_STR },
       cancelbutton = { text = K.CANCEL_STR },
     }
@@ -206,40 +205,45 @@ function ksk:RenameDialog (ttxt, oldlbl, oldval, newlbl, len, func, farg, shown)
     ret.input:SetPoint ("TOPLEFT", ret.str3, "TOPRIGHT", 12, 0)
 
     ret.OnCancel = function (this)
-      ksk.renamedlg:Hide ()
-      if (ksk.renamedlg.isshown) then
+      renamedialog:Hide ()
+      if (renamedialog.isshown) then
         ksk.mainwin:Show ()
       end
     end
 
     ret.OnAccept = function (this)
-      local rv = ksk.renamedlg.runfunction (ksk.renamedlg.input:GetText (), ksk.renamedlg.arg, true)
+      local rv = renamedialog.runfunction (renamedialog.input:GetText (), renamedialog.arg, true)
       if (rv) then
-        ksk.renamedlg:Show ()
-        ksk.renamedlg.input:SetFocus ()
+        renamedialog:Show ()
+        renamedialog.input:SetFocus ()
       else
-        ksk.renamedlg:Hide ()
-        if (ksk.renamedlg.isshown) then
+        renamedialog:Hide ()
+        if (renamedialog.isshown) then
           ksk.mainwin:Show ()
         end
       end
     end
     ret.input.OnEnterPressed = ret.OnAccept
 
-    ksk.renamedlg = ret
+    renamedialog = ret
   end
 
-  ksk.renamedlg:SetTitleText (ttxt)
-  ksk.renamedlg.str1:SetText (oldlbl)
-  ksk.renamedlg.str2:SetText (oldval)
-  ksk.renamedlg.str3:SetText (newlbl)
-  ksk.renamedlg.input:SetMaxLetters (len)
-  ksk.renamedlg.runfunction = func
-  ksk.renamedlg.arg = farg
-  ksk.renamedlg.isshown = shown
+  renamedialog:SetTitleText (ttxt)
+  renamedialog.str1:SetText (oldlbl)
+  renamedialog.str2:SetText (oldval)
+  renamedialog.str3:SetText (newlbl)
+  renamedialog.input:SetMaxLetters (len)
+  renamedialog.runfunction = func
+  renamedialog.arg = farg
+  renamedialog.isshown = shown
+
+  ksk.mainwin:Hide ()
+  renamedialog:Show ()
+  renamedialog.input:SetText ("")
+  renamedialog.input:SetFocus ()
 end
 
-function ksk:PopupSelectionList (name, list, title, width, height, parent, itemheight, func, topspace, botspace)
+function ksk.PopupSelectionList (name, list, title, width, height, parent, itemheight, func, topspace, botspace)
   if (ksk.popupwindow) then
     ksk.popupwindow:Hide ()
     ksk.popupwindow = nil
@@ -277,7 +281,7 @@ function ksk:PopupSelectionList (name, list, title, width, height, parent, itemh
   return rv
 end
 
-function ksk:SingleStringInputDialog (name, title, text, width, height)
+function ksk.SingleStringInputDialog (name, title, text, width, height)
   local arg = {
     x = "CENTER", y = "MIDDLE",
     name = name,
@@ -289,6 +293,7 @@ function ksk:SingleStringInputDialog (name, title, text, width, height)
     canresize = false,
     escclose = true,
     xbutton = false,
+    blackbg = true,
     okbutton = { text = K.ACCEPTSTR },
     cancelbutton = { text = K.CANCELSTR },
   }

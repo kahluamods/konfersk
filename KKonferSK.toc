@@ -28,7 +28,6 @@ locales\locales.xml
 KKonferSK.lua
 KSK-Utility.lua
 KSK-Comms.lua
-KSK-Init.lua
 KSK-Items.lua
 KSK-Generic.lua
 KSK-Config.lua
@@ -36,3 +35,4 @@ KSK-Users.lua
 KSK-Lists.lua
 KSK-Loot.lua
 KSK-Sync.lua
+KSK-Init.lua
