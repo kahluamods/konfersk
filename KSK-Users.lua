@@ -187,7 +187,7 @@ local function create_user_button()
     local ret = KUI:CreateDialogFrame (arg)
 
     arg = {
-      x = 5, y = 0, len = 16,
+      x = 5, y = 0, len = 48,
       label = { text = L["User Name"], pos = "LEFT" },
       tooltip = { title = "$$", text = L["TIP072"] },
     }
@@ -293,7 +293,7 @@ local function guild_import_button (shown)
     name = "KSKGuildImportDlg",
     title = L["Import Guild Users"],
     border = true,
-    width = 240,
+    width = 280,
     height = (K.guild.numranks * 28) + 92,
     canmove = true,
     canresize = false,
@@ -337,7 +337,7 @@ local function guild_import_button (shown)
     end
   end
 
-  local function do_rank (r, minlev)
+  local function do_rank (this, r, minlev)
     local rv = 0
     local ngm = K.guild.numroster
     for i = 1, ngm do
@@ -346,8 +346,17 @@ local function guild_import_button (shown)
         local uid = ksk.FindUser (nm)
         if (not uid) then
           local kcl = K.guild.roster.id[i].class
-          uid = ksk.CreateNewUser (nm, kcl, nil, true)
+
+          uid = ksk.CreateNewUser (nm, kcl, nil, true, false, nil, true)
           if (uid) then
+            local ent = { nm, kcl, uid }
+            tinsert (this.bulkadd, ent)
+            this.numbulk = this.numbulk + 1
+            if (this.numbulk == 20) then
+              ksk.AddEvent (cfgid, "BADDU", this.bulkadd)
+              this.numbulk = 0
+              this.bulkadd = {}
+            end
             rv = rv + 1
           else
             err ("error adding user %q!", white (nm))
@@ -362,21 +371,35 @@ local function guild_import_button (shown)
     local cas,ccs
     local tadd = 0
     local minlev = this.minlevel:GetValue ()
+
+    this.bulkadd = {}
+    this.numbulk = 0
+
     for i = 1, K.guild.numranks do
       ccs = "rankcb" .. tostring(i)
       if (this[ccs]:GetChecked ()) then
-        tadd = tadd + do_rank (i, minlev)
+        tadd = tadd + do_rank (this, i, minlev)
       end
     end
+
     if (tadd > 0) then
       ksk.RefreshUsers ()
       ksk.RefreshRaid ()
-      ksk.SendAM ("RFUSR", "ALERT", true)
     end
+
     this:Hide ()
     if (this.isshown) then
       ksk.mainwin:Show ()
     end
+
+    if (this.numbulk > 0) then
+      ksk.AddEvent (cfgid, "BADDU", this.bulkadd)
+    end
+    this.bulkadd = nil
+    this.numbulk = 0
+
+    ksk.RefreshUsers ()
+
     info (L["added %d user(s)."], tadd)
   end
 
@@ -476,15 +499,31 @@ local function add_missing_button ()
   end
 
   local added = 0
+  local bulkadd = {}
+  local numbulk = 0
 
   while (ksk.nmissing > 0 and added < 40) do
     local _, v = next(ksk.missing)
-    ksk.CreateNewUser (v.name, v.class, nil, true, true)
-    added = added + 1
+    local uid = ksk.CreateNewUser (v.name, v.class, nil, true, true, nil, true)
+    if (uid) then
+      local ent = { nm, kcl, uid }
+      tinsert (bulkadd, ent)
+      numbulk = numbulk + 1
+      if (numbulk == 20) then
+        ksk.AddEvent (cfgid, "BADDU", bulkadd)
+        numbulk = 0
+        bulkadd = {}
+      end
+      added = added + 1
+    end
   end
+
+  if (numbulk > 0) then
+    ksk.AddEvent (cfgid, "BADDU", bulkadd)
+  end
+
   ksk.RefreshUsers ()
   ksk.RefreshRaid ()
-  ksk.SendAM ("RFUSR", "ALERT", true)
 end
 
 function ksk.InitialiseUsersUI ()
@@ -824,6 +863,8 @@ function ksk.RefreshUsers()
   local olduser = seluser or nil
   local oldidx = nil
 
+  ksk.users = ksk.frdb.configs[ksk.currentid].users
+
   ksk.sortedusers = {}
   seluser = nil
 
@@ -1160,10 +1201,6 @@ function ksk.GetNextUID (cfgid)
 end
 
 function ksk.CreateNewUser (name, cls, cfgid, norefresh, bypass, myid, nocmd)
-  assert (name, "CreateNewUser: no name!")
-  assert (cls, "CreateNewUser: no class!")
-  assert (K.IndexClass[cls], "CreateUser: invalid class " .. strfmt("%q", tostring(cls)))
-
   local cfgid = cfgid or ksk.currentid
   local name = K.CanonicalName (name, nil)
 
@@ -1221,7 +1258,7 @@ function ksk.CreateNewUser (name, cls, cfgid, norefresh, bypass, myid, nocmd)
   end
 
   if (not nocmd) then
-    local es = strfmt ("%s:%s:%s:%s", uid, name, cls, norefresh and "Y" or "N")
+    local es = strfmt ("%s:%s:%s", uid, name, cls)
     ksk.AddEvent (cfgid, "MKUSR", es, true)
   end
 

@@ -813,6 +813,9 @@ local function import_list_button ()
         -- Import a guild rank (possibly randomly)
         local rusers = {}
         local ngm = K.guild.numroster
+        local bulkadd = {}
+        local numbulk = 0
+
         for i = 1, ngm do
           local nm = K.guild.roster.id[i].name
           local ri = K.guild.roster.id[i].rank
@@ -820,11 +823,31 @@ local function import_list_button ()
           if (ri == imprank) then
             local uid = ksk.FindUser (nm)
             if (not uid) then
-              uid = ksk.CreateNewUser (nm, cl, nil, false, true)
+              uid = ksk.CreateNewUser (nm, cl, nil, true, true, nil, true)
+              if (uid) then
+                local ent = { nm, cl, uid }
+                tinsert (bulkadd, ent)
+                numbulk = numbulk + 1
+                if (numbulk == 20) then
+                  ksk.AddEvent (ksk.currentid, "BADDU", bulkadd)
+                  numbulk = 0
+                  bulkadd = {}
+                end
+              end
             end
-            tinsert (rusers, uid)
+            if (uid) then
+              tinsert (rusers, uid)
+            end
           end
         end
+
+        if (numbulk > 0) then
+          ksk.AddEvent (ksk.currentid, "BADDU", bulkadd)
+          bulkadd = {}
+          numbulk = 0
+        end
+
+        ksk.RefreshUsers ()
 
         for k,v in pairs (rusers) do
           local pos = nil
@@ -1759,6 +1782,8 @@ function ksk.RefreshAllLists ()
 
   ksk.sortedlists = {}
   current_listid = nil
+
+  ksk.lists = ksk.frdb.config[ksk.currentid].lists
 
   for k,v in pairs (ksk.lists) do
     --
