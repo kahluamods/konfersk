@@ -1037,7 +1037,8 @@ end
 --          when adding a lot of guild members or missing raid users.
 --
 ehandlers.BADDU = function (adm, sender, proto, cmd, cfg, ...)
-  local bulkadd = ...
+  local sertbl = ...
+  local bulkadd = K.Deserialise (sertbl)
 
   for k, v in pairs (bulkadd) do
     ksk.CreateNewUser (v[1], v[2], cfg, false, true, v[3], true)

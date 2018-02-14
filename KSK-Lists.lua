@@ -829,7 +829,7 @@ local function import_list_button ()
                 tinsert (bulkadd, ent)
                 numbulk = numbulk + 1
                 if (numbulk == 20) then
-                  ksk.AddEvent (ksk.currentid, "BADDU", bulkadd)
+                  ksk.AddEvent (ksk.currentid, "BADDU", K.Serialise (bulkadd))
                   numbulk = 0
                   bulkadd = {}
                 end
@@ -842,7 +842,7 @@ local function import_list_button ()
         end
 
         if (numbulk > 0) then
-          ksk.AddEvent (ksk.currentid, "BADDU", bulkadd)
+          ksk.AddEvent (ksk.currentid, "BADDU", K.Serialise (bulkadd))
           bulkadd = {}
           numbulk = 0
         end
@@ -1783,7 +1783,7 @@ function ksk.RefreshAllLists ()
   ksk.sortedlists = {}
   current_listid = nil
 
-  ksk.lists = ksk.frdb.config[ksk.currentid].lists
+  ksk.lists = ksk.frdb.configs[ksk.currentid].lists
 
   for k,v in pairs (ksk.lists) do
     --
