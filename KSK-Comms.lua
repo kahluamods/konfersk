@@ -1019,33 +1019,34 @@ ihandlers.BIDRM = function (sender, proto, cmd, cfg, ...)
 end
 
 --
--- Command: MKUSR uid name class
+-- Command: MKUSR uid name class refresh
 -- Purpose: Sent to the raid / guild when a new user is created. Users who are
 --          syncers ignore this as they get their user list via sync messages.
---          NAME is the name of the user being added, CLASS is their class.
+--          NAME is the name of the user being added, CLASS is their class, and
+--          REFRESH is set to true if the user list should be refreshed, false
+--          if this is part of a loop and we can be expecting a RFUSR command
+--          in the near future.
 --
 ehandlers.MKUSR = function (adm, sender, proto, cmd, cfg, ...)
-  local uid, name, class = ...
+  local uid, name, class, refresh = ...
 
-  ksk.CreateNewUser (name, class, cfg, true, true, uid, true)
+  ksk.CreateNewUser (name, class, cfg, getbool (refresh), true, uid, true)
 end
 
 --
--- Command: BADDU table
--- Purpose: Bulk add a bunch of users. The TABLE is a list of entries in the
---          form { name, class, uid } for the user to be added. This is used
---          when adding a lot of guild members or missing raid users.
+-- Command: RFUSR raid
+-- Purpose: Sent to the raid / guild when the user list needs to be refreshed.
+--          This is usually sent after a bulk user add operation has taken
+--          place. RAID is set to true if we should refresh the raid as well.
 --
-ehandlers.BADDU = function (adm, sender, proto, cmd, cfg, ...)
-  local bulkadd = ...
-
-  for k, v in pairs (bulkadd) do
-    ksk.CreateNewUser (v[1], v[2], cfg, false, true, v[3], true)
-  end
+ehandlers.RFUSR = function (adm, sender, proto, cmd, cfg, ...)
+  local raid = getbool (...)
 
   if (cfg == ksk.currentid) then
     ksk.RefreshUsers ()
-    ksk.RefreshRaid ()
+    if (raid and ksk.raid) then
+      ksk.RefreshRaid ()
+    end
   end
 end
 
