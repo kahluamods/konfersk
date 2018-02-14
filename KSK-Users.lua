@@ -353,7 +353,7 @@ local function guild_import_button (shown)
             tinsert (this.bulkadd, ent)
             this.numbulk = this.numbulk + 1
             if (this.numbulk == 20) then
-              ksk.AddEvent (cfgid, "BADDU", K.Serialise (this.bulkadd))
+              ksk.AddEvent (cfgid, "BADDU", this.bulkadd)
               this.numbulk = 0
               this.bulkadd = {}
             end
@@ -393,7 +393,7 @@ local function guild_import_button (shown)
     end
 
     if (this.numbulk > 0) then
-      ksk.AddEvent (cfgid, "BADDU", K.Serialise (this.bulkadd))
+      ksk.AddEvent (cfgid, "BADDU", this.bulkadd)
     end
     this.bulkadd = nil
     this.numbulk = 0
@@ -510,7 +510,7 @@ local function add_missing_button ()
       tinsert (bulkadd, ent)
       numbulk = numbulk + 1
       if (numbulk == 20) then
-        ksk.AddEvent (cfgid, "BADDU", K.Serialise (bulkadd))
+        ksk.AddEvent (cfgid, "BADDU", bulkadd)
         numbulk = 0
         bulkadd = {}
       end
@@ -519,7 +519,7 @@ local function add_missing_button ()
   end
 
   if (numbulk > 0) then
-    ksk.AddEvent (cfgid, "BADDU", K.Serialise (bulkadd))
+    ksk.AddEvent (cfgid, "BADDU", bulkadd)
   end
 
   ksk.RefreshUsers ()
