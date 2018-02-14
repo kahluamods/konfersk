@@ -2153,6 +2153,8 @@ function ksk.RefreshConfigAdminUI (reset)
   -- of co-admins it should call this function (RefreshConfigAdminUI).
   --
   qf.cfglist:SetSelected (oldidx, true, true)
+
+  ksk.RefreshSyncUI (true)
 end
 
 --

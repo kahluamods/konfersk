@@ -826,6 +826,8 @@ local function import_list_button ()
           end
         end
 
+        ksk.RefreshUsers ()
+
         for k,v in pairs (rusers) do
           local pos = nil
           if (not ksk.UserInList (v)) then

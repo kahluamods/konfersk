@@ -1040,13 +1040,9 @@ end
 --          place. RAID is set to true if we should refresh the raid as well.
 --
 ehandlers.RFUSR = function (adm, sender, proto, cmd, cfg, ...)
-  local raid = getbool (...)
-
   if (cfg == ksk.currentid) then
     ksk.RefreshUsers ()
-    if (raid and ksk.raid) then
-      ksk.RefreshRaid ()
-    end
+    ksk.RefreshRaid ()
   end
 end
 

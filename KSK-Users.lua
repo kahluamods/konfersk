@@ -187,7 +187,7 @@ local function create_user_button()
     local ret = KUI:CreateDialogFrame (arg)
 
     arg = {
-      x = 5, y = 0, len = 16,
+      x = 5, y = 0, len = 48,
       label = { text = L["User Name"], pos = "LEFT" },
       tooltip = { title = "$$", text = L["TIP072"] },
     }
@@ -293,7 +293,7 @@ local function guild_import_button (shown)
     name = "KSKGuildImportDlg",
     title = L["Import Guild Users"],
     border = true,
-    width = 240,
+    width = 250,
     height = (K.guild.numranks * 28) + 92,
     canmove = true,
     canresize = false,
@@ -362,21 +362,26 @@ local function guild_import_button (shown)
     local cas,ccs
     local tadd = 0
     local minlev = this.minlevel:GetValue ()
+
     for i = 1, K.guild.numranks do
       ccs = "rankcb" .. tostring(i)
       if (this[ccs]:GetChecked ()) then
         tadd = tadd + do_rank (i, minlev)
       end
     end
+
     if (tadd > 0) then
       ksk.RefreshUsers ()
       ksk.RefreshRaid ()
       ksk.SendAM ("RFUSR", "ALERT", true)
+      ksk.RefreshUsers ()
     end
+
     this:Hide ()
     if (this.isshown) then
       ksk.mainwin:Show ()
     end
+
     info (L["added %d user(s)."], tadd)
   end
 
@@ -1160,10 +1165,6 @@ function ksk.GetNextUID (cfgid)
 end
 
 function ksk.CreateNewUser (name, cls, cfgid, norefresh, bypass, myid, nocmd)
-  assert (name, "CreateNewUser: no name!")
-  assert (cls, "CreateNewUser: no class!")
-  assert (K.IndexClass[cls], "CreateUser: invalid class " .. strfmt("%q", tostring(cls)))
-
   local cfgid = cfgid or ksk.currentid
   local name = K.CanonicalName (name, nil)
 
