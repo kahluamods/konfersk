@@ -1956,6 +1956,7 @@ function ksk.DeleteAdmin (uid, cfg, nocmd)
   if (admincfg and admincfg == ksk.currentid) then
     refresh_coadmins ()
   end
+  ksk.RefreshSyncUI (true)
 end
 
 --

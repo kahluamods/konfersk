@@ -1039,7 +1039,7 @@ end
 --          This is usually sent after a bulk user add operation has taken
 --          place. RAID is set to true if we should refresh the raid as well.
 --
-ehandlers.RFUSR = function (adm, sender, proto, cmd, cfg, ...)
+ihandlers.RFUSR = function (sender, proto, cmd, cfg, ...)
   if (cfg == ksk.currentid) then
     ksk.RefreshUsers ()
     ksk.RefreshRaid ()

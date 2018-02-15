@@ -133,6 +133,10 @@ local function users_selectitem (objp, idx, slot, btn, onoff)
     seluser = ksk.sortedusers[idx].id
     setup_uinfo ()
 
+    if (ksk.cfg.owner == seluser) then
+      qf.userbuttons.deletebutton:SetEnabled (false)
+    end
+
     qf.usertopbar.SetCurrentUser (seluser)
     qf.useropts.userrole:SetValue (uinfo.role)
     qf.useropts.enchanter:SetChecked (uinfo.enchanter)
