@@ -1,12 +1,12 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
      WWW: http://kahluamod.com/ksk
-     SVN: http://kahluamod.com/svn/konfersk
+     Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2010 James Kean Johnston. All rights reserved.
+   Copyright 2008-2018 James Kean Johnston. All rights reserved.
    Copyright 2009-2010 Stefan Junghanns. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");

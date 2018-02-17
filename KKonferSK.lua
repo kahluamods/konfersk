@@ -1,7 +1,7 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
      WWW: http://kahluamod.com/ksk
-     SVN: http://kahluamod.com/svn/konfersk
+     Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
@@ -90,8 +90,6 @@ ksk = K:NewAddon(nil, MAJOR, MINOR, L["Suicide Kings loot distribution system."]
 if (not ksk) then
   error ("KahLua KonferSK: addon creation failed.")
 end
-
-_G["ksk"] = ksk
 
 ksk.KUI = KUI
 ksk.L   = L
@@ -1802,46 +1800,6 @@ local function update_bcast_button ()
   elseif (ksk.cfg.cfgtype == ksk.CFGTYPE_PUG) then
     ksk.qf.bcastbutton:SetEnabled (ksk.AmIML () or KRP.is_aorl)
   end
-end
-
--- JKJ FIXME - this should be completely removed and all the work it does
--- rolled into ksk.FullRefresh() if it isn't already.
-function ksk.UpdateAllConfigSettings()
-
-  ksk.qf.bidders.forcebid:SetShown (en)
-  ksk.qf.bidders.forceret:SetShown (en)
-  ksk.qf.bidders.undo:SetShown (en)
-
-  ksk.qf.listbuttons.insertbutton:SetShown (en)
-  ksk.qf.listbuttons.deletebutton:SetShown (en)
-  ksk.qf.listbuttons.suicidebutton:SetShown (en)
-  ksk.qf.listbuttons.kingbutton:SetShown (en)
-  ksk.qf.listbuttons.upbutton:SetShown (en)
-  ksk.qf.listbuttons.downbutton:SetShown (en)
-  ksk.qf.listbuttons.reservebutton:SetShown (en)
-
-  ksk.qf.listcfgbuttons.createbutton:SetEnabled (en)
-  -- JKJ FIXME - ksk.list no longer exists and these UI elements should
-  -- be updated during a refresh of the lists UI.
-  if (not ksk.list) then
-    en = false
-  end
-  ksk.qf.listcfgbuttons.deletebutton:SetEnabled (en)
-  ksk.qf.listcfgbuttons.renamebutton:SetEnabled (en)
-  ksk.qf.listcfgbuttons.copybutton:SetEnabled (en)
-  ksk.qf.listcfgbuttons.importbutton:SetEnabled (en)
-  ksk.qf.listcfgbuttons.exportbutton:SetEnabled (en)
-  ksk.qf.listcfgbuttons.addmissingbutton:SetEnabled (en)
-  ksk.qf.listctl.announcebutton:SetEnabled (en)
-  ksk.qf.listctl.announceallbutton:SetEnabled (en)
-
-  if (ksk.raid and ksk.nmissing > 0 and ksk.csd.is_admin) then
-    ksk.qf.addmissing:SetEnabled (true)
-  else
-    ksk.qf.addmissing:SetEnabled (false)
-  end
-  ksk.qf.guildimp:SetEnabled (K.player.is_guilded and ksk.csd.is_admin ~= nil)
-  ksk.RefreshSyncers ()
 end
 
 function ksk.FullRefreshUI (reset)
