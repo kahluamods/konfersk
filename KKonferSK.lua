@@ -35,7 +35,7 @@ if (not K) then
   error ("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-if (tonumber(KM) < 733) then
+if (tonumber(KM) < 734) then
   error ("KahLua KonferSK: outdated KahLua Kore. Please update all KahLua addons.")
 end
 
