@@ -91,6 +91,8 @@ if (not ksk) then
   error ("KahLua KonferSK: addon creation failed.")
 end
 
+_G["KSK"] = ksk
+
 ksk.KUI = KUI
 ksk.L   = L
 ksk.KRP = KRP
@@ -200,8 +202,8 @@ ksk.CFGTYPE_PUG   = 2
 
 -- Whether or not we are actually in a raid. This is set via a callback from
 -- KKoreParty (IN_RAID_CHANGED). If we are in a raid this will be non-nil.
--- If we are not in a raid it will always be nil. Thus any code that needs to
--- check to see if we are in a raid can simply do if (ksk.raid).
+-- If we are not in a raid it will always be nil, but only for the master
+-- looter. For normal users we must check KRP.in_raid.
 ksk.raid = nil
 
 -- Handle to the return value from database initialisation. This is set early
@@ -576,7 +578,7 @@ ksk.class = function (str, class)
     sn = str
   end
 
-  if (ksk.raid and KRP.players) then
+  if (KRP.in_raid and KRP.players) then
     local pinfo = KRP.players[sn]
     if (pinfo) then
       return K.ClassColorsEsc[class] .. sn .. "|r"
@@ -597,7 +599,7 @@ ksk.shortclass = function (str, class)
     sn = str
   end
 
-  if (ksk.raid and KRP.players) then
+  if (KRP.in_raid and KRP.players) then
     local pinfo = KRP.players[sn]
     sn = Ambiguate (sn, "guild")
     if (pinfo) then
@@ -607,6 +609,7 @@ ksk.shortclass = function (str, class)
     end
   end
 
+  sn = Ambiguate (sn, "guild")
   return K.ClassColorsEsc[class] .. sn .. "|r"
 end
 
@@ -982,7 +985,7 @@ local function ksk_versioncheck ()
   ksk.mainwin:Hide ()
   vcdlg:Show ()
 
-  if (ksk.raid) then
+  if (KRP.in_raid) then
     ksk.SendRaidAM ({proto = 6, cmd = "VCHEK"}, nil)
   end
   if (K.player.is_guilded) then
@@ -1795,10 +1798,14 @@ function ksk.CanChangeConfigType ()
 end
 
 local function update_bcast_button ()
-  if (ksk.cfg.cfgtype == ksk.CFGTYPE_GUILD) then
-    ksk.qf.bcastbutton:SetEnabled (ksk.csd.is_admin and true or false)
-  elseif (ksk.cfg.cfgtype == ksk.CFGTYPE_PUG) then
-    ksk.qf.bcastbutton:SetEnabled (ksk.AmIML () or KRP.is_aorl)
+  if (ksk.csd.is_admin) then
+    if (ksk.cfg.cfgtype == ksk.CFGTYPE_GUILD) then
+      ksk.qf.bcastbutton:SetEnabled (true)
+    elseif (ksk.cfg.cfgtype == ksk.CFGTYPE_PUG) then
+      ksk.qf.bcastbutton:SetEnabled (ksk.AmIML () or KRP.is_aorl)
+    end
+  else
+    ksk.qf.bcastbutton:SetEnabled (false)
   end
 end
 
@@ -1940,19 +1947,6 @@ function ksk.AddItemToBossLoot (ilink, quant, lootslot)
     ti.relaxed = filt
   end
   tinsert (ksk.bossloot, ti)
-end
-
-local function loot_closed (evt, ...)
-  ksk.CloseLoot ()
-  ksk.chestname = nil
-  if (ksk.autoshown) then
-    ksk.autoshown = nil
-    ksk.mainwin:Hide ()
-  end
-  if (sentoloot) then
-    ksk.SendRaidAM ("CLOOT", "ALERT")
-  end
-  sentoloot = nil
 end
 
 local function extract_cmd (msg)
@@ -2151,17 +2145,7 @@ local function krp_update_group_start (_, _, pvt, ...)
   ksk.nmissing = 0
 end
 
---
--- Called by KRP when it is done updating all of the group info. This is a
--- callback fired at the same time as GROUP_ROSTER_CHANGED so there is no
--- need to handle both. One or the other will do.
---
-local function krp_update_group_end (_, _, pvt, ...)
-  if (ksk.suspended or not KRP.in_raid or not ksk.AmIML ()) then
-    return
-  end
-
-  ksk.raid = ksk.raid or {}
+local function update_denchers ()
   ksk.raid.denchers = {}
 
   for k, v in pairs (KRP.players) do
@@ -2169,6 +2153,20 @@ local function krp_update_group_end (_, _, pvt, ...)
       tinsert (ksk.raid.denchers, k)
     end
   end
+end
+
+--
+-- Called by KRP when it is done updating all of the group info. This is a
+-- callback fired at the same time as GROUP_ROSTER_CHANGED so there is no
+-- need to handle both. One or the other will do.
+--
+local function krp_update_group_end (_, _, pvt, ...)
+  if (ksk.suspended or not KRP.in_raid) then
+    return
+  end
+
+  ksk.raid = ksk.raid or {}
+  update_denchers ()
 
   ksk.RefreshAllMemberLists ()
   update_bcast_button ()
@@ -2246,6 +2244,7 @@ local function in_raid_changed_evt (evt, in_raid)
       ksk.raid.users = {}
     end
     if (not ksk.frdb.tempcfg) then
+      update_denchers ()
       if (ksk.csd.is_admin) then
         ksk.SendRaidAM ("REQRS", "BULK")
       end
@@ -2270,7 +2269,11 @@ local function in_raid_changed_evt (evt, in_raid)
 end
 
 local function kld_start_loot_info (_, _, pvt)
-  ksk:ResetBossLoot ()
+  if (ksk.suspended or not ksk.AmIML ()) then
+    return
+  end
+
+  ksk.ResetBossLoot ()
 end
 
 --
@@ -2439,8 +2442,12 @@ local function kld_end_loot_info ()
 end
 
 local function looting_ended_evt (evt)
-  ksk:EndOpenRoll ()
-  ksk:RefreshLootUI (true)
+  if (ksk.suspended or not ksk.AmIML ()) then
+    return
+  end
+
+  ksk.CloseLoot ()
+
   if (ksk.autoshown) then
     ksk.autoshown = nil
     ksk.mainwin:Hide ()
@@ -2460,7 +2467,7 @@ local function ksk_initialised_evt (evt, ...)
   ksk.initialised = true
 
   -- JKJ FIXME: The only event that should be globally trapped is
-  -- KRP:LOOT_METHOD_UPDATED. Only the master looter cares about and of
+  -- KRP:LOOT_METHOD_UPDATED. Only the master looter cares about any of
   -- these other events. All other users, including other admins, get their
   -- data from the mod, not directly from the game.
 

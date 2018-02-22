@@ -137,14 +137,14 @@ local function send_addon_msg (cfg, cmd, prio, dist, target, ...)
 end
 
 function ksk.SendRaidAM (cmd, prio, ...)
-  if (not ksk.raid) then
+  if (not KRP.in_raid) then
     return
   end
   send_addon_msg (ksk.currentid, cmd, prio, "RAID", nil, ...)
 end
 
 function ksk.CSendRaidAM (cfg, cmd, prio, ...)
-  if (not ksk.raid) then
+  if (not KRP.in_raid) then
     return
   end
   send_addon_msg (cfg, cmd, prio, "RAID", nil, ...)
@@ -161,7 +161,7 @@ end
 function ksk.CSendAM (cfg, cmd, prio, ...)
   local tp = "GUILD"
   if (ksk.configs[cfg or ksk.currentid].cfgtype == ksk.CFGTYPE_PUG) then
-    if (not ksk.raid) then
+    if (not KRP.in_raid) then
       return
     end
     tp = "RAID"
@@ -603,7 +603,7 @@ end
 ihandlers.LLSEL = function (sender, proto, cmd, cfg, ...)
   local listid, clearbids = ...
 
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+  if (cfg ~= ksk.currentid) then
     return
   end
 
@@ -723,11 +723,11 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
     end
   elseif (cfgtype == ksk.CFGTYPE_PUG) then
     -- PUG config
-    if (not ksk.raid) then
+    if (not KRP.in_raid) then
       debug (2, "BCAST returning: cfgtype=2 not in raid?")
       return -- Shouldnt ever happen - how do we get it if not in raid?
     end
-    if (not ksk.raid or not KRP.players or not KRP.players[sender]) then
+    if (not KRP.in_raid or not KRP.players or not KRP.players[sender]) then
       debug (2, "BCAST returning: cfgtype=2 not in players")
       return
     end

@@ -1256,7 +1256,7 @@ local function mlist_selectitem (objp, idx, slot, btn, onoff)
     realmemberid = nil
   end
 
-  qf.bidders.forcebid:SetEnabled (ksk:AmIML () and onoff and biditem ~= nil)
+  qf.bidders.forcebid:SetEnabled (ksk.AmIML () and onoff and biditem ~= nil)
 end
 
 local function lloot_on_click (this)
@@ -2196,7 +2196,7 @@ function ksk.InitialiseLootUI ()
   local kmt = ksk.mainwin.tabs[ksk.LOOT_TAB]
 
   kmt.onclick = function (main, sub)
-    qf.membersearch:SetEnabled (ksk:AmIML ())
+    qf.membersearch:SetEnabled (ksk.AmIML ())
   end
 
   -- First set up the quick access frames we will be using.
@@ -4398,7 +4398,7 @@ end
 
 function ksk.CloseLoot ()
   ksk.EndOpenRoll ()
-  ksk.ResetBossLoot ()
+  ksk.RefreshLootUI (true)
 end
 
 function ksk.RefreshLootUI (reset)
