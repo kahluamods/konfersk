@@ -229,8 +229,8 @@ end
 --   c=cfgid:name:type:tethered:limit:ownerid:oranks:crc
 --   u={numusers,userlist}
 --     Each element in userlist is name:class:role:ench:frozen:exempt:alt:main
---   a=adminstring
---     Simple joining of all of the coadmin user IDs into one big string
+--   a={numadmins,adminlist}
+--     Each element in adminlist is uid:adminid
 --   l={numlists,listinfo}
 --     Each element in listinfo is
 --       listid:name:order:rank:strictc:strictr:xlist:tout:next:nusers:ulist
@@ -272,12 +272,13 @@ local function prepare_broadcast (cfg)
   ci.u = { #ulist, ulist }
 
   local alist = {}
-  local nadm = 0
   for k,v in pairs (ksk.cfg.admins) do
-    local us = strfmt ("%s:%s", k, v.id)
-    tinsert (alist, us)
+    if (v.id) then
+      local us = strfmt ("%s:%s", k, v.id)
+      tinsert (alist, us)
+    end
   end
-  ci.a = { ksk.cfg.nadmins, alist }
+  ci.a = { #alist, alist }
 
   local llist = {}
   for k,v in pairs (tc.lists) do
@@ -359,6 +360,7 @@ function ksk.RecoverConfig (sender, cfg, cfgid, rdata)
   ksk.SyncUpdateReplier ()
   ksk.RefreshSyncUI (true)
   info ("recovery from user %s complete.", shortaclass (cfg.users[rdata.d]))
+  recovery = nil
   ksk.mainwin:Show ()
 end
 
@@ -373,7 +375,7 @@ local function recover_config ()
     -- ignore it.
     --
     recovery = { cfg = arg.cfg, uid = arg.uid }
-    ksk.SendWhisperAM (ksk.users[arg.uid].name, "RCOVR", "ALERT", ksk.cfg.name)
+    ksk.CSendWhisperAM (arg.cfg, ksk.users[arg.uid].name, "RCOVR", "ALERT", ksk.cfg.name)
     info (L["waiting for recovery reply from %s. Do not use KSK until recovery is complete."], shortaclass (ksk.users[arg.uid]))
   end
 
@@ -638,7 +640,11 @@ function ksk.ProcessSyncAck (cfg, myuid, theiruid, cktheiruid, lastevt, cksum)
   qf.syncers:SetSelected (nil)
 end
 
-function ksk.SendFullSync (cfg, dest, lasteid, isrecover)
+function ksk.SendFullSync (cfg, dest, isrecover)
+  if (not cfg or not ksk.configs[cfg]) then
+    return
+  end
+
   local ci = prepare_broadcast (cfg)
 
   --
@@ -650,26 +656,16 @@ function ksk.SendFullSync (cfg, dest, lasteid, isrecover)
     if (cf.users[k].name ~= dest or isrecover) then
       local us = strfmt ("%s:%014.0f", k, v.lastevent or 0)
       tinsert (ci.s, us)
-    else if (not isrecover) then
+    elseif (not isrecover) then
       --
       -- We are now in an active syncing relationship with this user.
       -- Mark it as such. We can also clear out any events we may have
       -- stored for this user, because they have them all, as of this
-      -- very moment. We also set the highest eventid we have "received"
-      -- from them to their current lasteid. This holds true because
-      -- whatever their current lasteid is, we know they have not been
-      -- generating any events, else they would not have requested a
-      -- full sync. Right now I am having a hard time trying to figure
-      -- out a way that this can ever be anything other than 0, but
-      -- in case it can, it is passed around and set properly here.
-      -- Perhaps if there was a lot of "churn" with regards to the
-      -- user being an admin or not (they were once, then not, then
-      -- and admin again etc) this can be non-zero.
+      -- very moment.
       --
       v.active = true
       v.sync = {}
-      v.lastevent = lasteid or 0
-      end
+      v.lastevent = 0
     end
   end
   local idb = {}
@@ -686,9 +682,9 @@ function ksk.SendFullSync (cfg, dest, lasteid, isrecover)
   if (not isrecover) then
     ksk.configs[cfg].syncing = true
     qf.reqsyncallbutton:SetEnabled (true)
-    ksk.SendWhisperAM (dest, "FSYNC", "ALERT", ci)
+    ksk.CSendWhisperAM (cfg, dest, "FSYNC", "ALERT", ci)
   else
-    ksk.SendWhisperAM (dest, "RCACK", "ALERT", ci)
+    ksk.CSendWhisperAM (cfg, dest, "RCACK", "ALERT", ci)
   end
 end
 

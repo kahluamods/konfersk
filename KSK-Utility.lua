@@ -273,7 +273,7 @@ function ksk.AddEvent (cfgid, event, estr, ufn)
 
   --
   -- If I am an admin, but not the owner, and I am not syncing yet, do
-  -- not even bother adding the event. Its meaningless, as the coadmin
+  -- not even bother adding the event. Its meaningless, as the owner
   -- and other users cant sync with us until we have established a sync
   -- relationship.
   --
@@ -300,6 +300,7 @@ function ksk.AddEvent (cfgid, event, estr, ufn)
   local oldeid = cfg.lastevent
   local eid = ksk.GetEventID (cfgid)
   local scrc = strfmt ("0x%s", K.hexstr (crc))
+
   cfg.cksum = newsum
   if (ksk.qf.synctopbar) then
     ksk.qf.synctopbar:SetCurrentCRC ()

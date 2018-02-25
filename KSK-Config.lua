@@ -246,7 +246,7 @@ local function coadmin_list_selectitem (objp, idx, slot, btn, onoff)
     coadmin_selected = sortedadmins[idx]
 
     if (coadmin_selected ~= lcf.owner) then
-      en = ksk.csdata[admincfg].is_admin == 2 and true
+      en = ksk.csdata[admincfg].is_admin == 2 and true or false
     end
   else
     coadmin_selected = nil
@@ -284,7 +284,7 @@ local function add_coadmin (uid, cfgid)
   assert (newid, "fatal logic bug somewhere!")
 
   -- Must add the event BEFORE we add the admin
-  ksk.AddEvent (cfgid, "MKADM", uid, newid)
+  ksk.AddEvent (cfgid, "MKADM", strfmt("%s:%s", uid, newid))
   pcc.nadmins = pcc.nadmins + 1
   pcc.admins[uid] = { id = newid }
 end
@@ -1552,9 +1552,7 @@ function ksk.InitialiseConfigUI ()
   tr.cfgowner:Catch ("OnValueChanged", function (this, evt, newv)
     local lcf = ksk.frdb.configs[admincfg]
     lcf.owner = newv
-    ksk.UpdateUserSecurity ()
-    ksk.RefreshCSData ()
-    ksk.RefreshConfigAdminUI (false)
+    ksk.FullRefresh (true)
   end)
   arg = {}
 
@@ -1665,17 +1663,21 @@ function ksk.InitialiseConfigUI ()
   coadmins.add:Catch ("OnClick", function (this, evt, ...)
     local ulist = {}
     local cc = ksk.frdb.configs[admincfg]
-    local cul = ksk.frdb.configs[admincfg].users
+    local cul = cc.users
+
     if (cc.nadmins == 36) then
       err (L["maximum number of co-admins (36) reached"])
       return
     end
+
     if (ksk.popupwindow) then
       ksk.popupwindow:Hide ()
       ksk.popupwindow = nil
     end
+
     for k,v in pairs (cul) do
-      if (not cc.admins[k] and k ~= cc.owner) then
+      if (not ksk.UserIsCoadmin (k, admincfg) and
+          not ksk.UserIsAlt (k, nil, admincfg)) then
         tinsert (ulist, { value = k, text = aclass (cul[k]) })
       end
     end
@@ -1940,17 +1942,18 @@ function ksk.DeleteAdmin (uid, cfg, nocmd)
     return
   end
 
+  -- Must send the event BEFORE removing the admin.
+  if (not nocmd) then
+    ksk.AddEvent (cfg, "RMADM", uid, true)
+  end
+
   cp.nadmins = cp.nadmins - 1
   cp.admins[uid] = nil
   if (cp.nadmins == 1) then
-    cp.syncing = nil
+    cp.syncing = false
     cp.lastevent = 0
     cp.admins[cp.owner].lastevent = nil
     cp.admins[cp.owner].sync = nil
-  end
-
-  if (not nocmd) then
-    ksk.AddEvent (cfg, "RMADM", uid, true)
   end
 
   if (admincfg and admincfg == ksk.currentid) then

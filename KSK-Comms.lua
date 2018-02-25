@@ -699,12 +699,21 @@ end
 --          before, as they may not care to have some random PUG's config data.
 --
 ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
+  --
+  -- If I am the config owner ignore all broadcasts.
+  --
+  if (ksk.configs[cfg] and ksk.csdata[cfg]) then
+    if (ksk.csdata[cfg].is_admin == 2) then
+      debug (2, "config owner ignorning BCAST")
+      return
+    end
+  end
+
   local ncf, cfgid = prepare_config_from_bcast (cfd)
   local cfgtype = ncf.cfgtype
 
-  ksk.jjj = ncf
-
   if (not cfgid or proto < 9) then
+      debug (2, "invalid config or protocol in BCAST")
     return
   end
 
@@ -740,6 +749,7 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
     return
   end
 
+  local tcf = ksk.configs[cfgid]
 
   --
   -- If this is an existing config, and we are an admin, we most probably
@@ -747,18 +757,21 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
   -- relationship with anyone (even if we know we are a syncer) we accept
   -- this.
   --
-  if (ksk.configs[cfgid]) then
+  if (tcf) then
     local myuid = ksk.csdata[cfgid].myuid
     local amadmin = ksk.csdata[cfgid].is_admin
     local senduid = ksk.FindUser (sender, cfgid)
     local sendowner, cksenduid = ksk.IsAdmin (senduid, cfgid)
+
     if (not cksenduid) then
       cksenduid = senduid
     end
+
     if (not senduid) then
       -- Otherwise it will have searched for ourselves
       sendowner = nil
     end
+
     if (sendowner == 2) then
       --
       -- First things first, there are certain key parameters that are
@@ -766,67 +779,58 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
       -- admin area). The broadcast will have included all of that
       -- info so we set it here.
       --
-      ksk.configs[cfgid].name = ncf.name
-      ksk.configs[cfgid].tethered = ncf.tethered
-      ksk.configs[cfgid].owner = ncf.owner
-      ksk.configs[cfgid].oranks = ncf.oranks
-    end
+      tcf.name = ncf.name
+      tcf.tethered = ncf.tethered
+      tcf.owner = ncf.owner
+      tcf.oranks = ncf.oranks
+      tcf.admins = tcf.admins or {}
+      tcf.nadmins = 0
 
-    if (amadmin) then
-      if (ksk.configs[cfgid].syncing) then
-        local remadm = false
-        --
-        -- We don't actually want to exit immediately here. If the sender
-        -- is the config owner, we want to check their list of admins to
-        -- see if perhaps we have been removed as an admin. It is the only
-        -- way we will ever discover we have been removed if we happened to
-        -- be offline when the owner removed us as an admin.
-        --
-
-        if (sendowner == 2) then
-          --
-          -- Yes, it's the owner. Check to make sure we're still an admin.
-          -- Actually, we may not even be a user any more, so we will check
-          -- that first, and while we're at it, gather the user id.
-          --
-          local uid
-          for k,v in pairs (ncf.users) do
-            if (v.name == K.player.name) then
-              uid = k
-              break
-            end
-          end
-          if (not uid) then
-            remadm = true
-          else
-            if (not ncf.admins[uid]) then
-              --
-              -- This may be an alt, and our main is the admin. We have to
-              -- check that.
-              --
-              if (string.find (ncf.users[uid].flags, "A") ~= nil) then
-                local main = ncf.users[uid].main
-                if (not ncf.admins[main] and ncf.owner ~= main) then
-                  remadm = true
-                end
-              else
-                remadm = true
-              end
-            end
-          end
-        end
-        if (not remadm) then
-          --
-          -- We're safe. We are still an admin and we are syncing, so we
-          -- return and ignore this message. If we were told that we are no
-          -- longer an admin, if we drop out of this conditional and resume
-          -- the normal code path below, it will effectively remove us and
-          -- reset the config without us as an admin or user.
-          --
-          debug (2, "BCAST returning: syncing admin")
-          return
+      --
+      -- An owner broadcast is authoritative with respects to co-admins.
+      -- So in case we got bogus data previously or if we have had any
+      -- form of corruption, we either remove excess admins from our
+      -- list or add any that are missing (but only their ID).
+      --
+      for k,v in pairs (ncf.admins) do
+        if (not tcf.admins[k]) then
+          tcf.admins[k] = v
         end
       end
+
+      for k,v in pairs (tcf.admins) do
+        if (not ncf.admins[k]) then
+          tcf.admins[k] = nil
+        else
+          -- Fix a bug introduced by all clients < r738 where a MKADM was
+          -- incorrectly formed and resulted in a nil id.
+          if (not v.id) then
+            v.id = ncf.admins[k].id
+          end
+          tcf.nadmins = tcf.nadmins + 1
+        end
+      end
+
+      --
+      -- We may no longer be a coadmin.
+      --
+      ksk.UpdateUserSecurity (cfgid)
+      amadmin = ksk.csdata[cfgid].is_admin
+
+      --
+      -- However, if we are an admin now, but we are not yet syncing, then
+      -- it means we are a newly appointed admin and we should request a full
+      -- sync from the config owner. The user used to have to do this manually.
+      --
+      if (amadmin and not tcf.syncing) then
+        debug (2, "BCAST new admin return requesting full sync")
+        ksk.CSendWhisperAM (cfgid, sender, "GSYNC", "ALERT", 0, true, 0, 0)
+      end
+    end
+
+    if (amadmin and tcf.syncing) then
+      debug (2, "BCAST returning: syncing admin")
+      return
     end
   end
 
@@ -838,6 +842,7 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
     end
     local nc = ksk.configs[cid]
     nc.users = nil
+    nc.nadmins = 0
     nc.admins = nil
     nc.lists = nil
     nc.syncing = false
@@ -1496,12 +1501,12 @@ end
 ehandlers.MKADM = function (adm, sender, proto, cmd, cfg, ...)
   local uid, adminid = ...
 
-  local cfp = ksk.configs[cfg]
+  local cfp = ksk.frdb.configs[cfg]
 
   if (not cfp.admins[uid]) then
     cfp.nadmins = cfp.nadmins + 1
-    cfp.admins[uid] = { id = adminid }
   end
+  cfp.admins[uid] = { id = adminid }
 
   if (cfg == ksk.currentid) then
     ksk.RefreshConfigAdminUI (true)
@@ -1528,11 +1533,12 @@ ehandlers.RMADM = function (adm, sender, proto, cmd, cfg, ...)
     mymain = cfp.users[ksk.csdata[cfg].myuid].main
   end
   if (uid == ksk.csdata[cfg].myuid or uid == mymain) then
-    cfp.syncing = nil
+    cfp.syncing = false
     cfp.lastevent = 0
     cfp.nitems = 0
     cfp.items = {}
     cfp.cksum = 0
+    cfp.history = {}
     for k,v in pairs (cfp.admins) do
       v.sync = nil
       v.lastevent = nil
@@ -1602,7 +1608,7 @@ ihandlers.RSYNC = function (sender, proto, cmd, cfg, ...)
   -- or not they need any events from us. If they do they will send us a
   -- GSYNC message requesting all events from a certain number forward.
   --
-  ksk.SendWhisperAM (sender, "SYNAK", "ALERT", ksk.cfg.lastevent, ksk.cfg.cksum)
+  ksk.CSendWhisperAM (cfg, sender, "SYNAK", "ALERT", ksk.cfg.lastevent, ksk.cfg.cksum)
 end
 
 --
@@ -1685,8 +1691,12 @@ ihandlers.GSYNC = function (sender, proto, cmd, cfg, ...)
   end
 
   if (full) then
-    info (L["sending sync data to user %s."], aclass (ksk.configs[cfg].users[theiruid]))
-    ksk.SendFullSync (cfg, sender, lasteid)
+    -- Updated r738: only the config owner can send full sync info because
+    -- it contains co-admin information that only they are authoritative for.
+    if (ksk.csdata[cfg].is_admin == 2) then
+      info (L["sending sync data to user %s."], aclass (ksk.configs[cfg].users[theiruid]))
+      ksk.SendFullSync (cfg, sender, false)
+    end
     return
   end
 
@@ -1925,7 +1935,7 @@ ihandlers.RCOVR = function (sender, proto, cmd, cfg, cfgname)
     return
   end
 
-  ksk.SendFullSync (cfgid, sender, nil, true)
+  ksk.SendFullSync (cfgid, sender, true)
 end
 
 --

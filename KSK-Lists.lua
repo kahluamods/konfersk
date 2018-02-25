@@ -536,7 +536,23 @@ local function insert_member (btn)
   end
 
   tsort (ulist, function (a,b)
-    return strlower (ksk.users[a.value].name) < strlower (ksk.users[b.value].name)
+    -- Sort so that if we are in a raid, that current raid members appear first
+    -- and then all of the offline members. Makes it a lot easier to find a
+    -- user if you need to add them in the middle of a raid.
+    local anm = ksk.users[a.value].name
+    local bnm = ksk.users[b.value].name
+
+    if (KRP.in_raid) then
+      local air = KRP.players[anm] and true or false
+      local bir = KRP.players[bnm] and true or false
+      if (air and not bir) then
+        return true
+      end
+      if (bir and not air) then
+        return false
+      end
+    end
+    return strlower (anm) < strlower (bnm)
   end)
 
   if (ksk.cfg.tethered) then

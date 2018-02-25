@@ -35,7 +35,7 @@ if (not K) then
   error ("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-if (tonumber(KM) < 734) then
+if (tonumber(KM) < 735) then
   error ("KahLua KonferSK: outdated KahLua Kore. Please update all KahLua addons.")
 end
 
@@ -1820,6 +1820,8 @@ end
 function ksk.FullRefresh (reset)
   ksk.FullRefreshUI (reset)
   K:UpdatePlayerAndGuild ()
+  ksk.UpdateUserSecurity ()
+  ksk.RefreshCSData ()
   KRP.UpdateGroup (false, true, false)
 
   -- JKJ FIXME: this logic should move into the refresh functions above.

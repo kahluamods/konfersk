@@ -1055,6 +1055,8 @@ end
 function ksk.SetUserIsAlt (userid, onoff, main, cfg, nocmd)
   local cfg = cfg or ksk.currentid
   local onoff = onoff or false
+  local cfp = ksk.frdb.configs[cfg]
+  local cfu = cfp.users
 
   if (not main or main == "") then
     onoff = false
@@ -1066,7 +1068,8 @@ function ksk.SetUserIsAlt (userid, onoff, main, cfg, nocmd)
     ksk.lootmemberid = nil
   end
 
-  local usr = ksk.frdb.configs[cfg].users[userid]
+  local usr = cfu[userid]
+
   if (onoff) then
     if (usr.main) then
       --
@@ -1074,13 +1077,15 @@ function ksk.SetUserIsAlt (userid, onoff, main, cfg, nocmd)
       -- remove this userid from that old main's list of alts. If that
       -- will leave the old main with no alts, set their alts entry to nil.
       --
-      local oldm = ksk.frdb.configs[cfg].users[usr.main]
+      local oldm = cfu[usr.main]
+
       for k,v in pairs (oldm.alts) do
         if (v == userid) then
           tremove (oldm.alts, k)
           break
         end
       end
+
       if (not next (oldm.alts)) then
         oldm.alts = nil
       end
@@ -1090,7 +1095,7 @@ function ksk.SetUserIsAlt (userid, onoff, main, cfg, nocmd)
     -- Now add this user to the new main's list of alts if we are not already
     -- in the list (which we never should be).
     --
-    local musr = ksk.frdb.configs[cfg].users[main]
+    local musr = cfu[main]
     local found = false
     usr.main = main
     if (not musr.alts) then
@@ -1105,12 +1110,12 @@ function ksk.SetUserIsAlt (userid, onoff, main, cfg, nocmd)
     if (not found) then
       tinsert (musr.alts, userid)
       tsort (musr.alts, function (a,b)
-        return ksk.frdb.configs[cfg].users[a].name < ksk.frdb.configs[cfg].users[b].name
+        return cfu[a].name < cfu[b].name
       end)
     end
-  else
+  else -- not onoff
     if (usr.main) then
-      local musr = ksk.frdb.configs[cfg].users[usr.main]
+      local musr = cfu[usr.main]
       for k,v in ipairs(musr.alts) do
         if (v == userid) then
           tremove (musr.alts, k)
