@@ -151,7 +151,7 @@ local function rlist_newitem (objp, num)
     -- prior to the one we request can be safely deleted.
     --
     ksk.SendWhisperAM (ksk.users[rp.theiruid].name, "GSYNC", "ALERT",
-      rp.mylast, rp.fullsync, ksk.cfg.lastevent, ksk.cfg.cksum)
+      rp.mylast, false, ksk.cfg.lastevent, ksk.cfg.cksum)
     this:Disable ()
     rp.synced = true
   end)
@@ -193,7 +193,7 @@ local function rlist_newitem (objp, num)
       end
       self.cks:SetText (fn (strfmt (L["Checksum: 0x%s"], K.hexstr (rp.cksum))))
     end
-    if ((rp.mylast ~= rp.last) or rp.fullsync) then
+    if (rp.mylast ~= rp.last) then
       fn = red
       self.syncbutton:Enable ()
     else
@@ -617,9 +617,20 @@ end
 function ksk.ProcessSyncAck (cfg, myuid, theiruid, cktheiruid, lastevt, cksum)
   repliers = repliers or {}
 
-  local fullsync = false
   if (not ksk.configs[cfg].syncing) then
-    fullsync = true
+    --
+    -- If we are not syncing with anyone yet, then we only accept replies
+    -- from the config owner. So even if others respond, we ignore the
+    -- response for now. If it is the owner responding, we don't even bother
+    -- displaying the reply we just immediately request a full sync from the
+    -- owner. After we have processed the full sync from the owner we will
+    -- send out another guild / raid RSYNC to start the syncing relationship
+    -- with other owners.
+    if (theiruid ~= ksk.configs[cfg].owner) then
+      return
+    end
+    ksk.CSendWhisperAM (cfg, ksk.configs[cfg].users[theiruid].name, "GSYNC", "ALERT", 0, true, 0, 0)
+    return
   end
 
   local mylast = ksk.configs[cfg].admins[cktheiruid].lastevent
@@ -631,8 +642,7 @@ function ksk.ProcessSyncAck (cfg, myuid, theiruid, cktheiruid, lastevt, cksum)
 
   tinsert (repliers, { name = shortaclass (ksk.users[theiruid]),
     theiruid = theiruid, myuid = myuid, mylast = mylast,
-    last = lastevt, cksum = cksum, fullsync = fullsync,
-    active = active, cktheiruid = cktheiruid,
+    last = lastevt, cksum = cksum, active = active, cktheiruid = cktheiruid,
   })
 
   qf.syncers.itemcount = #repliers

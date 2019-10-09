@@ -2544,26 +2544,17 @@ function ksk.InitialiseLootUI ()
   end)
 
   arg = {
-    x = 176, y = ypos, label = { text = K.IndexClass[K.CLASS_DEATHKNIGHT].c },
-    font = "GameFontHighlightSmall", height = 16,
-  }
-  bm.deathknight = KUI:CreateCheckBox (arg, bm)
-  bm.deathknight:Catch ("OnValueChanged", function (this, evt, val, user)
-    class_filter_func (this, evt, val, K.CLASS_DEATHKNIGHT, user)
-  end)
-  ypos = ypos - 16
-
-  arg = {
-    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_HUNTER].c },
+    x = 176, y = ypos, label = { text = K.IndexClass[K.CLASS_HUNTER].c },
     font = "GameFontHighlightSmall", height = 16,
   }
   bm.hunter = KUI:CreateCheckBox (arg, bm)
   bm.hunter:Catch ("OnValueChanged", function (this, evt, val, user)
     class_filter_func (this, evt, val, K.CLASS_HUNTER, user)
   end)
+  ypos = ypos - 16
 
   arg = {
-    x = 88, y = ypos, label = { text = K.IndexClass[K.CLASS_SHAMAN].c },
+    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_SHAMAN].c },
     font = "GameFontHighlightSmall", height = 16,
   }
   bm.shaman = KUI:CreateCheckBox (arg, bm)
@@ -2572,26 +2563,26 @@ function ksk.InitialiseLootUI ()
   end)
 
   arg = {
-    x = 176, y = ypos, label = { text = K.IndexClass[K.CLASS_DRUID].c },
+    x = 88, y = ypos, label = { text = K.IndexClass[K.CLASS_DRUID].c },
     font = "GameFontHighlightSmall", height = 16,
   }
   bm.druid = KUI:CreateCheckBox (arg, bm)
   bm.druid:Catch ("OnValueChanged", function (this, evt, val, user)
     class_filter_func (this, evt, val, K.CLASS_DRUID, user)
   end)
-  ypos = ypos - 16
 
   arg = {
-    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_ROGUE].c },
+    x = 176, y = ypos, label = { text = K.IndexClass[K.CLASS_ROGUE].c },
     font = "GameFontHighlightSmall", height = 16,
   }
   bm.rogue = KUI:CreateCheckBox (arg, bm)
   bm.rogue:Catch ("OnValueChanged", function (this, evt, val, user)
     class_filter_func (this, evt, val, K.CLASS_ROGUE, user)
   end)
+  ypos = ypos - 16
 
   arg = {
-    x = 88, y = ypos, label = { text = K.IndexClass[K.CLASS_MAGE].c },
+    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_MAGE].c },
     font = "GameFontHighlightSmall", height = 16,
   }
   bm.mage = KUI:CreateCheckBox (arg, bm)
@@ -2600,40 +2591,21 @@ function ksk.InitialiseLootUI ()
   end)
 
   arg = {
-    x = 176, y = ypos, label = { text = K.IndexClass[K.CLASS_WARLOCK].c },
+    x = 88, y = ypos, label = { text = K.IndexClass[K.CLASS_WARLOCK].c },
     font = "GameFontHighlightSmall", height = 16,
   }
   bm.warlock = KUI:CreateCheckBox (arg, bm)
   bm.warlock:Catch ("OnValueChanged", function (this, evt, val, user)
     class_filter_func (this, evt, val, K.CLASS_WARLOCK, user)
   end)
-  ypos = ypos - 16
 
   arg = {
-    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_PRIEST].c },
+    x = 176, y = ypos, label = { text = K.IndexClass[K.CLASS_PRIEST].c },
     font = "GameFontHighlightSmall", height = 16,
   }
   bm.priest = KUI:CreateCheckBox (arg, bm)
   bm.priest:Catch ("OnValueChanged", function (this, evt, val, user)
     class_filter_func (this, evt, val, K.CLASS_PRIEST, user)
-  end)
-
-  arg = {
-    x = 88, y = ypos, label = { text = K.IndexClass[K.CLASS_MONK].c },
-    font = "GameFontHighlightSmall", height = 16,
-  }
-  bm.monk = KUI:CreateCheckBox (arg, bm)
-  bm.monk:Catch ("OnValueChanged", function (this, evt, val, user)
-    class_filter_func (this, evt, val, K.CLASS_MONK, user)
-  end)
-
-  arg = {
-    x = 176, y = ypos, label = { text = K.IndexClass[K.CLASS_DEMONHUNTER].c },
-    font = "GameFontHighlightSmall", height = 16,
-  }
-  bm.demonhunter = KUI:CreateCheckBox (arg, bm)
-  bm.demonhunter:Catch ("OnValueChanged", function (this, evt, val, user)
-    class_filter_func (this, evt, val, K.CLASS_DEMONHUNTER, user)
   end)
 
   ypos = ypos - 20
@@ -3084,17 +3056,7 @@ function ksk.InitialiseLootUI ()
   ypos = ypos - 16
 
   arg = {
-    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_DEATHKNIGHT].c },
-    font = "GameFontHighlightSmall", height = 16,
-    enabled = false,
-  }
-  rs.deathknight = KUI:CreateCheckBox (arg, rs)
-  rs.deathknight:Catch ("OnValueChanged", function (this, evt, val, user)
-    iclass_filter_func (this, evt, val, K.CLASS_DEATHKNIGHT, user)
-  end)
-
-  arg = {
-    x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_HUNTER].c },
+    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_HUNTER].c },
     font = "GameFontHighlightSmall", height = 16,
     enabled = false,
   }
@@ -3102,10 +3064,9 @@ function ksk.InitialiseLootUI ()
   rs.hunter:Catch ("OnValueChanged", function (this, evt, val, user)
     iclass_filter_func (this, evt, val, K.CLASS_HUNTER, user)
   end)
-  ypos = ypos - 16
 
   arg = {
-    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_SHAMAN].c },
+    x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_SHAMAN].c },
     font = "GameFontHighlightSmall", height = 16,
     enabled = false,
   }
@@ -3113,9 +3074,10 @@ function ksk.InitialiseLootUI ()
   rs.shaman:Catch ("OnValueChanged", function (this, evt, val, user)
     iclass_filter_func (this, evt, val, K.CLASS_SHAMAN, user)
   end)
+  ypos = ypos - 16
 
   arg = {
-    x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_DRUID].c },
+    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_DRUID].c },
     font = "GameFontHighlightSmall", height = 16,
     enabled = false,
   }
@@ -3123,10 +3085,9 @@ function ksk.InitialiseLootUI ()
   rs.druid:Catch ("OnValueChanged", function (this, evt, val, user)
     iclass_filter_func (this, evt, val, K.CLASS_DRUID, user)
   end)
-  ypos = ypos - 16
 
   arg = {
-    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_ROGUE].c },
+    x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_ROGUE].c },
     font = "GameFontHighlightSmall", height = 16,
     enabled = false,
   }
@@ -3134,9 +3095,10 @@ function ksk.InitialiseLootUI ()
   rs.rogue:Catch ("OnValueChanged", function (this, evt, val, user)
     iclass_filter_func (this, evt, val, K.CLASS_ROGUE, user)
   end)
+  ypos = ypos - 16
 
   arg = {
-    x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_MAGE].c },
+    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_MAGE].c },
     font = "GameFontHighlightSmall", height = 16,
     enabled = false,
   }
@@ -3144,10 +3106,9 @@ function ksk.InitialiseLootUI ()
   rs.mage:Catch ("OnValueChanged", function (this, evt, val, user)
     iclass_filter_func (this, evt, val, K.CLASS_MAGE, user)
   end)
-  ypos = ypos - 16
 
   arg = {
-    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_WARLOCK].c },
+    x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_WARLOCK].c },
     font = "GameFontHighlightSmall", height = 16,
     enabled = false,
   }
@@ -3155,36 +3116,16 @@ function ksk.InitialiseLootUI ()
   rs.warlock:Catch ("OnValueChanged", function (this, evt, val, user)
     iclass_filter_func (this, evt, val, K.CLASS_WARLOCK, user)
   end)
+  ypos = ypos - 16
 
   arg = {
-    x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_PRIEST].c },
+    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_PRIEST].c },
     font = "GameFontHighlightSmall", height = 16,
     enabled = false,
   }
   rs.priest = KUI:CreateCheckBox (arg, rs)
   rs.priest:Catch ("OnValueChanged", function (this, evt, val, user)
     iclass_filter_func (this, evt, val, K.CLASS_PRIEST, user)
-  end)
-  ypos = ypos -16
-
-  arg = {
-    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_MONK].c },
-    font = "GameFontHighlightSmall", height = 16,
-    enabled = false,
-  }
-  rs.monk = KUI:CreateCheckBox (arg, rs)
-  rs.monk:Catch ("OnValueChanged", function (this, evt, val, user)
-    iclass_filter_func (this, evt, val, K.CLASS_MONK, user)
-  end)
-
-  arg = {
-    x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_DEMONHUNTER].c },
-    font = "GameFontHighlightSmall", height = 16,
-    enabled = false,
-  }
-  rs.demonhunter = KUI:CreateCheckBox (arg, rs)
-  rs.demonhunter:Catch ("OnValueChanged", function (this, evt, val, user)
-    iclass_filter_func (this, evt, val, K.CLASS_DEMONHUNTER, user)
   end)
 
   ypos = ypos - 18

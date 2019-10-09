@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2018 James Kean Johnston. All rights reserved.
+   Copyright 2008-2019 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -35,12 +35,16 @@ if (not K) then
   error ("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-if (tonumber(KM) < 735) then
+if (tonumber(KM) < 2) then
   error ("KahLua KonferSK: outdated KahLua Kore. Please update all KahLua addons.")
 end
 
 if (not H) then
   error ("KahLua KonferSK: could not find KahLua Kore Hash library.", 2)
+end
+
+if (not DB) then
+  error ("KahLua KonferSK: could not find KahLua Kore Database library.", 2)
 end
 
 if (not KUI) then
@@ -97,7 +101,7 @@ ksk.KUI = KUI
 ksk.L   = L
 ksk.KRP = KRP
 ksk.KLD = KLD
-ksk.KHL = H
+ksk.H   = H
 ksk.KDB = DB
 
 ksk.CHAT_MSG_PREFIX = "KSK"
@@ -132,14 +136,14 @@ ksk.version = MINOR
 -- this backwards compatibility into each protocol message. So at the moment
 -- these protocol versions must match exactly in order for two KSK mods to
 -- talk to each other.
-ksk.protocol = 9
+ksk.protocol = 1
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
 -- KSK-Utility.lua (ksk.UpdateDatabaseVersion ()) will update olrder databases
 -- dating all the way back to version 1. Once a database version has been
 -- upgraded it cannot be reverted.
-ksk.dbversion = 17
+ksk.dbversion = 1
 
 -- Whether or not KSK has been fully initialised. This can take a while as
 -- certain bits of information are not immediately available on login.
@@ -363,7 +367,9 @@ me.cmdname = L["CMDNAME"]
 me.version = MINOR
 me.suspendcmd = L["CMD_SUSPEND"]
 me.resumecmd = L["CMD_RESUME"]
-me.IsSuspended = function () return ksk.suspended or false end
+me.IsSuspended = function ()
+  return ksk.suspended or false
+end
 me.SetSuspended = function (onoff)
   ksk.suspended = onoff or false
   if (ksk.frdb) then
@@ -558,15 +564,15 @@ ksk.white = function (str)
 end
 
 ksk.red = function (str)
-  return strfmt ("|cffff0000%s|r", str)
+  return "|cffff0000" .. str .. "|r"
 end
 
 ksk.green = function (str)
-  return strfmt ("|cff00ff00%s|r", str)
+  return "|cff00ff00" .. str .. "|r"
 end
 
 ksk.yellow = function (str)
-  return strfmt ("|cff00ffff%s|r", str)
+  return "|cff00ffff" .. str .. "|r"
 end
 
 ksk.class = function (str, class)
@@ -641,7 +647,10 @@ local aclass = ksk.aclass
 local shortaclass = ksk.shortaclass
 
 function ksk.TimeStamp ()
-  local _, mo, dy, yr = CalendarGetDate ()
+  local tDate = date("*t")
+  local mo = tDate["month"]
+  local dy = tDate["day"]
+  local yr = tDate["year"]
   local hh, mm = GetGameTime ()
   return strfmt ("%04d%02d%02d%02d%02d", yr, mo, dy, hh, mm), yr, mo, dy, hh, mm
 end
@@ -742,7 +751,10 @@ local ts_datebase = nil
 local ts_evtcount = 0
 
 local function get_server_base_time ()
-  local _, mo, d, y = CalendarGetDate()
+  local tDate = date("*t")
+  local mo = tDate["month"]
+  local d = tDate["day"]
+  local y = tDate["year"]
   local h, m = GetGameTime ()
   return strfmt ("%02d%02d%02d%02d%02d0000", y-2000, mo, d, h, m)
 end

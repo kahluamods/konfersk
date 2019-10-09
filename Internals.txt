@@ -58,7 +58,7 @@ This means that we want to refresh the raid player info after we have
 registered the callback. However, addons that register with Kore start out
 life in a disabled state and no callbacks are called (although messages are
 still sent) for disabled addons. Only when the addon in question (KSK) is
-completely initialised to we want to enable the addon in KRP. So in the KSK
+completely initialised do we want to enable the addon in KRP. So in the KSK
 final initialisation phase (handling the KSK_INITIALISED message) we first
 enable KRP and then we enable KLD. Both of those addons register a handler for
 the SUSPEND_ADDON and ACTIVATE_ADDON messages, and they both refresh all of
@@ -137,7 +137,7 @@ RAID_ROSTER_UPDATE() [KRP]
   GROUP_ROSTER_CHANGED. During processing of players, will use call the
   "new_player" callback for each player.
 
-READ_CHECK
+READY_CHECK
   Fired when a ready check is started. Sets up some internal variables in
   order to record the status of the ready check. These include
   KRP.ready_start, KRP.ready_timeout, KRP.ready_checking and KRP.ready. After
@@ -145,7 +145,7 @@ READ_CHECK
 
 READY_CHECK_CONFIRM(unit,what) [KRP]
   Fired as each person in the raid or group either accepts or rejects the
-  ready check. Updated KRP.ready. Fires no events.
+  ready check. Updates KRP.ready. Fires no events.
 
 READY_CHECK_FINISHED() [KRP]
   Fired when either everyone has responded or the timer has expired. Signals
@@ -204,7 +204,7 @@ K:PLAYER_INFO_UPDATED ()
   to enable or disable various buttons, such as the guild import button.
 
 KRP:GROUP_ROSTER_CHANGED ()
-  Fired whenever KRP does a full refresh of the raid. KSK trps this in order
+  Fired whenever KRP does a full refresh of the raid. KSK traps this in order
   to populate the list of disenchanters that are in the raid. That list is in
   turn used during loot distribution.
 
@@ -222,14 +222,14 @@ KSK Communication
 -----------------
 
 KSK uses a clever mechanism for keeping users of the mod up to date. There are
-two types of users: normal users and admins. The amount of information and it
+two types of users: normal users and admins. The amount of information and its
 content varies significantly between these two classes of users. Technically
 KSK implements a distributed events database. Whenever something is done that
-changes the internal state of the KSk databases (a new user is added, a new
-list is created, a uder is moved on a list etc) the person who initiated that
+changes the internal state of the KSK databases (a new user is added, a new
+list is created, a user is moved on a list etc) the person who initiated that
 action generates an event. By and large, only admin users can generate events.
-Each time an event is egnerated, is is broadcast to either the current raid
-group (in the case of a PUG group) or to the raid group and the guild (in teh
+Each time an event is generated, is is broadcast to either the current raid
+group (in the case of a PUG group) or to the raid group and the guild (in the
 case of a guild config). Each event is tagged with the configuration to which
 that event is tied. Since only one configugation can be active at a time, the
 person generating the event will only ever generate events for their active
@@ -246,20 +246,20 @@ this file is dedicated to processing events.
 All admins know who the other admins are for a given configuration. Whenever
 an admin generates an event, all other admins must receieve it. However, not
 all admins may be online, so we need a mechanism for storing events. What each
-admin does in store the vents it generates for other admins in a list
+admin does is store the events it generates for other admins in a list
 dedicated to each admin. When that admin is online and the two admins are in
 sync with each other, as the event is generated, the other admin receives it
 and processes it. Both admins keep a record of the last event received from
 each other. Now suppose one of those admins logs off. The online admin
 generates some events, but stores them for the offline admin. At some future
-point in the both admins are online and they request a sync status between
+point in time both admins are online and they request a sync status between
 them. If either of the admins has events that the other does not, then they
 are given an opportunity to sync, which means that they will receive all of
 the events that the other admin egnerated after the last time they were in
-sync. If there are only tow admins, once they have both processed all events
+sync. If there are only two admins, once they have both processed all events
 that the other party has, they should be in sync and their data should be
-identical. To confirm this, KSk keeps a checksum of the databases. If any two
-admis have the same checksum then they can know to a considerable degree of
+identical. To confirm this, KSK keeps a checksum of the databases. If any two
+admins have the same checksum then they can know to a considerable degree of
 mathematical certainty that they have each processed the same events and that
 their data is identical.
 
@@ -287,18 +287,18 @@ are. Or simply that they dont make KSK changes until the other admins are
 online.
 
 For normal users things arent nearly so complicated. At the start of the raid
-the master looter should boradcast their config to the raid. That will ensure
+the master looter should broadcast their config to the raid. That will ensure
 that all non-admin raiders have an identical copy of the data that the master
 looter does. Other admins ignore these broadcasts as they get their data
-through the evnt sharing, but for normal users, they simply accept the
+through the event sharing, but for normal users, they simply accept the
 configuration information verbatim from the master looter. So now the users
-will have the same lists and the same users int eh same spot as the master
+will have the same lists and the same users in the same spot as the master
 looter. When the master looter then opens a chest or loots a boss, they send
 events to that effect to the whole raid (and possibly also guild). This will
 cause KSK to pop up on the users screen with the same loot and list data that
 the master looter sees. As the master looter selects loot and opens items for
 bidding, these things are communicated to all other users in the raid. Thus,
-whatever the master looter is seeing on theier screen is mirrored on every
+whatever the master looter is seeing on their screen is mirrored on every
 other raiders screen. The data is identical.
 
 This all sounds very complex but in reality its pretty simple and works well.
@@ -310,14 +310,14 @@ raids.
 The User Interface (and dealing with data)
 ------------------------------------------
 
-Arguably the most important part of the addon as it is how the users
-ultimately interact with it to do teh work the mod needs to do. The UI is
-completely controlled by code, using KKoreUI (KUI). No XML files involved to
-obscure where things are happening. In reality the UI is fairly simple. There
-are a number of tabs, 2 of which everyone can see, and 3 extra ones which
-admins can see. Each of these tabs, which are selected along the bottom edge
-of the mod, can have sub-tabs, which are selected along the top. Again, the
-admins have more tabs visible to them than normal users do. To use the in-code
+Arguably the most important part of the addon is how the users ultimately
+interact with it to do the work the mod needs to do. The UI is completely
+controlled by code, using KKoreUI (KUI). No XML files involved to obscure
+where things are happening. In reality the UI is fairly simple. There are a
+number of tabs, 2 of which everyone can see, and 3 extra ones which admins can
+see. Each of these tabs, which are selected along the bottom edge of the mod,
+can have sub-tabs, which are selected along the top. Again, the admins have
+more tabs visible to them than normal users do. To use the in-code
 terminology, the bottom tabs are called tabs, and the top ones are called
 pages.
 
@@ -326,8 +326,8 @@ tabs and the various pages within those tabs. These tabs are, in order,
 the lists tab (KSK-Lists.lua), the loot tab (KSK-Loot.lua), the users tab
 (KSK-Users.lua), the sync tab (KSK-Sync.lua) and the config tab
 (KSK-Config.lua). As you can see each tab has its own file which completely
-controls the content of that tab. The idea is to have anything that dels with
-teh UI and the data that the UI needs all in a single file. The main UI shave
+controls the content of that tab. The idea is to have anything that deals with
+the UI and the data that the UI needs all in a single file. The main UI
 (KSK-Init.lua) creates the main tabbed dialog, and calls the initialisation
 functions for each of the main tabs.
 
@@ -356,7 +356,7 @@ ksk.RefreshXXXUI (reset)
   example, if this is true, then the lists panel will reset the currently
   selected list variable, and the currently selected member variable. This is
   done *before* any user interface elements are updated. Typically this will
-  only ever be done but the ksk.FullRefresh() function described below, which
+  only ever be done by the ksk.FullRefresh() function described below, which
   is called when a new config is being selected. This is important because we
   do not want any data associated with the old config to bleed through to the
   new config, not to mention the fact that some of the data will almost

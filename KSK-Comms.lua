@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2018 James Kean Johnston. All rights reserved.
+   Copyright 2008-2019 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ local L = ksk.L
 local KUI = ksk.KUI
 local KRP = ksk.KRP
 local KLD = ksk.KLD
-local H = ksk.KHL
+local H = ksk.H
 
 local MakeFrame = KUI.MakeFrame
 
@@ -132,7 +132,6 @@ local function send_addon_msg (cfg, cmd, prio, dist, target, ...)
   crc = H:CRC32 (ndata, crc, true)
   fs = fs .. K.hexstr (crc) .. ":" .. ndata
 
-  debug (9, "sending: cfg=%s fs=%q dist=%q target=%q prio=%q", cfg, tostring(fs:gsub("\124", "\124\124")), tostring(dist), tostring(target), tostring(prio))
   K.comm.SendCommMessage (ksk.CHAT_MSG_PREFIX, fs, dist, target, prio)
 end
 
