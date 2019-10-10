@@ -104,7 +104,7 @@ ksk.KLD = KLD
 ksk.H   = H
 ksk.KDB = DB
 
-ksk.CHAT_MSG_PREFIX = "KSK"
+ksk.CHAT_MSG_PREFIX = "KSKC"
 
 local MakeFrame = KUI.MakeFrame
 
@@ -136,7 +136,7 @@ ksk.version = MINOR
 -- this backwards compatibility into each protocol message. So at the moment
 -- these protocol versions must match exactly in order for two KSK mods to
 -- talk to each other.
-ksk.protocol = 1
+ksk.protocol = 2
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file

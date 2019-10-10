@@ -3784,11 +3784,27 @@ function ksk.NewBidder (u)
   -- to master looter.
   --
   local slot = ksk.bossloot[biditem].slot
-  local kldi = KLD.items[slot]
 
-  if (not kldi or not kldi.candidates or not kldi.candidates[u]) then
-    ksk.SendWhisper (strfmt (L["%s: you are not eligible to receive loot - %s ignored."], L["MODTITLE"], L["bid"]), u)
-    return
+  --
+  -- If the loot was added manually with /ksk addloot it will have a slot of
+  -- 0, which teh API never returns. So we need to check for that here and
+  -- avoid looking in KLD for the item because it isn't there. The other
+  -- alternative is to change the KLD API to allow us to manually add things
+  -- to the loot table, but that's more complicated so working around this
+  -- for now.
+  --
+  local kloot = false
+  local klid = nil
+
+  if (slot > 0) then
+    kldi = KLD.items[slot]
+
+    if (not kldi or not kldi.candidates or not kldi.candidates[u]) then
+      ksk.SendWhisper (strfmt (L["%s: you are not eligible to receive loot - %s ignored."], L["MODTITLE"], L["bid"]), u)
+      return
+    end
+  else
+    kloot = true
   end
 
   local found = false

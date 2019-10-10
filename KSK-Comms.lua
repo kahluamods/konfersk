@@ -438,7 +438,7 @@ end
 -- Purpose: Respond to sender with a version check
 --
 ihandlers.VCHEK = function (sender, proto, cmd, cfg, ...)
-  ksk.SendWhisperAM (sender, { proto = 6, cmd = "VCACK" }, nil, ksk.version)
+  ksk.SendWhisperAM (sender, { proto = 2, cmd = "VCACK" }, nil, ksk.version)
 end
 
 --
@@ -577,10 +577,6 @@ end
 --          the list being rolled on or by the item options.
 --
 ihandlers.LISEL = function (sender, proto, cmd, cfg, ...)
-  if (proto < 9) then
-    -- The format changed in protocol version 9
-    return
-  end
   local idx, filter, role, list, rank = ...
 
   if (cfg ~= ksk.currentid or not ksk.bossloot) then
@@ -711,8 +707,8 @@ ihandlers.BCAST = function (sender, proto, cmd, cfg, cfd)
   local ncf, cfgid = prepare_config_from_bcast (cfd)
   local cfgtype = ncf.cfgtype
 
-  if (not cfgid or proto < 9) then
-      debug (2, "invalid config or protocol in BCAST")
+  if (not cfgid) then
+      debug (2, "invalid config in BCAST")
     return
   end
 
