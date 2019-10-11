@@ -205,7 +205,7 @@ local function create_user_button()
       tooltip = { title = "$$", text = L["TIP073"] },
     }
     for k,v in pairs(K.IndexClass) do
-      if (v.c) then
+      if (v.c and not v.ign) then
         tinsert (arg.items, { text = v.c, value = k, color = K.ClassColorsRGBPerc[k] })
       end
     end

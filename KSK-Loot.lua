@@ -3230,9 +3230,9 @@ function ksk.InitialiseLootUI ()
     --
     local ilink = iinfo.ilink
     if (iinfo.ignore) then
-      ksk.items[itemid] = { ilink = ilink, ignore = true }
+      ksk.items[selitemid] = { ilink = ilink, ignore = true }
     else
-      ksk.items[itemid] = { ilink = ilink }
+      ksk.items[selitemid] = { ilink = ilink }
       local cs = {}
       local ns = 0
       for k,v in pairs (K.IndexClass) do
@@ -3246,40 +3246,40 @@ function ksk.InitialiseLootUI ()
       end
       local fcs = tconcat (cs)
       if (ns > 0) then
-        ksk.items[itemid].cfilter = fcs
+        ksk.items[selitemid].cfilter = fcs
       end
 
       if (iinfo.role and iinfo.role ~= 0) then
-        ksk.items[itemid].role = iinfo.role
+        ksk.items[selitemid].role = iinfo.role
       end
 
       if (iinfo.list and iinfo.list ~= "" and iinfo.list ~= "0") then
-        ksk.items[itemid].list = iinfo.list
+        ksk.items[selitemid].list = iinfo.list
       end
 
       if (iinfo.rank) then
-        ksk.items[itemid].rank = iinfo.rank
+        ksk.items[selitemid].rank = iinfo.rank
       end
 
       if (iinfo.nextdrop and iinfo.nextdrop ~= false and iinfo.nextuser and iinfo.nextuser ~= "" and iinfo.nextuser ~= 0) then
-        ksk.items[itemid].user = iinfo.nextuser
+        ksk.items[selitemid].user = iinfo.nextuser
         if (iinfo.suicide and iinfo.suicide ~= "0") then
-          ksk.items[itemid].suicide = iinfo.suicide
+          ksk.items[selitemid].suicide = iinfo.suicide
         end
         if (iinfo.autodel) then
-          ksk.items[itemid].del = true
+          ksk.items[selitemid].del = true
         end
       end
 
       if (iinfo.autodench and iinfo.autodench ~= false) then
-        ksk.items[itemid].autodench = true
+        ksk.items[selitemid].autodench = true
       end
 
       if (iinfo.automl and iinfo.automl ~= false) then
-        ksk.items[itemid].automl = true
+        ksk.items[selitemid].automl = true
       end
     end
-    ksk.MakeCHITM (itemid, ksk.items[itemid], ksk.currentid, true)
+    ksk.MakeCHITM (selitemid, ksk.items[selitemid], ksk.currentid, true)
     qf.itemupdbtn:SetEnabled (false)
   end)
 
@@ -3289,7 +3289,7 @@ function ksk.InitialiseLootUI ()
   rs.deletebtn = KUI:CreateButton (arg, rs)
   qf.itemdelbtn = rs.deletebtn
   rs.deletebtn:Catch ("OnClick", function (this, evt)
-    ksk.DeleteItem (itemid)
+    ksk.DeleteItem (selitemid)
   end)
   ypos = ypos - 24
 
@@ -3681,8 +3681,8 @@ function ksk.SelectLootItem (idx, filter, role, list, rank)
   local autoloot = false
   local uname = nil
 
-  if (loot.slot and itemid and ksk.items[itemid]) then
-    local ii = ksk.items[itemid]
+  if (loot.slot and selitemid and ksk.items[selitemid]) then
+    local ii = ksk.items[selitemid]
     if (ii.user and ksk.raid and ksk.raid.users[ii.user]) then
       uname = ksk.raid.users[ii.user]
       if (KLD.items[loot.slot].candidates[uname]) then
