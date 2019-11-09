@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2018 James Kean Johnston. All rights reserved.
+   Copyright 2008-2019 James Kean Johnston. All rights reserved.
    
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -21,22 +21,14 @@
    limitations under the License.
 ]]
 
-local K = LibStub:GetLibrary("KKore")
+-- Translated from English to French by Grimal for "les gardiens de l'ombre"
+-- Alliance PvE Guild @ Sinstralis - EU
+-- version 1.1 Release
 
-if (not K) then
-  error ("KahLua KonferSK: Impossible de trouver KahLua Kore.", 2)
-end
-
-local L = K:RegisterI18NTable("KKonferSK", "frFR")
+local L = LibStub("AceLocale-3.0"):NewLocale("KKonferSK", "frFR")
 if (not L) then
   return
 end
-
--- Translated from English to French by Grimal for "les gardiens de l'ombre" - Alliance PvE Guild @ Sinstralis - EU
--- version 1.1 Release
-
-
-
 
 L["MODTITLE"] = "KonferSK"
 L["MODNAME"] = "konfersk"
@@ -50,7 +42,6 @@ L["CMD_LISTS"] = "listes"
 L["CMD_SYNC"] = "synchro"
 L["CMD_VERSION"] = "version"
 L["CMD_RESETPOS"] = "resetpos"
-L["CMD_REPAIR"] = "reparer"
 L["CMD_SUSPEND"] = "suspendre"
 L["CMD_RESUME"] = "reprendre"
 L["CMD_VERSIONCHECK"] = "versioncheck"
@@ -93,9 +84,6 @@ L["WHISPERCMD_HELP"] = "ksk"
 -- Main localisation strings start here
 --
 
-L["VCTITLE"] = "%s %s Version Check"
-L["Version"] = "Version"
-L["In Raid"] = "In Raid"
 L["NEWMSG"] = "Entrez le nom du nouvel espace de configuration ci-dessous. Notez bien que ce nouvel espace ne partage absolument pas de donn\195\169es avec un autre espace de configuration. Cette nouvelle configuration sera trait\195\169e come si c'\195\169tait une copie enti\195\168re de Konfer qui tournait."
 L["DELMSG"] = "Etes-vous vraiment s\195\187r de supprimer cette configuration ? Il n'est pas possible d'annuler cette op\195\169ration, et toutes les listes, permissions joueurs, historique de raid et 'user loot information' associ\195\169 avec cette configuration seront perdus. Si vous \195\170tes le possesseur de cette configuration et avez partag\195\169e celle-ci avec d'autres joueurs, vous devriez attendre que vous ayez transf\195\169r\195\169 la possession \195\160 un autre joueur, sinon ils ne pourront pas \195\169diter les configurations li\195\169es \195\160 la s\195\169curit\195\169 sur la liste. Soyez s\195\187r que la bonne liste est affich\195\169e ci-dessus avant de r\195\169aliser ceci."
 L["DELUSER"] = "Etes-vous vraiment s\195\187r de vouloir supprimer ce joueur ? Il n'est pas possible d'annuler cette op\195\169ration ; tout l'historique du joueur et ses informations seront perdues, et le joueur sera supprim\195\169 de toutes les listes dans toutes les configurations, pas seulement dans celle active. Si ce joueur est un main et qu'il a des rerolls d\195\169finis, ils seront supprim\195\169s \195\169galement. Soyez bien s\195\187r que le bon joueur est affich\195\169 ci-dessus avant de r\195\169aliser ceci."
@@ -224,12 +212,6 @@ L["NOTICE: user %q renamed to %q."] = "Avertissement : joueur %q renomm\195\169 
 L["NOTICE: roll list %q renamed to %q."] = "Avertissement : Liste %q renomm\195\169e en %q."
 L["Co-admins"] = "Co-Admins"
 L["User Role"] = "R\195\180le du joueur"
-L["Not Set"] = "Non d\195\169fini"
-L["Tank"] = "Tank"
-L["Ranged DPS"] = "DPS distant"
-L["Melee DPS"] = "DPS CaC"
-L["Healer"] = "Heal"
-L["Spellcaster"] = "DPS magique"
 L["User is an Enchanter"] = "Le joueur est un enchanteur"
 L["User is an Alt of"] = "Le joueur est un reroll"
 L["User is Frozen"] = "Le joueur est gel\195\169"
@@ -318,7 +300,6 @@ L["Role Restriction"] = "Restriction de r\195\180le"
 L["Assign Next Drop to User"] = "Attribuer le prochain loot au joueur"
 L["Auto-Remove When Assigned"] = "Suppression auto lors de l'attribution"
 L["Suicide User on List"] = "Suicider le joueur sur la liste"
-L["your version of %s is out of date. Please update it."] = "Votre version de %s n'est pas \195\160 jour. T\195\169l\195\169chargez-la sur le site des GDO."
 L["Announce Loot"] = "Annoncer le loot"
 L["Announce Winners in Guild Chat"] = "Annoncer les gagnants sur le canal de guilde"
 L["Nowhere"] = "Nulle part"
@@ -603,13 +584,3 @@ L["TIP097"] = "Activer cette option pour que l'objet soit automatiquement attrib
 L["TIP098"] = "Activer cette option pour que l'objet soit automatiquement attribu\195\169 au ma\195\174tre du butin, et qu'il saute l'\195\169tape des ench\195\168res ou des rands."
 L["TIP099"] = "Commencez \195\160 saisir le nom du joueur que vous recherchez. Cela peut-\195\170tre n'importe quelle partie du nom du joueur. Le premier joueur trouv\195\169 est surlign\195\169 est s\195\169lectionn\195\169."
 L["TIP100"] = "Mark which guild ranks are officer ranks. Only officers will be permitted to broadcast configs to the entire guild."
-
---
--- Shared Konfer dialog. These strings are used by all Konfer addons.
---
-L["KONFER_SEL_TITLE"] = "S\195\169lectionner le module Konfer %s actif"
-L["KONFER_SEL_HEADER"] = "Vous avez plusieurs add-ons Konfer %s install\195\169s, et plus d'un est actif et configur\195\169 pour s'ouvrir automatiquement lors du loot d'un corps ou d'un coffre. Ceci peut provoquer des conflits, vous devez donc choisir lequel activer, tous les autres seront d\195\169sactiv\195\169s."
-L["KONFER_SEL_DDTITLE"] = "Choisir le module \195\160 activer"
-L["KONFER_ACTIVE"] = "activ\195\169"
-L["KONFER_SUSPENDED"] = "d\195\169sactiv\195\169"
-L["KONFER_SUSPEND_OTHERS"] = "Vous venez d'activer le module Konfer %s ci-dessus, mais d'autres modules Konfer sont \195\169galement activ\195\169s. Avoir plusieurs modules Konfer actifs en m\195\170me temps peut g\195\169n\195\169rer des probl\195\168mes, notamment si plus d'un est configur\195\169 pour s'ouvrir automatiquement lors d'un loot. Nous vous conseillons de d\195\169sactiver tous les autres add-ons Konfer. Pour suivre ce conseil et faire de ce module le seul actif, cliquez sur 'Ok'. Si vous \195\170tes certain de vouloir laisser plusieurs add-ons Konfer actifs, cliquez sur 'Annuler'."

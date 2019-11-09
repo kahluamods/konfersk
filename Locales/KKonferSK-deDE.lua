@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2018 James Kean Johnston. All rights reserved.
+   Copyright 2008-2019 James Kean Johnston. All rights reserved.
    Copyright 2009-2010 Stefan Junghanns. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,13 +22,7 @@
    limitations under the License.
 ]]
 
-local K = LibStub:GetLibrary("KKore")
-
-if (not K) then
-  error ("KahLua KonferSK: KahLua Kore konnte nicht gefunden werden.", 2)
-end
-
-local L = K:RegisterI18NTable("KKonferSK", "deDE")
+local L = LibStub("AceLocale-3.0"):NewLocale("KKonferSK", "deDE")
 if (not L) then
   return
 end
@@ -52,7 +46,6 @@ L["CMD_LISTS"] = "listen"
 L["CMD_SYNC"] = "sync"
 L["CMD_VERSION"] = "version"
 L["CMD_RESETPOS"] = "resetpos"
-L["CMD_REPAIR"] = "repair"
 L["CMD_SUSPEND"] = "suspend"
 L["CMD_RESUME"] = "resume"
 L["CMD_VERSIONCHECK"] = "versionscheck"
@@ -95,9 +88,6 @@ L["WHISPERCMD_HELP"] = "ksk"
 -- Main localisation strings start here
 --
 
-L["VCTITLE"] = "%s %s Version Check"
-L["Version"] = "Version"
-L["In Raid"] = "In Raid"
 L["NEWMSG"] = "Gebe den Namen einer neuen Konfiguration unten ein. Bitte denke daran, dass diese neue Konfiguration keine Daten mit einer anderen Konfiguration austauscht. Diese neue Konfiguration wird als komplett separate Kopie von Konfer behandelt."
 L["DELMSG"] = "Bist du absolut sicher, dass du diese Konfiguration löschen möchtest? Es ist nicht möglich, diese Handlung rückgängig zu machen und alle Loot-Listen, Nutzerrechte, vergangenen Raids und Loot-Informationen, die an diese Konfiguration geknüpft sind, gehen verloren. Wenn du der Besitzer dieser Konfiguration bist, solltest du warten, bis du eine andere Person zum Besitzer erklärt hast. Sonst können sie die sicherheitsrelevanten Einstellungen nicht verändern. Bitte sei dir absolut sicher, dass dort oben die richtige Liste dargestellt ist, bevor du fortfährst."
 L["DELUSER"] = "Bist du absolut sicher, dass du diesen Nutzer löschen möchtest? Es ist nicht möglich, diese Handlung rückgängig zu machen und die kompletten Nutzer-Informationen gehen verloren. Außerdem wird der Nutzer von allen Listen, nicht nur von der aktiven, gelöscht. Wenn der Nutzer ein Main-Charakter ist und Twinks festgelegt wurden, werden auch alle Twinks gelöscht. Bitte sei dir absolut sicher, dass der richtige Nutzer dort oben steht, bevor du fortfährst."
@@ -108,7 +98,7 @@ L["AUTOSUICIDE"] = "Wenn du entscheidest, dieses Item an %s zu vergeben, wird de
 L["AUTOLOOT"] = "Dieses Item wurde von %s gewonnen. Drücke 'OK', um das Item %s automatisch zuzuteilen. Wenn du 'Abbrechen' drückst, wird das Item trotzdem von der Loot-Liste entfernt und du musst es %s mit dem Standard User Interface zuteilen."
 L["AUTODENCH"] = "Das Item hat keine Bieter. Entzauberer %q ist online und im Raid. Drücke 'Ok' um %s das Item zuzuteilen. Drücke 'Abbrechen' wenn du das Item manuell zuweisen möchtest oder wenn du es zum Würfeln freigeben möchtest (Das Item bleibt in der Loot-Liste wenn du 'Abbrechen' drückst)."
 L["AUTODENCHNR"] = "Niemand hat auf das Item gewürfelt. Entzauberer %q ist online und im Raid. Drücke 'Ok', um %s das Item zuzuteilen. Drücke 'Abbrechen' wenn du das Item manuell zuweisen möchtest (Das Item wird von der Loot-Liste entfernt, aber nicht aus dem Leichnam oder aus der Truhe)."
-L["PUGCONFIG"] = "Spieler %q hat die oben genannte PUG Konfiguration gesendet. Wenn dies eine normale PUG ist, die %s benutzt, um den Loot zu verwalten und du alle Loot Ereignisse, Listen und Mitglieder nachvollziehen möchtest, drücke 'OK' um zu Akzeptieren und diese Konfiguration zu erstellen (Du wirst für diese Konfiguration keine weiteren Bestätigungen bekommen). Wenn du diese Sendung nicht akzeptieren willst, drücke 'Abbrechen' (Du wirst diese Nachricht trotzdem immer sehen, wenn der Raidleiter die Liste sendet)."
+L["PUGCONFIG"] = "Spieler %q hat die oben genannte Konfiguration gesendet. Wenn dies eine normale PUG ist, die %s benutzt, um den Loot zu verwalten und du alle Loot Ereignisse, Listen und Mitglieder nachvollziehen möchtest, drücke 'OK' um zu Akzeptieren und diese Konfiguration zu erstellen (Du wirst für diese Konfiguration keine weiteren Bestätigungen bekommen). Wenn du diese Sendung nicht akzeptieren willst, drücke 'Abbrechen' (Du wirst diese Nachricht trotzdem immer sehen, wenn der Raidleiter die Liste sendet)."
 L["LISTPOSMSG"] = "%s: Unten siehst du die Listen-Positionen in der Konfiguration %q. Warum lädst du nicht %s runter, dann kannst du selber die Listen verfolgen, anstatt immer dieses Kommando zu schreiben."
 L["RECOVERMSG"] = "Du bist der Besitzer der oben genannten Konfiguration und du hast eine Wiederherstellung der Liste von dem Nutzer %q angefragt. Bitte beachte, dass %s mit allen Admins synchronisiert sein muss, damit die Wiederherstellung funktioniert. Wenn du mit der Wiederherstellung fortfährst, löschst du deine komplette Konfiguration (aber nicht deine lokalen Einstellungen) eingeschlossen alle Listen, Nutzer, Items und Loot-Historien. Die Benutzung der Wiederherstellungsfunktion sollte dein allerletzter Versuch sein, eine beschädigte Konfiguration zu reparieren. Wenn du kein BackUp von deinen 'SavedVariables' hast, solltest du jetzt das Spiel schließen und dies tun. Bitte sei dir absolut sicher, dass du das tun möchtest. Es ist wirklich ein drastischer Schritt."
 
@@ -227,12 +217,6 @@ L["NOTICE: user %q renamed to %q."] = "ACHTUNG: Nutzer %q wurde zu %q umbenannt.
 L["NOTICE: roll list %q renamed to %q."] = "ACHTUNG: Wurf-Liste %q wurde zu %q umbenannt."
 L["Co-admins"] = "Co-Admins"
 L["User Role"] = "Nutzerrolle"
-L["Not Set"] = "Nicht festgelegt"
-L["Tank"] = "Tank"
-L["Ranged DPS"] = "Ranged DPS"
-L["Melee DPS"] = "Melee DPS"
-L["Healer"] = "Healer"
-L["Spellcaster"] = "Spellcaster"
 L["User is an Enchanter"] = "Nutzer ist ein Verzauberer"
 L["User is an Alt of"] = "Nutzer ist ein Twink von"
 L["User is Frozen"] = "Nutzer ist eingefroren"
@@ -321,7 +305,6 @@ L["Role Restriction"] = "Rollen-Einschränkung"
 L["Assign Next Drop to User"] = "Teile nächstes Item dem Nutzer zu"
 L["Auto-Remove When Assigned"] = "Auto-Löschen, wenn zugeteilt"
 L["Suicide User on List"] = "Nutzer auf der Liste 'suiciden'"
-L["your version of %s is out of date. Please update it."] = "Deine Version von %s ist nicht aktuell. Bitte aktualisiere sie."
 L["Announce Loot"] = "Loot verkünden"
 L["Announce Winners in Guild Chat"] = "Gewinner im Gilden-Chat verkünden"
 L["Nowhere"] = "Nirgendwo"
@@ -606,13 +589,3 @@ L["TIP097"] = "Aktiviere diese Option, um das Item automatisch an den Entzaubere
 L["TIP098"] = "Aktiviere diese Option, um das Item automatisch an den Plündermeister zu senden und nicht zum Bieten / Würfeln zuzulassen."
 L["TIP099"] = "Gib den Namen des Nutzers ein, den Du suchen willst. Dies kann auch nur ein Teil des Nutzer-Namens sein. Der erste gefundenen Nutzer wird hervorgehoben und ausgewählt."
 L["TIP100"] = "Mark which guild ranks are officer ranks. Only officers will be permitted to broadcast configs to the entire guild."
-
---
--- Shared Konfer dialog. These strings are used by all Konfer addons.
---
-L["KONFER_SEL_TITLE"] = "Auswahl des aktiven %s Konfer-Moduls"
-L["KONFER_SEL_HEADER"] = "Du hast %s Konfer-Module installiert und mehr als eines von ihnen ist aktiv und eingestellt auf automatisches Öffnen, wenn ein Leichnam oder eine Kiste/Truhe geplündert wird. Dies kann Konflikte verursachen, du solltest eines der Module als aktives auswählen. Alle anderen werden dann ausgeschlossen."
-L["KONFER_SEL_DDTITLE"] = "Modul-Auswahl zum Aktivieren"
-L["KONFER_ACTIVE"] = "aktiv"
-L["KONFER_SUSPENDED"] = "ausgeschlossen"
-L["KONFER_SUSPEND_OTHERS"] = "Du hast das %s Konfer-Modul gerade aktiviert, aber andere Konfer-Module sind ebenfalls aktiv. Mehrere Module zur selben Zeit aktiv zu haben, kann Probleme verursachen, besonders wenn mehr als eins sich beim Looten automatisch öffnet. Es wird empfohlen, die anderen Module zu deaktivieren. Wenn du dies tun willst und nur das ausgewählte aktivieren willst, drücke den 'OK'-Button. Wenn du sicher bist, dass mehrere Konfer-Module laufen sollen, dann drücke 'Abbrechen'."

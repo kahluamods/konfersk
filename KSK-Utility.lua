@@ -32,6 +32,7 @@ end
 local ksk = K:GetAddon ("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
+local DB = ksk.DB
 
 -- Local aliases for global or Lua library functions
 local _G = _G
@@ -74,7 +75,7 @@ local aclass = ksk.aclass
 -- Returns true if the user is thought to be a guild master, false
 -- if we cant tell or can tell if they are not.
 --
-function ksk.UserIsRanked (cfg, name)
+function ksk.UserIsRanked(cfg, name)
   if (not K.player.is_guilded or not K.guild) then
     return false
   end
@@ -91,13 +92,6 @@ function ksk.UserIsRanked (cfg, name)
     return false
   end
 
-  local gi = K.guild.roster.name[name]
-  local gu = K.guild.roster.id[gi]
-  local ri = gu.rank
-  if (strsub (ksk.frdb.configs[cfg].oranks, ri, ri) == "1") then
-    return true
-  end
-
   return false
 end
 
@@ -110,11 +104,11 @@ function ksk.CreateRaidList (listid)
   for k,v in ipairs (ksk.lists[listid].users) do
     if (ksk.UserIsReserved (v)) then
       tinsert (raiders, v)
-    elseif (ksk.raid.users[v]) then
+    elseif (ksk.group.users[v]) then
       tinsert (raiders, v)
     elseif (ksk.cfg.tethered and ksk.users[v].alts) then
       for ak,av in pairs (ksk.users[v].alts) do
-        if (ksk.raid.users[av]) then
+        if (ksk.group.users[av]) then
           tinsert (raiders, v)
           break
         end
@@ -317,7 +311,7 @@ function ksk.AddEvent (cfgid, event, estr, ufn)
     end
   end
 
-  ksk.CSendAM (cfgid, event, "ALERT", estr, scrc, eid, oldeid, ufn or false)
+  ksk:CSendAM(cfgid, event, "ALERT", estr, scrc, eid, oldeid, ufn or false)
 end
 
 function ksk.RepairDatabases (users, lists)
@@ -366,9 +360,6 @@ function ksk.RepairDatabases (users, lists)
         if (not lv.sortorder) then
           lv.sortorder = 1
         end
-        if (not lv.def_rank) then
-          lv.def_rank = 999
-        end
         if (not lv.strictcfilter) then
           lv.strictcfilter = false
         end
@@ -408,6 +399,20 @@ function ksk.UpdateDatabaseVersion ()
     return ret
   end
 
+  if (ksk.frdb.dbversion == 1) then
+    --
+    -- Version 2 removed the "guild" config type. Find all such configs
+    -- and remove the cfgtype from the config.
+    --
+    for k,v in pairs (ksk.frdb.configs) do
+      v.cfgtype = nil
+      v.def_rank = nil
+      v.use_ranks = nil
+      v.rank_prio = nil
+    end
+    ret = true
+  end
+
   --
   -- Fix a potential error with co-admins
   --
@@ -429,4 +434,3 @@ function ksk.UpdateDatabaseVersion ()
   ksk.frdb.dbversion = ksk.dbversion
   return ret
 end
-

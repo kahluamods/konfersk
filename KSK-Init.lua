@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2018 James Kean Johnston. All rights reserved.
+   Copyright 2008-2019 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -22,19 +22,12 @@
 ]]
 
 local K = LibStub:GetLibrary("KKore")
-local H = LibStub:GetLibrary("KKoreHash")
-local DB = LibStub:GetLibrary("KKoreDB")
-local KUIBase = LibStub:GetLibrary("KKoreUI")
 
 if (not K) then
-  error ("KahLua KonferSK: could not find KahLua Kore.", 2)
+  error("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-if (not H) then
-  error ("KahLua KonferSK: could not find KahLua Kore Hash library.", 2)
-end
-
-local ksk = K:GetAddon ("KKonferSK")
+local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
 local MakeFrame = KUI.MakeFrame
@@ -157,7 +150,7 @@ function ksk.InitialiseUI()
     return
   end
 
-  ksk.mainwin = KUI:CreateTabbedDialog (mainwin)
+  ksk.mainwin = KUI:CreateTabbedDialog(mainwin)
 
   --
   -- Every panel and every sub-panel needs to display the current config and
@@ -174,16 +167,16 @@ function ksk.InitialiseUI()
     level = 12,
     tooltip = { title = L["TIP028.0"], text = L["TIP028.1"] },
   }
-  ksk.mainwin.cfgselector = KUI:CreateDropDown (arg, tbf)
-  ksk.mainwin.cfgselector:ClearAllPoints ()
-  ksk.mainwin.cfgselector:SetPoint ("TOPRIGHT", tbf, "TOPRIGHT", 4, -4)
-  ksk.mainwin.cfgselector:Catch ("OnValueChanged", function (this, evt, nv)
+  ksk.mainwin.cfgselector = KUI:CreateDropDown(arg, tbf)
+  ksk.mainwin.cfgselector:ClearAllPoints()
+  ksk.mainwin.cfgselector:SetPoint("TOPRIGHT", tbf, "TOPRIGHT", 4, -4)
+  ksk.mainwin.cfgselector:Catch("OnValueChanged", function(this, evt, nv)
     if (ksk.frdb and not ksk.frdb.tempcfg) then
       if (last_cfg_selected ~= nv) then
         last_cfg_selected = nv
-        ksk.SetDefaultConfig (nv)
+        ksk.SetDefaultConfig(nv)
         if (ksk.qf.synctopbar) then
-          ksk.qf.synctopbar:SetCurrentCRC ()
+          ksk.qf.synctopbar:SetCurrentCRC()
         end
       end
     end
@@ -193,15 +186,14 @@ function ksk.InitialiseUI()
   ksk.qf.configtab = ksk.mainwin.tabs[ksk.CONFIG_TAB].tbutton
   ksk.qf.userstab = ksk.mainwin.tabs[ksk.USERS_TAB].tbutton
   ksk.qf.synctab = ksk.mainwin.tabs[ksk.SYNC_TAB].tbutton
-  ksk.qf.iedit = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ITEMS_PAGE].content
   ksk.qf.iedittab = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ITEMS_PAGE].tbutton
   ksk.qf.historytab = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_HISTORY_PAGE].tbutton
   ksk.qf.listcfgtab = ksk.mainwin.tabs[ksk.LISTS_TAB].tabs[ksk.LISTS_CONFIG_PAGE].tbutton
   ksk.qf.cfgadmintab = ksk.mainwin.tabs[ksk.CONFIG_TAB].tabs[ksk.CONFIG_ADMIN_PAGE].tbutton
 
-  ksk.InitialiseListsUI ()
-  ksk.InitialiseLootUI ()
-  ksk.InitialiseUsersUI ()
-  ksk.InitialiseSyncUI ()
-  ksk.InitialiseConfigUI ()
+  ksk.InitialiseListsUI()
+  ksk.InitialiseLootUI()
+  ksk.InitialiseUsersUI()
+  ksk.InitialiseSyncUI()
+  ksk.InitialiseConfigUI()
 end

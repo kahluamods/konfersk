@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2018 James Kean Johnston. All rights reserved.
+   Copyright 2008-2019 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -21,15 +21,9 @@
    limitations under the License.
 ]]
 
-local K = LibStub:GetLibrary("KKore")
-
-if (not K) then
-  error ("KahLua KonferSK: could not find KahLua Kore.", 2)
-end
-
-local L = K:RegisterI18NTable("KKonferSK", "enUS")
+local L = LibStub("AceLocale-3.0"):NewLocale("KKonferSK", "enUS", true, false)
 if (not L) then
-  error ("KahLua KonferSK: could not initialize I18N.", 2)
+  return
 end
 
 --
@@ -51,7 +45,6 @@ L["CMD_LISTS"] = "lists"
 L["CMD_SYNC"] = "sync"
 L["CMD_VERSION"] = "version"
 L["CMD_RESETPOS"] = "resetpos"
-L["CMD_REPAIR"] = "repair"
 L["CMD_SUSPEND"] = "suspend"
 L["CMD_RESUME"] = "resume"
 L["CMD_VERSIONCHECK"] = "versioncheck"
@@ -94,9 +87,6 @@ L["WHISPERCMD_HELP"] = "ksk"
 -- Main localisation strings start here
 --
 
-L["VCTITLE"] = "%s %s Version Check"
-L["Version"] = true
-L["In Raid"] = true
 L["NEWMSG"] = "Enter the name of a new configuration space below. Please remember that this new space shares absolutely no data with any other configuration space. This new configuration will be treated as if it was an entirely separate copy of Konfer running."
 L["DELMSG"] = "Are you absolutely sure you want to delete this configuration? It is not possible to undo this operation, and all roll lists, user permissions, raid history and user loot information associated with this configuration will be lost. If you are the owner of this configuration and you have shared it with other users, you should wait until you have transfered ownership to another user, else they will be unable to edit any security related settings on the list. Please be very sure the correct list is displayed above before proceeding."
 L["DELUSER"] = "Are you absolutely sure you want to delete this user? It is not possible to undo this operation, and all user history and information will be lost, and the user will be removed from all roll lists in all configurations, not just the active one. If this user is a main and has alts defined, they can all be removed as well. Please be very sure the correct user is displayed above before proceeding."
@@ -107,7 +97,7 @@ L["AUTOSUICIDE"] = "If you do decide to award this item to %s, they will automat
 L["AUTOLOOT"] = "This item was won by %s. Press 'Ok' to automatically assign the item to %s. If you press 'Cancel' the item will still be removed from the loot list, and you will need to assign it to %s using the standard user interface."
 L["AUTODENCH"] = "The item above had no bidders. Disenchanter %q is online and in the raid. Press 'Ok' to assign this item to %s. Press 'Cancel' if you want to assign the item manually or make it available for open roll (the item will be left in the loot list if you press 'Cancel')."
 L["AUTODENCHNR"] = "No-one rolled on the above item. Disenchanter %q is online and in the raid. Press 'Ok' to assign this item to %s. Press 'Cancel' if you want to assign the item manually (the item will be removed from the loot list but not from the corpse or chest)."
-L["PUGCONFIG"] = "Player %q has broadcast the PUG configuration above. If this is a regular PUG that uses %s to administer loot, and you wish to keep track of all loot events, lists and members, press 'Ok' to accept and create this configuration (you will receieve no further confirmations for this configuration). If you decide not to accept this broadcast, press 'Cancel' below (you will however see this message each time the raid leader broadcasts it)."
+L["PUGCONFIG"] = "Player %q has broadcast the configuration above. If this is a regular PUG that uses %s to administer loot, and you wish to keep track of all loot events, lists and members, press 'Ok' to accept and create this configuration (you will receieve no further confirmations for this configuration). If you decide not to accept this broadcast, press 'Cancel' below (you will however see this message each time the raid leader broadcasts it)."
 L["LISTPOSMSG"] = "%s: below are your list positions in the %q configuration. Instead of using this command why not download %s and keep track of the lists using the mod itself?"
 L["RECOVERMSG"] = "You are the owner of the above config and you have requested list recovery from user %q. Please note that in order for recovery to work, %s must be fully synced with all other admins. If you proceed with recovery, you will erase your entire configuration (but not your local settings) including lists, users, items and loot history. Using recovery should be a last-ditch effort to recover a corrupted configuration. If you have not backed up your existing savedvariables file you should exit the game completely and do so now. Please be absolutely sure this is what you want to do. It is a fairly drastic step."
 
@@ -226,12 +216,6 @@ L["NOTICE: user %q renamed to %q."] = true
 L["NOTICE: roll list %q renamed to %q."] = true
 L["Co-admins"] = true
 L["User Role"] = true
-L["Not Set"] = true
-L["Tank"] = true
-L["Ranged DPS"] = true
-L["Melee DPS"] = true
-L["Healer"] = true
-L["Spellcaster"] = true
 L["User is an Enchanter"] = true
 L["User is an Alt of"] = true
 L["User is Frozen"] = true
@@ -321,7 +305,6 @@ L["Role Restriction"] = true
 L["Assign Next Drop to User"] = true
 L["Auto-Remove When Assigned"] = true
 L["Suicide User on List"] = true
-L["your version of %s is out of date. Please update it."] = true
 L["Announce Loot"] = true
 L["Announce Winners in Guild Chat"] = true
 L["Nowhere"] = true
@@ -605,13 +588,3 @@ L["TIP097"] = "Enable this option to have the item automatically sent to a raid 
 L["TIP098"] = "Enable this option to have the item automatically sent to the master looter, and completely bypass bidding and rolling."
 L["TIP099"] = "Start typing the name of a user you wish to search for. This can be any part of the user's name. The first user that matches is highlighted and selected."
 L["TIP100"] = "Mark which guild ranks are officer ranks. Only officers will be permitted to broadcast configs to the entire guild."
-
---
--- Shared Konfer dialog. These strings are used by all Konfer addons.
---
-L["KONFER_SEL_TITLE"] = "Select Active %s Konfer Module"
-L["KONFER_SEL_HEADER"] = "You have multiple %s Konfer modules installed, and more than one of them is active and set to auto-open when you loot a corpse or chest. This can cause conflicts and you need to select which one of the modules should be the active one. All others will be suspended."
-L["KONFER_SEL_DDTITLE"] = "Select Module to Make Active"
-L["KONFER_ACTIVE"] = "active"
-L["KONFER_SUSPENDED"] = "suspended"
-L["KONFER_SUSPEND_OTHERS"] = "You have just activated the %s Konfer module above, but other Konfer modules are also currently active. Having multiple Konfer modules active at the same time can cause problems, especially if more than one of them is set to auto-open on loot. It is suggested that you suspend all other Konfer modules. If you would like to do this and make the module above the only active one, press 'Ok' below. If you are certain you want to leave multiple Konfer modules running, press 'Cancel'."

@@ -24,10 +24,10 @@
 local K = LibStub:GetLibrary("KKore")
 
 if (not K) then
-  error ("KahLua KonferSK: could not find KahLua Kore.", 2)
+  error("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-local ksk = K:GetAddon ("KKonferSK")
+local ksk = K:GetAddon("KKonferSK")
 
 ksk.iitems = {}
 local sp = ksk.iitems

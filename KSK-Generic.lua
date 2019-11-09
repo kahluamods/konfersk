@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2018 James Kean Johnston. All rights reserved.
+   Copyright 2008-2019 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -24,10 +24,10 @@
 local K = LibStub:GetLibrary("KKore")
 
 if (not K) then
-  error ("KahLua KonferSK: could not find KahLua Kore.", 2)
+  error("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-local ksk = K:GetAddon ("KKonferSK")
+local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
 local MakeFrame = KUI.MakeFrame
@@ -62,7 +62,7 @@ local renamedialog
 -- such as the rename dialog and others.
 --
 
-function ksk.ConfirmationDialog (ttxt, msg, val, func, farg, isshown, height, option)
+function ksk.ConfirmationDialog(ttxt, msg, val, func, farg, isshown, height, option)
   height = height or 240
   if (not ksk.confirmdlg) then
     local arg = {
@@ -80,7 +80,7 @@ function ksk.ConfirmationDialog (ttxt, msg, val, func, farg, isshown, height, op
       cancelbutton = { text = K.CANCEL_STR },
     }
 
-    local ret = KUI:CreateDialogFrame (arg)
+    local ret = KUI:CreateDialogFrame(arg)
     arg = {}
 
     arg = {
@@ -89,7 +89,7 @@ function ksk.ConfirmationDialog (ttxt, msg, val, func, farg, isshown, height, op
       color = {r = 1, g = 1, b = 1, a = 1 }, border = true,
       justifyh = "CENTER",
     }
-    ret.str1 = KUI:CreateStringLabel (arg, ret)
+    ret.str1 = KUI:CreateStringLabel(arg, ret)
     arg = {}
 
     arg = {
@@ -98,58 +98,58 @@ function ksk.ConfirmationDialog (ttxt, msg, val, func, farg, isshown, height, op
       color = {r = 1, g = 0, b = 0, a = 1 }, text = "",
       font = "GameFontNormal", justifyv = "TOP",
     }
-    ret.str2 = KUI:CreateStringLabel (arg, ret)
+    ret.str2 = KUI:CreateStringLabel(arg, ret)
     arg = {}
 
     arg = {
       x = "CENTER", y = -height + 85, label = { text = ""},
     }
-    ret.opt = KUI:CreateCheckBox (arg, ret)
+    ret.opt = KUI:CreateCheckBox(arg, ret)
     ret.optval = false
-    ret.opt:Catch ("OnValueChanged", function (this, evt, val)
+    ret.opt:Catch("OnValueChanged", function(this, evt, val)
       ret.optval = val
     end)
     arg = {}
 
-    ret.OnCancel = function (this)
-      ksk.confirmdlg:Hide ()
+    ret.OnCancel = function(this)
+      ksk.confirmdlg:Hide()
       if (ksk.confirmdlg.isshown) then
-        ksk.mainwin:Show ()
+        ksk.mainwin:Show()
       end
     end
 
-    ret.OnAccept = function (this)
-      ksk.confirmdlg:Hide ()
+    ret.OnAccept = function(this)
+      ksk.confirmdlg:Hide()
       if (ksk.confirmdlg.isshown) then
-        ksk.mainwin:Show ()
+        ksk.mainwin:Show()
       end
-      ksk.confirmdlg.runfunction (ksk.confirmdlg.arg, ksk.confirmdlg.optval)
+      ksk.confirmdlg.runfunction(ksk.confirmdlg.arg, ksk.confirmdlg.optval)
     end
 
     ksk.confirmdlg = ret
   end
 
-  ksk.confirmdlg:SetHeight (height)
-  ksk.confirmdlg.str2:SetHeight (height - 95 - (option and 24 or 0))
-  ksk.confirmdlg.opt:SetPoint ("TOP", ksk.confirmdlg, "BOTTOM", 0, 56)
+  ksk.confirmdlg:SetHeight(height)
+  ksk.confirmdlg.str2:SetHeight(height - 95 - (option and 24 or 0))
+  ksk.confirmdlg.opt:SetPoint("TOP", ksk.confirmdlg, "BOTTOM", 0, 56)
   if (option) then
-    ksk.confirmdlg.opt:SetText (option)
-    ksk.confirmdlg.opt:Show ()
+    ksk.confirmdlg.opt:SetText(option)
+    ksk.confirmdlg.opt:Show()
     ksk.confirmdlg.optval = false
-    ksk.confirmdlg.opt:SetChecked (false)
+    ksk.confirmdlg.opt:SetChecked(false)
   else
-    ksk.confirmdlg.opt:Hide ()
+    ksk.confirmdlg.opt:Hide()
   end
-  ksk.confirmdlg:SetTitleText (ttxt)
-  ksk.confirmdlg.str1:SetText (val)
-  ksk.confirmdlg.str2:SetText (msg)
+  ksk.confirmdlg:SetTitleText(ttxt)
+  ksk.confirmdlg.str1:SetText(val)
+  ksk.confirmdlg.str2:SetText(msg)
   ksk.confirmdlg.runfunction = func
   ksk.confirmdlg.arg = farg
   ksk.confirmdlg.isshown = isshown
-  ksk.confirmdlg:Show ()
+  ksk.confirmdlg:Show()
 end
 
-function ksk.RenameDialog (ttxt, oldlbl, oldval, newlbl, len, func, farg, shown)
+function ksk.RenameDialog(ttxt, oldlbl, oldval, newlbl, len, func, farg, shown)
   if (not renamedialog) then
     local arg = {
       x = "CENTER", y = "MIDDLE",
@@ -166,14 +166,14 @@ function ksk.RenameDialog (ttxt, oldlbl, oldval, newlbl, len, func, farg, shown)
       cancelbutton = { text = K.CANCEL_STR },
     }
 
-    local ret = KUI:CreateDialogFrame (arg)
+    local ret = KUI:CreateDialogFrame(arg)
     arg = {}
 
     arg = {
       x = 0, y = 0, width = 150, height = 24, autosize = false,
       justifyh = "RIGHT", font = "GameFontNormal", text = "",
     }
-    ret.str1 = KUI:CreateStringLabel (arg, ret)
+    ret.str1 = KUI:CreateStringLabel(arg, ret)
     arg = {}
 
     arg = {
@@ -181,45 +181,45 @@ function ksk.RenameDialog (ttxt, oldlbl, oldval, newlbl, len, func, farg, shown)
       justifyh = "LEFT", font = "GameFontNormal", text = "",
       color = {r = 1, g = 1, b = 1, a = 1 }, border = true,
     }
-    ret.str2 = KUI:CreateStringLabel (arg, ret)
+    ret.str2 = KUI:CreateStringLabel(arg, ret)
     arg = {}
 
-    ret.str2:ClearAllPoints ()
-    ret.str2:SetPoint ("TOPLEFT", ret.str1, "TOPRIGHT", 8, 0)
+    ret.str2:ClearAllPoints()
+    ret.str2:SetPoint("TOPLEFT", ret.str1, "TOPRIGHT", 8, 0)
 
     arg = {
       x = 0, y = -30, width = 150, height = 24, autosize = false,
       justifyh = "RIGHT", font = "GameFontNormal", text = "",
     }
-    ret.str3 = KUI:CreateStringLabel (arg, ret)
+    ret.str3 = KUI:CreateStringLabel(arg, ret)
     arg = {}
 
     arg = {
       x = 0, y = -30, width = 200, height = 20,
     }
-    ret.input = KUI:CreateEditBox (arg, ret)
-    ret.input:SetFocus ()
+    ret.input = KUI:CreateEditBox(arg, ret)
+    ret.input:SetFocus()
     arg = {}
 
-    ret.input:ClearAllPoints ()
-    ret.input:SetPoint ("TOPLEFT", ret.str3, "TOPRIGHT", 12, 0)
+    ret.input:ClearAllPoints()
+    ret.input:SetPoint("TOPLEFT", ret.str3, "TOPRIGHT", 12, 0)
 
-    ret.OnCancel = function (this)
-      renamedialog:Hide ()
+    ret.OnCancel = function(this)
+      renamedialog:Hide()
       if (renamedialog.isshown) then
-        ksk.mainwin:Show ()
+        ksk.mainwin:Show()
       end
     end
 
-    ret.OnAccept = function (this)
-      local rv = renamedialog.runfunction (renamedialog.input:GetText (), renamedialog.arg, true)
+    ret.OnAccept = function(this)
+      local rv = renamedialog.runfunction(renamedialog.input:GetText(), renamedialog.arg, true)
       if (rv) then
-        renamedialog:Show ()
-        renamedialog.input:SetFocus ()
+        renamedialog:Show()
+        renamedialog.input:SetFocus()
       else
-        renamedialog:Hide ()
+        renamedialog:Hide()
         if (renamedialog.isshown) then
-          ksk.mainwin:Show ()
+          ksk.mainwin:Show()
         end
       end
     end
@@ -228,28 +228,28 @@ function ksk.RenameDialog (ttxt, oldlbl, oldval, newlbl, len, func, farg, shown)
     renamedialog = ret
   end
 
-  renamedialog:SetTitleText (ttxt)
-  renamedialog.str1:SetText (oldlbl)
-  renamedialog.str2:SetText (oldval)
-  renamedialog.str3:SetText (newlbl)
-  renamedialog.input:SetMaxLetters (len)
+  renamedialog:SetTitleText(ttxt)
+  renamedialog.str1:SetText(oldlbl)
+  renamedialog.str2:SetText(oldval)
+  renamedialog.str3:SetText(newlbl)
+  renamedialog.input:SetMaxLetters(len)
   renamedialog.runfunction = func
   renamedialog.arg = farg
   renamedialog.isshown = shown
 
-  ksk.mainwin:Hide ()
-  renamedialog:Show ()
-  renamedialog.input:SetText ("")
-  renamedialog.input:SetFocus ()
+  ksk.mainwin:Hide()
+  renamedialog:Show()
+  renamedialog.input:SetText("")
+  renamedialog.input:SetFocus()
 end
 
-function ksk.PopupSelectionList (name, list, title, width, height, parent, itemheight, func, topspace, botspace)
+function ksk.PopupSelectionList(name, list, title, width, height, parent, itemheight, func, topspace, botspace)
   if (ksk.popupwindow) then
-    ksk.popupwindow:Hide ()
+    ksk.popupwindow:Hide()
     ksk.popupwindow = nil
   end
 
-  assert (name)
+  assert(name)
 
   local arg = {
     name = name,
@@ -269,19 +269,19 @@ function ksk.PopupSelectionList (name, list, title, width, height, parent, itemh
     border = "THICK",
     x = "CENTER",
     y = "MIDDLE",
-    func = function (lst, idx, arg)
-      func (lst[idx].value)
+    func = function(lst, idx, arg)
+      func(lst[idx].value)
     end,
     timeout = 3,
   }
-  local rv = KUI:CreatePopupList (arg, parent)
-  assert (rv)
-  rv:UpdateList (list)
-  rv:Show ()
+  local rv = KUI:CreatePopupList(arg, parent)
+  assert(rv)
+  rv:UpdateList(list)
+  rv:Show()
   return rv
 end
 
-function ksk.SingleStringInputDialog (name, title, text, width, height)
+function ksk.SingleStringInputDialog(name, title, text, width, height)
   local arg = {
     x = "CENTER", y = "MIDDLE",
     name = name,
@@ -298,19 +298,19 @@ function ksk.SingleStringInputDialog (name, title, text, width, height)
     cancelbutton = { text = K.CANCELSTR },
   }
 
-  local ret = KUI:CreateDialogFrame (arg)
+  local ret = KUI:CreateDialogFrame(arg)
   arg = {}
 
   arg = {
     x = 8, y = 0, width = width - 40, height = height - 90, autosize = false,
     font = "GameFontNormal", text = text, }
-  ret.str1 = KUI:CreateStringLabel (arg, ret)
+  ret.str1 = KUI:CreateStringLabel(arg, ret)
 
   arg = {}
   arg = { x = "CENTER", y = -(height - 85), len = 32 }
-  ret.ebox = KUI:CreateEditBox (arg, ret)
+  ret.ebox = KUI:CreateEditBox(arg, ret)
 
-  ret.ebox:SetFocus ()
+  ret.ebox:SetFocus()
 
   return ret, ret.ebox
 end
