@@ -259,7 +259,7 @@ local function classes_setenabled (tbl, onoff)
   local onoff = onoff or false
 
   for k, v in pairs (K.IndexClass) do
-    if (k ~= K.CLASS_UNKNOWN and v.w and tbl[v.w]) then
+    if ((not v.ign) and v.w and tbl[v.w]) then
       tbl[v.w]:SetEnabled (onoff)
     end
   end
@@ -269,7 +269,7 @@ local function classes_setchecked (tbl, onoff)
   local onoff = onoff or false
 
   for k, v in pairs (K.IndexClass) do
-    if (k ~= K.CLASS_UNKNOWN and v.w and tbl[v.w]) then
+    if ((not v.ign) and v.w and tbl[v.w]) then
       tbl[v.w]:SetChecked (onoff)
     end
   end
@@ -277,7 +277,7 @@ end
 
 local function classes_cfilter (tbl, cfilter)
   for k, v in pairs (K.IndexClass) do
-    if (k ~= K.CLASS_UNKNOWN and v.w and tbl[v.w]) then
+    if ((not v.ign) and v.w and tbl[v.w]) then
       tbl[v.w]:SetChecked (cfilter[k])
     end
   end
@@ -366,7 +366,7 @@ local function verify_user_class (user, class, what)
   if (not qf.lootrules[w]:GetChecked ()) then
     local clist = {}
     for k,v in pairs (K.IndexClass) do
-      if (k ~= K.CLASS_UNKNOWN and v.w) then
+      if ((not v.ign) and v.w) then
         if (qf.lootrules[v.w]:GetChecked ()) then
           tinsert (clist, v.c)
         end
@@ -1455,7 +1455,7 @@ local function setup_iinfo ()
 
   for k,v in pairs (K.IndexClass) do
     local n = tonumber(k)
-    if (string.sub (ics, n, n) == "1") then
+    if ((not v.ign) and strsub (ics, n, n) == "1") then
       iinfo.cfilter[k] = true
     else
       iinfo.cfilter[k] = false
@@ -1980,7 +1980,7 @@ local function export_history_button ()
 
   tinsert (classes, '<c id="00" v="unkclass"/>')
   for k,v in pairs (K.IndexClass) do
-    if (v.u) then
+    if ((not v.ign) and v.u) then
       tinsert (classes, strfmt ("<c id=%q v=%q/>", tostring (k), strlower (tostring(v.u))))
     end
   end
@@ -2187,7 +2187,9 @@ local function set_classes_from_filter (filter)
     if (strsub (filter, n, n) == "1") then
       val = true
     end
-    qf.lootrules[v.w]:SetChecked (val)
+    if (not v.ign) then
+      qf.lootrules[v.w]:SetChecked (val)
+    end
   end
 end
 
@@ -3237,7 +3239,7 @@ function ksk.InitialiseLootUI ()
       local ns = 0
       for k,v in pairs (K.IndexClass) do
         local n = tonumber (k)
-        if (iinfo.cfilter[k]) then
+        if ((not v.ign) and iinfo.cfilter[k]) then
           cs[n] = "1"
           ns = ns + 1
         else
@@ -4314,7 +4316,9 @@ end
 function ksk.ChangeLootFilter (what, v1, v2)
   if (what == "C") then
     local w = K.IndexClass[v1].w
-    qf.lootrules[w]:SetChecked (v2)
+    if (not K.IndexClass[v1].ign) then
+      qf.lootrules[w]:SetChecked (v2)
+    end
   elseif (what == "R") then
     qf.lootrules.role:SetValue (v1)
   elseif (what == "G") then

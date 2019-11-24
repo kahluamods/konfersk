@@ -1282,7 +1282,7 @@ local function ksk_createuser (input)
 
   local lclass = strlower(nclass)
   for k,v in pairs(K.IndexClass) do
-    if (v.l == lclass) then
+    if ((not v.ign) and v.l == lclass) then
       classid = k
     end
   end
@@ -1290,7 +1290,7 @@ local function ksk_createuser (input)
   if (not classid) then
     err (L["invalid class %q specified. Valid classes are:"], white (lclass))
     for k,v in pairs(K.IndexClass) do
-      if (v.l) then
+      if ((not v.ign) and v.l) then
         printf ("    |cffffffff%s|r", v.l)
       end
     end
