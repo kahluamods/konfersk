@@ -1000,7 +1000,7 @@ local function export_list_button()
         local tstr = strfmt("%02d:%02d", hh, mm)
         local cs = ""
         for k,v in pairs(K.IndexClass) do
-          if (v.u) then
+          if (v.u and not v.ign) then
             cs = cs .. strfmt("<c id=%q v=%q/>", tostring(k), strlower(tostring(v.u)))
           end
         end

@@ -733,7 +733,7 @@ local function ksk_createuser(input)
   local kcmd = L["CMDNAME"]
   local cmd = L["CMD_CREATEUSER"]
   local nname, nclass, pos
-  local classid
+  local classid = nil
 
   if (not input or input == "") then
     err(L["Usage: "] .. white(strfmt(L["/%s %s name class"], kcmd, cmd)))
@@ -758,7 +758,7 @@ local function ksk_createuser(input)
 
   local lclass = strlower(nclass)
   for k,v in pairs(K.IndexClass) do
-    if (v.l == lclass) then
+    if ((not v.ign) and (v.l == lclass)) then
       classid = k
     end
   end
@@ -766,7 +766,7 @@ local function ksk_createuser(input)
   if (not classid) then
     err(L["invalid class %q specified. Valid classes are:"], white(lclass))
     for k,v in pairs(K.IndexClass) do
-      if (v.l) then
+      if ((not v.ign) and v.l) then
         printf("    |cffffffff%s|r", v.l)
       end
     end
@@ -1107,7 +1107,7 @@ local function ksk_resume(input)
 end
 
 local function ksk_refresh(input)
-  KRP.UpdateGroup(false, true, false)
+  KRP.UpdateGroup(true, true, false)
 end
 
 K.debugging[L["MODNAME"]] = 9   -- @debug-delete@
@@ -1336,7 +1336,7 @@ local function player_info_updated(evt, ...)
 end
 
 function ksk.RefreshRaid()
-  KRP.UpdateGroup(true, true, true)
+  KRP.UpdateGroup(true, true, false)
 end
 
 function ksk.AddItemToBossLoot(ilink, quant, lootslot)

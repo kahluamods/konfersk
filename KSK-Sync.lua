@@ -245,7 +245,7 @@ local function prepare_broadcast(cfg)
   local tc = ksk.configs[cfg]
 
   ci.v = 3
-  ci.c = strfmt("%s:%s:%s:%s:%s:0x%s", cfg, tc.name,
+  ci.c = strfmt("%s:%s:%s:%s:0x%s", cfg, tc.name,
     tc.tethered and "Y" or "N", tc.owner, K.hexstr(tc.cksum))
 
   local ulist = {}
