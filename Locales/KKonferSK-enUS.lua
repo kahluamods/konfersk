@@ -97,7 +97,7 @@ L["AUTOSUICIDE"] = "If you do decide to award this item to %s, they will automat
 L["AUTOLOOT"] = "This item was won by %s. Press 'Ok' to automatically assign the item to %s. If you press 'Cancel' the item will still be removed from the loot list, and you will need to assign it to %s using the standard user interface."
 L["AUTODENCH"] = "The item above had no bidders. Disenchanter %q is online and in the raid. Press 'Ok' to assign this item to %s. Press 'Cancel' if you want to assign the item manually or make it available for open roll (the item will be left in the loot list if you press 'Cancel')."
 L["AUTODENCHNR"] = "No-one rolled on the above item. Disenchanter %q is online and in the raid. Press 'Ok' to assign this item to %s. Press 'Cancel' if you want to assign the item manually (the item will be removed from the loot list but not from the corpse or chest)."
-L["PUGCONFIG"] = "Player %q has broadcast the configuration above. If this is a regular PUG that uses %s to administer loot, and you wish to keep track of all loot events, lists and members, press 'Ok' to accept and create this configuration (you will receieve no further confirmations for this configuration). If you decide not to accept this broadcast, press 'Cancel' below (you will however see this message each time the raid leader broadcasts it)."
+L["PUGCONFIG"] = "Player %q has broadcast the configuration above. If this is a regular group that uses %s to administer loot, and you wish to keep track of all loot events, lists and members, press 'Ok' to accept and create this configuration (you will receieve no further confirmations for this configuration). If you decide not to accept this broadcast, press 'Cancel' below (you will however see this message each time the raid leader broadcasts it)."
 L["LISTPOSMSG"] = "%s: below are your list positions in the %q configuration. Instead of using this command why not download %s and keep track of the lists using the mod itself?"
 L["RECOVERMSG"] = "You are the owner of the above config and you have requested list recovery from user %q. Please note that in order for recovery to work, %s must be fully synced with all other admins. If you proceed with recovery, you will erase your entire configuration (but not your local settings) including lists, users, items and loot history. Using recovery should be a last-ditch effort to recover a corrupted configuration. If you have not backed up your existing savedvariables file you should exit the game completely and do so now. Please be absolutely sure this is what you want to do. It is a fairly drastic step."
 
@@ -206,7 +206,7 @@ L["Reset"] = true
 L["Select"] = true
 L["Config Owner"] = true
 L["Alts Tethered to Mains"] = true
-L["cannot delete configuration %q - KonferSK requires at least one configuration."] = true
+L["cannot delete configuration %q - %s requires at least one configuration."] = true
 L["configuration %q deleted."] = true
 L["user %q deleted."] = true
 L["roll list %q deleted."] = true
@@ -467,6 +467,8 @@ L["users not on the %q list: %s"] = true
 L["User Search"] = true
 L["Edit Officer Ranks"] = true
 L["Set Guild Officer Ranks"] = true
+L["Main Spec Roll"] = true
+L["Off Spec Roll"] = true
 
 --
 -- Tooltip text.

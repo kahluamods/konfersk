@@ -36,35 +36,17 @@ local MakeFrame = KUI.MakeFrame
 local _G = _G
 local tinsert = table.insert
 local tremove = table.remove
-local setmetatable = setmetatable
-local tconcat = table.concat
 local tsort = table.sort
-local tostring = tostring
-local GetTime = GetTime
-local min = math.min
-local max = math.max
+local tostring, tonumber = tostring, tonumber
 local strfmt = string.format
-local strsub = string.sub
-local strlen = string.len
-local strfind = string.find
-local strlower = string.lower
-local xpcall, pcall = xpcall, pcall
-local pairs, next, type = pairs, next, type
-local select, assert, loadstring = select, assert, loadstring
-local printf = K.printf
-
-local ucolor = K.ucolor
-local ecolor = K.ecolor
-local icolor = K.icolor
+local pairs = pairs
+local assert = assert
 local debug = ksk.debug
+
 local info = ksk.info
-local err = ksk.err
 local white = ksk.white
 local red = ksk.red
 local green = ksk.green
-local yellow = ksk.yellow
-local class = ksk.class
-local shortclass = ksk.shortclass
 local aclass = ksk.aclass
 local shortaclass = ksk.shortaclass
 
@@ -139,19 +121,7 @@ local function rlist_newitem(objp, num)
     local rp = repliers[idx]
     busy_with_sync = shortaclass(ksk.users[rp.theiruid])
 
-    --
-    -- This is where the magic starts. We have determined that the user has
-    -- events for us and we have just selected to sync with them. If our
-    -- own last event ID was zero, we request a full sync, which is just
-    -- like a full broadcast, except with an extra table for the list of
-    -- people the syncer has in their sync lists and the event ID they have
-    -- from that admin. If we have an existing sync relationship with the
-    -- user, we simply request all sync events past the one we currently have.
-    -- The recipient can use this info to "trim" their sync list. Any events
-    -- prior to the one we request can be safely deleted.
-    --
-    ksk:SendWhisperAM(ksk.users[rp.theiruid].name, "GSYNC", "ALERT",
-      rp.mylast, false, ksk.cfg.lastevent, ksk.cfg.cksum)
+    ksk:SendWhisperAM(ksk.users[rp.theiruid].name, "GSYNC", "ALERT", rp.mylast, false, ksk.cfg.lastevent, ksk.cfg.cksum)
     this:Disable()
     rp.synced = true
   end)
@@ -379,7 +349,7 @@ local function recover_config()
     info(L["waiting for recovery reply from %s. Do not use KSK until recovery is complete."], shortaclass(ksk.users[arg.uid]))
   end
 
-  ksk.ConfirmationDialog(L["Recover Configuration"],
+  K.ConfirmationDialog(ksk, L["Recover Configuration"],
     strfmt(L["RECOVERMSG"], aclass(ksk.users[selsyncer]),
       aclass(ksk.users[selsyncer])),
     ksk.cfg.name, real_recover,

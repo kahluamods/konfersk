@@ -69,24 +69,12 @@ local L = LibStub("AceLocale-3.0"):GetLocale(MAJOR, false)
 -- Local aliases for global or Lua library functions
 local _G = _G
 local tinsert = table.insert
-local tremove = table.remove
-local tsort = table.sort
-local setmetatable = setmetatable
-local tconcat = table.concat
-local tostring = tostring
-local GetTime = GetTime
-local min = math.min
-local max = math.max
+local tonumber = tonumber
 local strfmt = string.format
 local strsub = string.sub
-local strlen = string.len
-local strfind = string.find
 local strlower = string.lower
-local gmatch = string.gmatch
 local match = string.match
-local xpcall, pcall = xpcall, pcall
-local pairs, next, type = pairs, next, type
-local select, assert, loadstring = select, assert, loadstring
+local pairs, ipairs, type = pairs, ipairs, type
 local printf = K.printf
 
 local LOOT_METHOD_UNKNOWN    = KRP.LOOT_METHOD_UNKNWON
@@ -143,7 +131,10 @@ ksk.version = MINOR
 -- this backwards compatibility into each protocol message. So at the moment
 -- these protocol versions must match exactly in order for two KSK mods to
 -- talk to each other.
-ksk.protocol = 2
+--   1   - internal only (version check)
+--   2   - initial protocol
+--   3   - dates now in UTC seconds since epoch for history
+ksk.protocol = 3
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
@@ -187,6 +178,13 @@ ksk.CONFIG_TAB = 5
 ksk.NON_ADMIN_THRESHOLD        = ksk.USERS_TAB
 ksk.NON_ADMIN_CONFIG_THRESHOLD = ksk.CONFIG_ROLLS_PAGE
 
+-- Constants used too define the index into each table element for the loot
+-- history.
+ksk.HIST_WHEN   = 1
+ksk.HIST_WHAT   = 2
+ksk.HIST_WHO    = 3
+ksk.HIST_HOW    = 4
+
 -- Whether or not we are actually in a raid. This is set via a callback from
 -- KKoreParty (IN_GROUP_CHANGED). If we are in a group this will be non-nil.
 -- If we are not in a group it will always be nil, but only for the master
@@ -227,7 +225,7 @@ ksk.settings = nil
 -- class number (for example K.CLASS_DRUID) of the missing player. These are
 -- set to 0 and nil respectively when not in a raid.
 ksk.nmissing = 0
-ksk.missing = nil
+ksk.missing = {}
 
 -- Cached session data. This is a table, with one entry per defined config in
 -- the config file, and stores convenience data frequently accessed from each
@@ -319,12 +317,12 @@ end
 
 local function err(msg, ...)
   local str = L["MODTITLE"] .. " " .. L["error: "] .. strfmt(msg, ...)
-  K.printf(K.ecolor, "%s", str)
+  printf(ecolor, "%s", str)
 end
 
 local function info(msg, ...)
   local str = L["MODTITLE"] .. ": " .. strfmt(msg, ...)
-  K.printf(K.icolor, "%s", str)
+  printf(icolor, "%s", str)
 end
 
 ksk.debug = debug
@@ -343,11 +341,6 @@ ksk.shortaclass = KRP.ShortAlwaysClassString
 
 local white = K.white
 local class = KRP.ClassString 
-local shortclass = KRP.ShortClassString 
-local aclass = KRP.AlwaysClassString
-local shortaclass = KRP.ShortAlwaysClassString
-
-ksk.TimeStamp = KK.TimeStamp
 
 -- cfg is known to be valid before this is called
 local function get_my_ids(cfg)
@@ -437,20 +430,12 @@ end
 local ts_datebase = nil
 local ts_evtcount = 0
 
-local function get_server_base_time()
-  local tDate = date("*t")
-  local mo = tDate["month"]
-  local d = tDate["day"]
-  local y = tDate["year"]
-  local h, m = GetGameTime()
-  return strfmt("%02d%02d%02d%02d%02d0000", y-2000, mo, d, h, m)
-end
-
 function ksk.GetEventID(cfg)
   local cfg = cfg or ksk.currentid
 
   if (not ts_datebase or ts_evtcount >= 9999) then
-    ts_datebase = tonumber(get_server_base_time())
+    local now = K.time()
+    ts_datebase = tonumber(date("%y%m%d%H%M", now) .. "0000")
     ts_evtcount = 0
     while ((ts_datebase + ts_evtcount) < (ksk.configs[cfg].lastevent or 0)) do
       ts_evtcount = ts_evtcount + 100
@@ -758,7 +743,7 @@ local function ksk_createuser(input)
 
   local lclass = strlower(nclass)
   for k,v in pairs(K.IndexClass) do
-    if ((not v.ign) and (v.l == lclass)) then
+    if (v.l == lclass) then
       classid = k
     end
   end
@@ -766,7 +751,7 @@ local function ksk_createuser(input)
   if (not classid) then
     err(L["invalid class %q specified. Valid classes are:"], white(lclass))
     for k,v in pairs(K.IndexClass) do
-      if ((not v.ign) and v.l) then
+      if (v.l) then
         printf("    |cffffffff%s|r", v.l)
       end
     end
@@ -1231,17 +1216,6 @@ function ksk.RefreshCSData()
   end
 end
 
-function ksk.CreateNewID(strtohash)
-  local _, y, mo, d, h, m = ksk.TimeStamp()
-  local ts = strfmt("%02d%02d%02d", y-2000, mo, d)
-  local crc = H:CRC32(ts, nil, false)
-  crc = H:CRC32(tostring(h), crc, false)
-  crc = H:CRC32(tostring(m), crc, false)
-  crc = H:CRC32(strtohash, crc, true)
-  ts = ts .. K.hexstr(crc)
-  return ts
-end
-
 function ksk.CheckPerm(cfg)
   local cfg = cfg or ksk.currentid
 
@@ -1269,6 +1243,20 @@ local function update_bcast_button()
   end
 end
 
+function ksk.MakeAliases()
+  ksk.frdb = ksk.db.factionrealm
+  ksk.configs = ksk.db.factionrealm.configs
+
+  if (ksk.currentid) then
+    local cid = ksk.currentid
+    ksk.cfg = ksk.db.factionrealm.configs[cid]
+    ksk.users = ksk.db.factionrealm.configs[cid].users
+    ksk.settings = ksk.db.factionrealm.configs[cid].settings
+    ksk.lists = ksk.db.factionrealm.configs[cid].lists
+    ksk.items = ksk.db.factionrealm.configs[cid].items
+  end
+end
+
 function ksk.FullRefreshUI(reset)
   ksk.RefreshConfigUI(reset)
   ksk.RefreshListsUI(reset)
@@ -1278,11 +1266,13 @@ function ksk.FullRefreshUI(reset)
 end
 
 function ksk.FullRefresh(reset)
-  K:UpdatePlayerAndGuild(true)
+  K.UpdatePlayerAndGuild(true)
   ksk.UpdateUserSecurity()
   ksk.RefreshCSData()
-  KRP.UpdateGroup(true, true, false)
   ksk.FullRefreshUI(reset)
+  ksk.nmissing = 0
+  ksk.missing = {}
+  KRP.UpdateGroup(true, true, false)
 
   -- JKJ FIXME: this logic should move into the refresh functions above.
   local en = true
@@ -1332,7 +1322,7 @@ local function player_info_updated(evt, ...)
   end
 
   RequestRaidInfo()
-  ksk.FullRefreshUI(true)
+  ksk.FullRefreshUI(false)
 end
 
 function ksk.RefreshRaid()
@@ -1347,6 +1337,7 @@ function ksk.AddItemToBossLoot(ilink, quant, lootslot)
   local _, _, _, _, _, _, _, _, slot, _, _, icls, isubcls = GetItemInfo(ilink)
   local filt, boe = K.GetItemClassFilter(ilink)
   local ti = { itemid = itemid, ilink = ilink, slot = lootslot, quant = quant, boe = boe }
+
   if (icls == K.classfilters.weapon) then
     if (filt == K.classfilters.allclasses) then
       ti.strict = K.classfilters.weapons[isubcls]
@@ -1519,15 +1510,18 @@ local function ksk_config_admin_evt(evt, onoff, ...)
     ksk:UnregisterEvent("CHAT_MSG_WHISPER")
   end
 
+  local amef = ChatFrame_AddMessageEventFilter
+  local rmef = ChatFrame_RemoveMessageEventFilter
+
   if (onoff) then
     if (chat_filters_installed ~= true) then
       if (ksk.settings.chat_filter) then
         chat_filters_installed = true
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", whisper_filter)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER_INFORM", reply_filter)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID", reply_filter)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", reply_filter)
-        ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID_LEADER", reply_filter)
+        amef("CHAT_MSG_WHISPER", whisper_filter)
+        amef("CHAT_MSG_WHISPER_INFORM", reply_filter)
+        amef("CHAT_MSG_RAID", reply_filter)
+        amef("CHAT_MSG_GUILD", reply_filter)
+        amef("CHAT_MSG_RAID_LEADER", reply_filter)
       end
     end
   end
@@ -1535,11 +1529,11 @@ local function ksk_config_admin_evt(evt, onoff, ...)
   if (not onoff or not ksk.settings.chat_filter) then
     if (chat_filters_installed) then
       chat_filters_installed = false
-      ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER", whisper_filter)
-      ChatFrame_RemoveMessageEventFilter("CHAT_MSG_WHISPER_INFORM", reply_filter)
-      ChatFrame_RemoveMessageEventFilter("CHAT_MSG_RAID", reply_filter)
-      ChatFrame_RemoveMessageEventFilter("CHAT_MSG_GUILD", reply_filter)
-      ChatFrame_RemoveMessageEventFilter("CHAT_MSG_RAID_LEADER", reply_filter)
+      rmef("CHAT_MSG_WHISPER", whisper_filter)
+      rmef("CHAT_MSG_WHISPER_INFORM", reply_filter)
+      rmef("CHAT_MSG_RAID", reply_filter)
+      rmef("CHAT_MSG_GUILD", reply_filter)
+      rmef("CHAT_MSG_RAID_LEADER", reply_filter)
     end
   end
 end
@@ -1573,8 +1567,6 @@ end
 --
 local function krp_update_group_start(_, _, pvt, ...)
   pvt.users = {}
-  ksk.missing = {}
-  ksk.nmissing = 0
 end
 
 local function update_denchers()
@@ -1614,6 +1606,10 @@ end
 -- player is unique to the current config.
 --
 local function krp_new_player(_, _, pvt, player)
+  if (ksk.suspended) then
+    return
+  end
+
   local nm = player.name
   local unkuser = nil
 
@@ -1694,7 +1690,7 @@ local function in_group_changed_evt(evt, in_party, in_raid, in_bg)
   else
     ksk.group = nil
     ksk.nmissing = 0
-    ksk.missing = nil
+    ksk.missing = {}
     ksk.RefreshListsUIForRaid(false)
     ksk.qf.addmissing:SetEnabled(false)
     ksk.ResetBossLoot()

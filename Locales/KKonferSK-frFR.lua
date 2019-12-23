@@ -94,7 +94,7 @@ L["AUTOSUICIDE"] = "Si vous d\195\169cidez de d\195\169cerner cet objet \195\160
 L["AUTOLOOT"] = "Cet objet a \195\169t\195\169 gagn\195\169 par %s. CLiquez sur 'Ok' pour attribuer automatiquement l'objet \195\160 %s. Si vous cliquez sur 'Annuler', l'objet sera tout de m\195\170me supprim\195\169 de la liste, et vous aurez \195\160 l'attribuer \195\160 %s via l'interface joueur standard."
 L["AUTODENCH"] = "Cet objet n'a pas de 'parieurs' L'enchanteur %q est connect\195\169 et dans le raid. Cliquez sur 'Ok' pour attribuer l'objet \195\160 %s. Cliquez sur 'Annuler' si vous voulez attribuer l'objet manuellement ou le rendre disponible au rand (l'objet restera dans la liste si cliquez sur 'Annuler')."
 L["AUTODENCHNR"] = "Personne n'a rand sur cet objet. L'enchanteur %q est connect\195\169 et dans le raid. Cliquez sur 'Ok' pour attribuer l'objet \195\160 %s. Cliquez sur 'Annuler' si vous souhaitez attribuer cet objet manuellement (l'objet sera supprim\195\169 de la liste mais pas du cadavre ou du coffre)."
-L["PUGCONFIG"] = "Le joueur %q a \195\169mis la configuration pick-up ci-dessus. S'il s'agit d'un groupe pick-up r\195\169gulier qui utilise %s pour administrer les loots, et si vous souhaitez garder la trace de tous les loots, les listes et membres, cliquez sur 'Ok' pour accepter et cr\195\169er cette configuration (vous ne recevrez pas d'autres confirmations pour cette configuration). Si vous d\195\169cidez de ne pas accepter cette diffusion, cliquez sur 'Annuler' (vous verrez cependant ce message chaque fois que le raid leader diffuse cette configuration)."
+L["PUGCONFIG"] = "Le joueur %q a \195\169mis la configuration pick-up ci-dessus. S'il s'agit d'un groupe r\195\169gulier qui utilise %s pour administrer les loots, et si vous souhaitez garder la trace de tous les loots, les listes et membres, cliquez sur 'Ok' pour accepter et cr\195\169er cette configuration (vous ne recevrez pas d'autres confirmations pour cette configuration). Si vous d\195\169cidez de ne pas accepter cette diffusion, cliquez sur 'Annuler' (vous verrez cependant ce message chaque fois que le raid leader diffuse cette configuration)."
 L["LISTPOSMSG"] = "%s : Ci-dessous se trouvent vos places dans la configuration %q. Au lieu d'utiliser cette commande, pourquoi ne pas t\195\169l\195\169charger %s et garder la trace des listes utilisant cet add-on ?"
 L["RECOVERMSG"] = "Vous \195\170tes le possesseur de cette configuration et avez demand\195\169 une restauration depuis le joueur %q. Sachez que pour que la restauration fonctionne, %s doit \195\170tre enti\195\168rement synchronis\195\169 avec tous les autres administrateurs. Si vous lancez cette restauration, vous effacerez toute votre configuration (mais pas vos param\195\168tres locaux), dont les listes, joueurs, objets et historiques de loot. Proc\195\169der \195\160 une restauration doit \195\170tre le dernier recours pour faire face \195\160 une configuration corrompue. Si vous n'avez pas fait de back-up de votre fichier existant savedvariables, vous devriez d'abord fermer le jeu compl\195\168tement et le faire maintenant. Soyez vraiment s\195\187r que c'est ce que vous souhaitez faire. C'est une mesure radicale."
 
@@ -202,7 +202,7 @@ L["Reset"] = "Reset"
 L["Select"] = "S\195\169lectionner"
 L["Config Owner"] = "Possesseur de config"
 L["Alts Tethered to Mains"] = "Rerolls attach\195\169s aux mains"
-L["cannot delete configuration %q - KonferSK requires at least one configuration."] = "Impossible de supprimer la configuration %q - KonferSK n\195\169cessite au moins une configuration."
+L["cannot delete configuration %q - %s requires at least one configuration."] = "Impossible de supprimer la configuration %q - %s n\195\169cessite au moins une configuration."
 L["configuration %q deleted."] = "Configuration %q supprim\195\169e."
 L["user %q deleted."] = "joueur %q supprim\195\169."
 L["roll list %q deleted."] = "Liste %q supprim\195\169e."
@@ -463,6 +463,8 @@ L["users not on the %q list: %s"] = "joueurs qui ne sont pas sur la liste %q : %
 L["User Search"] = "Rechercher un joueur"
 L["Edit Officer Ranks"] = "Edit Officer Ranks"
 L["Set Guild Officer Ranks"] = "Set Guild Officer Ranks"
+L["Main Spec Roll"] = true
+L["Off Spec Roll"] = true
 
 --
 -- Tooltip text.

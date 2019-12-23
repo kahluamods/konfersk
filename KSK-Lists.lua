@@ -32,35 +32,25 @@ local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
 local KRP = ksk.KRP
+local KK = ksk.KK
 local MakeFrame = KUI.MakeFrame
 
 -- Local aliases for global or Lua library functions
 local _G = _G
 local tinsert = table.insert
 local tremove = table.remove
-local setmetatable = setmetatable
 local tconcat = table.concat
 local tsort = table.sort
-local tostring = tostring
-local GetTime = GetTime
-local min = math.min
-local max = math.max
+local tostring, tonumber = tostring, tonumber
 local strfmt = string.format
-local strsub = string.sub
 local strgsub = string.gsub
 local strlen = string.len
 local strfind = string.find
 local strsplit = string.split
-local xpcall, pcall = xpcall, pcall
-local pairs, next, type = pairs, next, type
-local select, assert, loadstring = select, assert, loadstring
+local pairs, ipairs = pairs, ipairs
+local assert = assert 
 local strlower = string.lower
-local printf = K.printf
 
-local ucolor = K.ucolor
-local ecolor = K.ecolor
-local icolor = K.icolor
-local debug = ksk.debug
 local info = ksk.info
 local err = ksk.err
 local white = ksk.white
@@ -68,6 +58,7 @@ local class = ksk.class
 local shortclass = ksk.shortclass
 local aclass = ksk.aclass
 local shortaclass = ksk.shortaclass
+local debug = ksk.debug
 
 local members = nil
 local current_list = nil
@@ -105,7 +96,7 @@ end
 
 --
 -- linfo is needed because we don't save changes to the data immediately, we
--- wait for teh user to be done and then press the "Update" button. If we made
+-- wait for the user to be done and then press the "Update" button. If we made
 -- the changes directly in each onclick handler we wouldn't need this, but
 -- then we would need to send out a change event for every change. This way we
 -- batch up all changes into one event.
@@ -221,15 +212,24 @@ end
 local function rlist_setenabled(onoff)
   local onoff = onoff or false
 
-  if (not qf.listconf) then
-    return
+  if (qf.listconf) then
+    qf.listconf.sortorder:SetEnabled(onoff)
+    qf.listconf.cfilter:SetEnabled(onoff)
+    qf.listconf.rfilter:SetEnabled(onoff)
+    qf.listconf.slistdd:SetEnabled(onoff)
+    qf.insert:SetEnabled(onoff)
   end
 
-  qf.listconf.sortorder:SetEnabled(onoff)
-  qf.listconf.cfilter:SetEnabled(onoff)
-  qf.listconf.rfilter:SetEnabled(onoff)
-  qf.listconf.slistdd:SetEnabled(onoff)
-  qf.insert:SetEnabled(onoff)
+  onoff = onoff and ksk.csd.is_admin
+  if (qf.listcfgbuttons) then
+    qf.listcfgbuttons.createbutton:SetEnabled(onoff)
+    qf.listcfgbuttons.deletebutton:SetEnabled(onoff)
+    qf.listcfgbuttons.renamebutton:SetEnabled(onoff)
+    qf.listcfgbuttons.copybutton:SetEnabled(onoff)
+    qf.listcfgbuttons.importbutton:SetEnabled(onoff)
+    qf.listcfgbuttons.exportbutton:SetEnabled(onoff)
+    qf.listcfgbuttons.addmissingbutton:SetEnabled(onoff)
+  end
 end
 
 local function rlist_selectitem(objp, idx, slot, btn, onoff)
@@ -238,6 +238,9 @@ local function rlist_selectitem(objp, idx, slot, btn, onoff)
   hide_popup()
   rlist_setenabled(onoff and ksk.csd.is_admin)
 
+  if (qf.listcfgbuttons) then
+    qf.listcfgbuttons.createbutton:SetEnabled(ksk.csd.is_admin ~= nil)
+  end
   if (onoff) then
     current_listid = ksk.sortedlists[idx].id
     current_list = ksk.lists[current_listid]
@@ -396,7 +399,7 @@ local function create_list_button()
   local box
 
   if (not newlistdlg) then
-    newlistdlg, box = ksk.SingleStringInputDialog("KSKSetupNewList",
+    newlistdlg, box = K.SingleStringInputDialog(ksk, "KSKSetupNewList",
       L["Create Roll List"], L["NEWLIST"], 400, 175)
 
     local function verify_with_create(objp, val)
@@ -465,7 +468,7 @@ local function rename_list_button(lid)
     return false
   end
 
-  ksk.RenameDialog(L["Rename Roll List"], L["Old Name"],
+  K.RenameDialog(ksk, L["Rename Roll List"], L["Old Name"],
     ksk.lists[lid].name, L["New Name"], 32, rename_helper,
     lid, true)
 end
@@ -496,7 +499,7 @@ local function copy_list_button(lid)
     return false
   end
 
-  ksk.RenameDialog(L["Copy Roll List"], L["Source List"],
+  K.RenameDialog(ksk, L["Copy Roll List"], L["Source List"],
     ksk.lists[lid].name, L["Destination List"], 32, copy_helper,
     lid, true)
 end
@@ -535,7 +538,7 @@ local function insert_member(btn)
     local anm = ksk.users[a.value].name
     local bnm = ksk.users[b.value].name
 
-    if (KRP.in_raid) then
+    if (KRP.in_either) then
       local air = KRP.players[anm] and true or false
       local bir = KRP.players[bnm] and true or false
       if (air and not bir) then
@@ -584,7 +587,7 @@ local function insert_member(btn)
   end
 
   if (not insert_popup) then
-    insert_popup = ksk.PopupSelectionList("KSKInsertMemberPopup",
+    insert_popup = K.PopupSelectionList(ksk, "KSKInsertMemberPopup",
       ulist, nil, 205, 300, ksk.mainwin.tabs[ksk.LISTS_TAB].content, 16,
       pop_func, 20, 20)
     local arg = {
@@ -994,13 +997,11 @@ local function export_list_button()
       end
 
       local function final_xml_string()
-        local _, mo, dy, yr = CalendarGetDate()
-        local hh, mm = GetGameTime()
-        local dstr = strfmt("%04d-%02d-%02d", yr, mo, dy)
-        local tstr = strfmt("%02d:%02d", hh, mm)
+        local dstr = K.YMDStamp()
+        local tstr = K.HMStamp()
         local cs = ""
         for k,v in pairs(K.IndexClass) do
-          if (v.u and not v.ign) then
+          if (v.u) then
             cs = cs .. strfmt("<c id=%q v=%q/>", tostring(k), strlower(tostring(v.u)))
           end
         end
@@ -1008,10 +1009,8 @@ local function export_list_button()
       end
 
       local function final_bbcode_string()
-        local _, mo, dy, yr = CalendarGetDate()
-        local hh, mm = GetGameTime()
-        local dstr = strfmt("%04d-%02d-%02d", yr, mo, dy)
-        local tstr = strfmt("%02d:%02d", hh, mm)
+        local dstr = K.YMDStamp()
+        local tstr = K.HMStamp()
         thestring = strfmt("[center][b]KSK Lists as of %s %s[/b][/center]\n", dstr, tstr) .. lststring
       end
 
@@ -1897,7 +1896,7 @@ function ksk.CreateNewList(name, cfg, myid, nocmd)
     return true
   end
 
-  local newkey = myid or ksk.CreateNewID(name)
+  local newkey = myid or KK.CreateNewID(name)
   ksk.configs[cfg].lists[newkey] = {}
   local rl = ksk.configs[cfg].lists[newkey]
 
@@ -1954,15 +1953,15 @@ function ksk.DeleteList(listid, cfgid, nocmd)
     end
   end
 
-  for k,v in pairs(ksk.items) do
+  for k,v in pairs(ksk.configs[cfg].items) do
     if (v.nextdrop and v.nextdrop.suicide == listid) then
-      ksk.items[k].nextdrop.suicide = nil
+      ksk.configs[cfg].items[k].nextdrop.suicide = nil
     end
     if (v.list and v.list == listid) then
-      ksk.items[k].list = nil
+      ksk.configs[cfg].items[k].list = nil
     end
     if (v.suicide and v.suicide == listid) then
-      ksk.items[k].suicide = nil
+      ksk.configs[cfg].items[k].suicide = nil
     end
   end
 
@@ -1992,7 +1991,7 @@ function ksk.DeleteListCmd(listid, show, cfg)
   local isshown = show or ksk.mainwin:IsShown()
   ksk.mainwin:Hide()
 
-  ksk.ConfirmationDialog(L["Delete Roll List"], L["DELLIST"],
+  K.ConfirmationDialog(ksk, L["Delete Roll List"], L["DELLIST"],
     ksk.configs[cfg].lists[listid].name, real_delete_list,
     { cfg=cfg, listid=listid}, isshown, 190)
 
@@ -2045,8 +2044,8 @@ function ksk.CopyList(listid, newname, cfg, myid, nocmd)
     return true
   end
 
-  local src = ksk.lists[listid]
-  local dst = ksk.lists[cid]
+  local src = ksk.configs[cfg].lists[listid]
+  local dst = ksk.configs[cfg].lists[cid]
 
   dst.sortorder = src.sortorder
   dst.strictcfilter = src.strictcfilter
@@ -2321,4 +2320,3 @@ function ksk.RefreshAllMemberLists(listid, notus)
   -- Refresh the loot distribution's member list.
   ksk.RefreshLootMembers(listid)
 end
-

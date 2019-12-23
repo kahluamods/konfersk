@@ -26,10 +26,10 @@ local K = LibStub:GetLibrary("KKore")
 local H = LibStub:GetLibrary("KKoreHash")
 
 if (not K) then
-  error ("KahLua KonferSK: could not find KahLua Kore.", 2)
+  error("KahLua KonferSK: could not find KahLua Kore.", 2)
 end
 
-local ksk = K:GetAddon ("KKonferSK")
+local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
 local DB = ksk.DB
@@ -38,34 +38,15 @@ local DB = ksk.DB
 local _G = _G
 local tinsert = table.insert
 local tremove = table.remove
-local setmetatable = setmetatable
-local tconcat = table.concat
-local tsort = table.sort
-local tostring = tostring
-local GetTime = GetTime
-local min = math.min
-local max = math.max
+local tonumber = tonumber
 local strfmt = string.format
 local strsub = string.sub
+local gmatch = string.gmatch
 local gsub = string.gsub
-local strlen = string.len
 local strfind = string.find
-local strlower = string.lower
-local xpcall, pcall = xpcall, pcall
-local pairs, next, type = pairs, next, type
-local select, assert, loadstring = select, assert, loadstring
-local printf = K.printf
+local pairs, ipairs = pairs, ipairs
 local bxor = bit.bxor
-
-local ucolor = K.ucolor
-local ecolor = K.ecolor
-local icolor = K.icolor
 local debug = ksk.debug
-local info = ksk.info
-local err = ksk.err
-local white = ksk.white
-local class = ksk.class
-local aclass = ksk.aclass
 
 --
 -- This file contains general purpose utility functions used throughout KSK.
@@ -99,17 +80,17 @@ end
 -- If we have tethered alts, and the alt is in the raid, we need to store
 -- the UID of the alt's main, else they will not be suicided.
 --
-function ksk.CreateRaidList (listid)
+function ksk.CreateRaidList(listid)
   local raiders = {}
-  for k,v in ipairs (ksk.lists[listid].users) do
-    if (ksk.UserIsReserved (v)) then
-      tinsert (raiders, v)
+  for k,v in ipairs(ksk.lists[listid].users) do
+    if (ksk.UserIsReserved(v)) then
+      tinsert(raiders, v)
     elseif (ksk.group.users[v]) then
-      tinsert (raiders, v)
+      tinsert(raiders, v)
     elseif (ksk.cfg.tethered and ksk.users[v].alts) then
-      for ak,av in pairs (ksk.users[v].alts) do
+      for ak,av in pairs(ksk.users[v].alts) do
         if (ksk.group.users[av]) then
-          tinsert (raiders, v)
+          tinsert(raiders, v)
           break
         end
       end
@@ -118,10 +99,10 @@ function ksk.CreateRaidList (listid)
   return raiders
 end
 
-function ksk.SplitRaidList (raidlist)
+function ksk.SplitRaidList(raidlist)
   local raiders = {}
-  for w in string.gmatch (raidlist, "....") do
-    tinsert (raiders, w)
+  for w in gmatch(raidlist, "....") do
+    tinsert(raiders, w)
   end
   return raiders
 end
@@ -150,7 +131,7 @@ end
 -- suicided is themselves frozen, we simply pretend that they are not, and
 -- move them to the bottom of the list.
 --
-function ksk.SuicideUserLowLevel (listid, rlist, uid, cfgid, ilink)
+function ksk.SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
   cfgid = cfgid or ksk.currentid
 
   if (not ksk.configs[cfgid]) then
@@ -197,8 +178,8 @@ function ksk.SuicideUserLowLevel (listid, rlist, uid, cfgid, ilink)
         foundfirst = true
       end
       if (foundfirst) then
-        if (lu[i] == uid or not ksk.UserIsFrozen (lu[i], nil, cfgid)) then
-          tinsert (movers, i)
+        if (lu[i] == uid or not ksk.UserIsFrozen(lu[i], nil, cfgid)) then
+          tinsert(movers, i)
         end
       end
     end
@@ -231,8 +212,8 @@ function ksk.SuicideUserLowLevel (listid, rlist, uid, cfgid, ilink)
       return
     end
     for i = p+1, #lu do
-      if (not ksk.UserIsFrozen (lu[i], nil, cfgid)) then
-        tinsert (movers, i)
+      if (not ksk.UserIsFrozen(lu[i], nil, cfgid)) then
+        tinsert(movers, i)
       end
     end
   end
@@ -250,19 +231,19 @@ function ksk.SuicideUserLowLevel (listid, rlist, uid, cfgid, ilink)
   if (not ksk.csdata[cfgid].undo) then
     ksk.csdata[cfgid].undo = {}
   end
-  tinsert (ksk.csdata[cfgid].undo, 1, undo)
+  tinsert(ksk.csdata[cfgid].undo, 1, undo)
   if (ksk.AmIML() and cfgid == ksk.currentid) then
-    ksk.qf.undobutton:SetEnabled (true)
+    ksk.qf.undobutton:SetEnabled(true)
   end
   local nmove = undo.n - 1
   for i = 1, nmove do
     lu[movers[i]] = lu[movers[i+1]]
   end
   lu[movers[nmove+1]] = uid
-  ksk.RefreshAllMemberLists ()
+  ksk.RefreshAllMemberLists()
 end
 
-function ksk.AddEvent (cfgid, event, estr, ufn)
+function ksk.AddEvent(cfgid, event, estr, ufn)
   local cfgid = cfgid or ksk.currentid
 
   --
@@ -288,25 +269,25 @@ function ksk.AddEvent (cfgid, event, estr, ufn)
   -- Those that are not online will simply have the event queued for when
   -- they are. Pretty simple really.
   --
-  local crc = H:CRC32 (estr)
+  local crc = H:CRC32(estr)
   local oldsum = cfg.cksum
-  local newsum = bxor (oldsum, crc)
+  local newsum = bxor(oldsum, crc)
   local oldeid = cfg.lastevent
-  local eid = ksk.GetEventID (cfgid)
-  local scrc = strfmt ("0x%s", K.hexstr (crc))
+  local eid = ksk.GetEventID(cfgid)
+  local scrc = strfmt("0x%s", K.hexstr(crc))
 
   cfg.cksum = newsum
   if (ksk.qf.synctopbar) then
-    ksk.qf.synctopbar:SetCurrentCRC ()
+    ksk.qf.synctopbar:SetCurrentCRC()
   end
 
   if (cfg.syncing) then
-    for k,v in pairs (cfg.admins) do
+    for k,v in pairs(cfg.admins) do
       if (k ~= myuid) then
         if (not v.sync) then
           v.sync = {}
         end
-        tinsert (v.sync, strfmt ("%s\8%014.0f\8%s\8%s", event, eid, scrc, estr))
+        tinsert(v.sync, strfmt("%s\8%014.0f\8%s\8%s", event, eid, scrc, estr))
       end
     end
   end
@@ -314,7 +295,7 @@ function ksk.AddEvent (cfgid, event, estr, ufn)
   ksk:CSendAM(cfgid, event, "ALERT", estr, scrc, eid, oldeid, ufn or false)
 end
 
-function ksk.RepairDatabases (users, lists)
+function ksk.RepairDatabases(users, lists)
   if (users == nil) then
     users = true
   end
@@ -326,7 +307,7 @@ function ksk.RepairDatabases (users, lists)
   -- themselves. This means they have co-admins badly configured and they
   -- have an alt on the same account that has written sync data.
   ksk.frdb.nconfigs = 0
-  for k,v in pairs (ksk.frdb.configs) do
+  for k,v in pairs(ksk.frdb.configs) do
     ksk.frdb.nconfigs = ksk.frdb.nconfigs + 1
     local to = v.owner
     if (v.admins[to]) then
@@ -337,25 +318,25 @@ function ksk.RepairDatabases (users, lists)
   end
 
   if (users) then
-    for k,v in pairs (ksk.frdb.configs) do
+    for k,v in pairs(ksk.frdb.configs) do
       -- First remove any alts whose main was removed
-      for uk, uv in pairs (v.users) do
+      for uk, uv in pairs(v.users) do
         if (uv.main and not v.users[uv.main]) then
-          ksk.DeleteUser (uk, k, false, true)
+          ksk.DeleteUser(uk, k, false, true)
         end
       end
       -- Now calculate the correct number of users
       v.nusers = 0
-      for uk, uv in pairs (v.users) do
+      for uk, uv in pairs(v.users) do
         v.nusers = v.nusers + 1
       end
     end
   end
 
   if (lists) then
-    for k,v in pairs (ksk.frdb.configs) do
+    for k,v in pairs(ksk.frdb.configs) do
       v.nlists = 0
-      for lk,lv in pairs (v.lists) do
+      for lk,lv in pairs(v.lists) do
         v.nlists = v.nlists + 1
         if (not lv.sortorder) then
           lv.sortorder = 1
@@ -373,14 +354,14 @@ function ksk.RepairDatabases (users, lists)
           lv.users = {}
           lv.nusers = 0
         end
-        if (strfind (lv.name, ":")) then
-          lv.name = gsub (lv.name, ":", "-")
+        if (strfind(lv.name, ":")) then
+          lv.name = gsub(lv.name, ":", "-")
         end
         local lui = 1
         while (lui <= #lv.users) do
           local uid = lv.users[lui]
           if (not v.users[uid]) then
-            tremove (lv.users, lui)
+            tremove(lv.users, lui)
           else
             lui = lui + 1
           end
@@ -391,7 +372,7 @@ function ksk.RepairDatabases (users, lists)
   end
 end
 
-function ksk.UpdateDatabaseVersion ()
+function ksk.UpdateDatabaseVersion()
   local ret = false
 
   if (not ksk.frdb.dbversion) then
@@ -402,13 +383,28 @@ function ksk.UpdateDatabaseVersion ()
   if (ksk.frdb.dbversion == 1) then
     --
     -- Version 2 removed the "guild" config type. Find all such configs
-    -- and remove the cfgtype from the config.
+    -- and remove the cfgtype from the config. We also changed the storage
+    -- format of the history items.
     --
-    for k,v in pairs (ksk.frdb.configs) do
+    for k,v in pairs(ksk.frdb.configs) do
       v.cfgtype = nil
-      v.def_rank = nil
-      v.use_ranks = nil
-      v.rank_prio = nil
+      v.settings.def_rank = nil
+      v.settings.use_ranks = nil
+      v.settings.rank_prio = nil
+      local newhist = {}
+      for kk,vv in pairs(v.history) do
+        local when,what,who,how = strsplit("\7", vv)
+        local otm = {}
+        otm.year = tonumber(strsub(when, 1, 4))
+        otm.month = tonumber(strsub(when, 5,6))
+        otm.day = tonumber(strsub(when, 7, 8))
+        otm.hour = tonumber(strsub(when, 9, 10))
+        otm.min = tonumber(strsub(when, 11, 12))
+        otm.sec = 0
+        when = time(otm) - K.utcdiff
+        tinsert(newhist, { tonumber(when), what, who, how })
+      end
+      v.history = newhist
     end
     ret = true
   end
@@ -416,8 +412,8 @@ function ksk.UpdateDatabaseVersion ()
   --
   -- Fix a potential error with co-admins
   --
-  for k,v in pairs (ksk.frdb.configs) do
-    for kk,vv in pairs (v.admins) do
+  for k,v in pairs(ksk.frdb.configs) do
+    for kk,vv in pairs(v.admins) do
       if (vv.active == true) then
         if (vv.lastevent == nil) then
           vv.lastevent = 0

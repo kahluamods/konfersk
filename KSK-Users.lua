@@ -36,27 +36,14 @@ local MakeFrame = KUI.MakeFrame
 local _G = _G
 local tinsert = table.insert
 local tremove = table.remove
-local setmetatable = setmetatable
-local tconcat = table.concat
 local tsort = table.sort
-local tostring = tostring
-local GetTime = GetTime
-local min = math.min
-local max = math.max
+local tostring, tonumber = tostring, tonumber
 local strfmt = string.format
-local strsub = string.sub
-local strlen = string.len
 local strfind = string.find
 local strlower = string.lower
-local xpcall, pcall = xpcall, pcall
-local pairs, next, type = pairs, next, type
-local select, assert, loadstring = select, assert, loadstring
-local printf = K.printf
+local pairs, ipairs, next = pairs, ipairs, next
+local assert = assert
 
-local ucolor = K.ucolor
-local ecolor = K.ecolor
-local icolor = K.icolor
-local debug = ksk.debug
 local info = ksk.info
 local err = ksk.err
 local white = ksk.white
@@ -70,6 +57,11 @@ local seluser = nil
 local umemlist = nil
 local uinfo = {}
 local qf = {}
+
+local HIST_WHEN = ksk.HIST_WHEN
+local HIST_WHAT = ksk.HIST_WHAT
+local HIST_WHO = ksk.HIST_WHO
+local HIST_HOW = ksk.HIST_HOW
 
 --
 -- This file contains all of the UI handling code for the users panel,
@@ -287,7 +279,7 @@ local function rename_user_button(uid)
     return false
   end
 
-  ksk.RenameDialog(L["Rename User"], L["Old Name"],
+  K.RenameDialog(ksk, L["Rename User"], L["Old Name"],
     ksk.users[uid].name, L["New Name"], 48, rename_helper,
     uid, true)
 end
@@ -430,7 +422,7 @@ local function select_main(btn, lbl)
   end
 
   if (not selmain_popup) then
-    selmain_popup = ksk.PopupSelectionList("KSKMainSelPopup", ulist,
+    selmain_popup = K.PopupSelectionList(ksk, "KSKMainSelPopup", ulist,
       nil, 205, 400, ksk.mainwin.tabs[ksk.USERS_TAB].content, 16, pop_func,
       nil, 20)
     local arg = {
@@ -1307,11 +1299,9 @@ function ksk.DeleteUser(uid, cfgid, alts, nocmd)
     -- displayed correctly.
     --
     local nwhostr = lcp.users[userid].name .. "/" .. lcp.users[userid].class
-    for k,v in pairs(lcp.history) do
-      local when,what,who,how = strsplit("\7", v)
-      if (who == userid) then
-        who = nwhostr
-        lcp.history[k] = strfmt("%s\7%s\7%s\7%s", when, what, who, how)
+    for k,v in ipairs(lcp.history) do
+      if (v[HIST_WHO] == userid) then
+        v[HIST_WHO] = nwhostr
         refreshhistory = true
       end
     end
@@ -1392,7 +1382,7 @@ function ksk.DeleteUserCmd(userid, show, cfg)
   if (ksk.configs[cfg].users[userid].alts) then
     alts = L["Delete All Alts of User"]
   end
-  ksk.ConfirmationDialog(L["Delete User"], L["DELUSER"],
+  K.ConfirmationDialog(ksk, L["Delete User"], L["DELUSER"],
     ksk.configs[cfg].users[userid].name, confirm_delete_user,
     { uid=userid, cfg=cfg }, isshown, 210, alts)
 

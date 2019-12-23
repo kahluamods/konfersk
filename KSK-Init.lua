@@ -32,32 +32,7 @@ local L = ksk.L
 local KUI = ksk.KUI
 local MakeFrame = KUI.MakeFrame
 
--- Local aliases for global or Lua library functions
 local _G = _G
-local tinsert = table.insert
-local tremove = table.remove
-local setmetatable = setmetatable
-local tconcat = table.concat
-local tsort = table.sort
-local tostring = tostring
-local GetTime = GetTime
-local min = math.min
-local max = math.max
-local strfmt = string.format
-local strsub = string.sub
-local strlen = string.len
-local strfind = string.find
-local xpcall, pcall = xpcall, pcall
-local pairs, next, type = pairs, next, type
-local select, assert, loadstring = select, assert, loadstring
-local printf = K.printf
-
-local ucolor = K.ucolor
-local ecolor = K.ecolor
-local icolor = K.icolor
-local debug = ksk.debug
-local info = ksk.info
-local err = ksk.err
 
 --
 -- This file contains all of the UI initialisation code for KahLua KonferSK.

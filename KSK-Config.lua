@@ -31,36 +31,24 @@ end
 local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
+local KK = ksk.KK
 local MakeFrame = KUI.MakeFrame
 
 -- Local aliases for global or LUA library functions
 local _G = _G
 local tinsert = table.insert
-local tremove = table.remove
-local setmetatable = setmetatable
 local tconcat = table.concat
 local tsort = table.sort
-local tostring = tostring
 local strlower = string.lower
-local GetTime = GetTime
-local min = math.min
-local max = math.max
 local strfmt = string.format
 local strsub = string.sub
 local strlen = string.len
 local strfind = string.find
-local xpcall, pcall = xpcall, pcall
-local pairs, next, type = pairs, next, type
-local select, assert, loadstring = select, assert, loadstring
+local pairs, ipairs, next = pairs, ipairs, next
+local assert = assert
 
-local printf = K.printf
-local ucolor = K.ucolor
-local ecolor = K.ecolor
-local icolor = K.icolor
 local white = ksk.white
-local class = ksk.class
 local aclass = ksk.aclass
-local debug = ksk.debug
 local info = ksk.info
 local err = ksk.err
 
@@ -93,7 +81,7 @@ local sortedadmins = nil
 local newcfgdlg = nil
 local copycfgdlg = nil
 local coadmin_popup = nil
-local silent_delete = false
+local silent_delete = nil
 
 local qf = {}
 
@@ -270,7 +258,7 @@ local function new_space_button()
   local box
 
   if (not newcfgdlg) then
-    newcfgdlg, box = ksk.SingleStringInputDialog("KSKSetupNewSpace",
+    newcfgdlg, box = K.SingleStringInputDialog(ksk, "KSKSetupNewSpace",
       L["Create Configuration"], L["NEWMSG"], 400, 165)
 
     local function verify_with_create(objp, val)
@@ -321,9 +309,9 @@ local function rename_space_button(cfgid)
     return false
   end
 
-  ksk.RenameDialog(L["Rename Configuration"], L["Old Name"],
+  K.RenameDialog(ksk, L["Rename Configuration"], L["Old Name"],
     ksk.frdb.configs[cfgid].name, L["New Name"], 32, rename_helper,
-    cfgid, true)
+    cfgid, true, ksk.mainwin)
 end
 
 local function copy_space_button(cfgid, newname, newid, shown)
@@ -750,7 +738,7 @@ local function select_dencher(btn, lbl, num)
   end
 
   if (not dencher_popup) then
-    dencher_popup = ksk.PopupSelectionList("KSKDencherPopup",
+    dencher_popup = K.PopupSelectionList(ksk, "KSKDencherPopup",
       ulist, L["Select Enchanter"], 225, 400, btn, 16, 
       function(idx) pop_func(idx) end)
   end
@@ -1294,7 +1282,7 @@ function ksk.InitialiseConfigUI()
   --
   arg = {
     x = 0, y = 0, name = "KSKConfigOWnerDD", itemheight = 16,
-    dwidth = 125, mode = "SINGLE", items = KUI.emptydropdown,
+    dwidth = 150, mode = "SINGLE", items = KUI.emptydropdown,
     label = { pos = "LEFT", text = L["Config Owner"] },
     tooltip = { title = "$$", text = L["TIP023"] },
   }
@@ -1397,7 +1385,7 @@ function ksk.InitialiseConfigUI()
     end
 
     if (not coadmin_popup) then
-      coadmin_popup = ksk.PopupSelectionList("KSKCoadminAddPopup",
+      coadmin_popup = K.PopupSelectionList(ksk, "KSKCoadminAddPopup",
         ulist, L["Select Co-admin"], 200, 400, this, 16, pop_func)
     else
       coadmin_popup:UpdateList(ulist)
@@ -1478,7 +1466,7 @@ end
 
 function ksk.DeleteConfig(cfgid, show, private)
   if (ksk.frdb.nconfigs == 1 and not private) then
-    err(L["cannot delete configuration %q - KonferSK requires at least one configuration."], white(ksk.frdb.configs[cfgid].name))
+    err(L["cannot delete configuration %q - %s requires at least one configuration."], white(ksk.frdb.configs[cfgid].name), L["MODTITLE"])
     return true
   end
 
@@ -1493,7 +1481,7 @@ function ksk.DeleteConfig(cfgid, show, private)
   local isshown = show or ksk.mainwin:IsShown()
   ksk.mainwin:Hide()
 
-  ksk.ConfirmationDialog(L["Delete Configuration"], L["DELMSG"],
+  K.ConfirmationDialog(ksk, L["Delete Configuration"], L["DELMSG"],
     ksk.frdb.configs[cfgid].name, real_delete_config, cfgid, isshown)
 
   return false
@@ -1520,7 +1508,7 @@ function ksk.CreateNewConfig(name, initial, nouser, mykey)
   if (mykey) then
     newkey = mykey
   else
-    newkey = ksk.CreateNewID(name)
+    newkey = KK.CreateNewID(name)
   end
   ksk.frdb.configs[newkey] = {}
   ksk.csdata[newkey] = {}
@@ -1549,7 +1537,7 @@ function ksk.CreateNewConfig(name, initial, nouser, mykey)
       role = 0, flags = "" }
     sp.owner = "0001"
     ksk.csdata[newkey].myuid = uid
-    ksk.info(L["configuration %q created."], white(name))
+    info(L["configuration %q created."], white(name))
     sp.nadmins = 1
     sp.admins["0001"] = { id = "0" }
   end
@@ -1563,7 +1551,7 @@ function ksk.CreateNewConfig(name, initial, nouser, mykey)
     ksk.SetDefaultConfig(newkey, true, true)
     silent_delete = true
     real_delete_config("1")
-    silent_delete = false
+    silent_delete = nil
     ksk.frdb.tempcfg = nil
   end
 
@@ -1666,16 +1654,8 @@ function ksk.SetDefaultConfig(cfgid, silent, force)
   if (ksk.frdb.defconfig ~= cfgid or force) then
     ksk.frdb.defconfig = cfgid
     ksk.currentid = cfgid
-    ksk.cfg = ksk.frdb.configs[cfgid]
 
-    if (ksk.initialised) then
-      ksk.qf.synctopbar:SetCurrentCRC()
-    end
-
-    ksk.settings = ksk.frdb.configs[cfgid].settings
-    ksk.users = ksk.frdb.configs[cfgid].users
-    ksk.lists = ksk.frdb.configs[cfgid].lists
-    ksk.items = ksk.frdb.configs[cfgid].items
+    ksk.MakeAliases()
 
     if (ksk.initialised) then
       -- If we're not initialised yet then this will just have been called.
@@ -1683,9 +1663,16 @@ function ksk.SetDefaultConfig(cfgid, silent, force)
     end
     ksk.csd = ksk.csdata[cfgid]
 
+    if (ksk.initialised) then
+      ksk.qf.synctopbar:SetCurrentCRC()
+    end
+
     ksk.sortedlists = nil
     ksk.missing = {}
     ksk.nmissing = 0
+
+    ksk.csd.warns = {}
+    ksk.csd.warns.lists = {}
 
     ksk.UpdateUserSecurity(cfgid)
 
@@ -1706,10 +1693,10 @@ function ksk.SetDefaultConfig(cfgid, silent, force)
       end
 
       if (not silent) then
-        ksk.info(L["NOTICE: default configuration changed to %q."],
+        info(L["NOTICE: default configuration changed to %q."],
           white(ksk.frdb.configs[cfgid].name))
         if (not ksk.csd.is_admin) then
-          ksk.info(L["you are not an administrator of this configuration. Your access to it is read-only."])
+          info(L["you are not an administrator of this configuration. Your access to it is read-only."])
         end
       end
     end

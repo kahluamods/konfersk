@@ -1,4 +1,4 @@
-﻿## Interface: 11302
+﻿## Interface: 11303
 ## Title: Konfer (Suicide Kings) |cffff2222-K-|r
 ## Notes: Suicide Kings loot distribution system.
 ## Notes-deDE: Suicide Kings Loot Verteilungs System.
@@ -29,7 +29,6 @@ KKonferSK.lua
 KSK-Utility.lua
 KSK-Comms.lua
 KSK-Items.lua
-KSK-Generic.lua
 KSK-Config.lua
 KSK-Users.lua
 KSK-Lists.lua

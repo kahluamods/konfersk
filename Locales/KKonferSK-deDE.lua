@@ -98,7 +98,7 @@ L["AUTOSUICIDE"] = "Wenn du entscheidest, dieses Item an %s zu vergeben, wird de
 L["AUTOLOOT"] = "Dieses Item wurde von %s gewonnen. Drücke 'OK', um das Item %s automatisch zuzuteilen. Wenn du 'Abbrechen' drückst, wird das Item trotzdem von der Loot-Liste entfernt und du musst es %s mit dem Standard User Interface zuteilen."
 L["AUTODENCH"] = "Das Item hat keine Bieter. Entzauberer %q ist online und im Raid. Drücke 'Ok' um %s das Item zuzuteilen. Drücke 'Abbrechen' wenn du das Item manuell zuweisen möchtest oder wenn du es zum Würfeln freigeben möchtest (Das Item bleibt in der Loot-Liste wenn du 'Abbrechen' drückst)."
 L["AUTODENCHNR"] = "Niemand hat auf das Item gewürfelt. Entzauberer %q ist online und im Raid. Drücke 'Ok', um %s das Item zuzuteilen. Drücke 'Abbrechen' wenn du das Item manuell zuweisen möchtest (Das Item wird von der Loot-Liste entfernt, aber nicht aus dem Leichnam oder aus der Truhe)."
-L["PUGCONFIG"] = "Spieler %q hat die oben genannte Konfiguration gesendet. Wenn dies eine normale PUG ist, die %s benutzt, um den Loot zu verwalten und du alle Loot Ereignisse, Listen und Mitglieder nachvollziehen möchtest, drücke 'OK' um zu Akzeptieren und diese Konfiguration zu erstellen (Du wirst für diese Konfiguration keine weiteren Bestätigungen bekommen). Wenn du diese Sendung nicht akzeptieren willst, drücke 'Abbrechen' (Du wirst diese Nachricht trotzdem immer sehen, wenn der Raidleiter die Liste sendet)."
+L["PUGCONFIG"] = "Spieler %q hat die oben genannte Konfiguration gesendet. Wenn dies eine normale Gruppe ist, die %s benutzt, um den Loot zu verwalten und du alle Loot Ereignisse, Listen und Mitglieder nachvollziehen möchtest, drücke 'OK' um zu Akzeptieren und diese Konfiguration zu erstellen (Du wirst für diese Konfiguration keine weiteren Bestätigungen bekommen). Wenn du diese Sendung nicht akzeptieren willst, drücke 'Abbrechen' (Du wirst diese Nachricht trotzdem immer sehen, wenn der Raidleiter die Liste sendet)."
 L["LISTPOSMSG"] = "%s: Unten siehst du die Listen-Positionen in der Konfiguration %q. Warum lädst du nicht %s runter, dann kannst du selber die Listen verfolgen, anstatt immer dieses Kommando zu schreiben."
 L["RECOVERMSG"] = "Du bist der Besitzer der oben genannten Konfiguration und du hast eine Wiederherstellung der Liste von dem Nutzer %q angefragt. Bitte beachte, dass %s mit allen Admins synchronisiert sein muss, damit die Wiederherstellung funktioniert. Wenn du mit der Wiederherstellung fortfährst, löschst du deine komplette Konfiguration (aber nicht deine lokalen Einstellungen) eingeschlossen alle Listen, Nutzer, Items und Loot-Historien. Die Benutzung der Wiederherstellungsfunktion sollte dein allerletzter Versuch sein, eine beschädigte Konfiguration zu reparieren. Wenn du kein BackUp von deinen 'SavedVariables' hast, solltest du jetzt das Spiel schließen und dies tun. Bitte sei dir absolut sicher, dass du das tun möchtest. Es ist wirklich ein drastischer Schritt."
 
@@ -207,7 +207,7 @@ L["Reset"] = "Zurücksetzen"
 L["Select"] = "Auswählen"
 L["Config Owner"] = "Konfigurationsbesitzer"
 L["Alts Tethered to Mains"] = "Twinks an Main gekoppelt"
-L["cannot delete configuration %q - KonferSK requires at least one configuration."] = "Kann die Konfiguration %q nicht löschen - KonferSK benötigt mindestens eine Konfiguration."
+L["cannot delete configuration %q - %s requires at least one configuration."] = "Kann die Konfiguration %q nicht löschen - %s benötigt mindestens eine Konfiguration."
 L["configuration %q deleted."] = "Konfiguration %q wurde gelöscht."
 L["user %q deleted."] = "Nutzer %q wurde gelöscht."
 L["roll list %q deleted."] = "Loot-Liste %q wurde gelöscht."
@@ -468,6 +468,8 @@ L["users not on the %q list: %s"] = "Nutzer nicht auf der %q - Liste: %s"
 L["User Search"] = "Nutzer-Suche"
 L["Edit Officer Ranks"] = "Edit Officer Ranks"
 L["Set Guild Officer Ranks"] = "Set Guild Officer Ranks"
+L["Main Spec Roll"] = true
+L["Off Spec Roll"] = true
 
 --
 -- Tooltip text.
