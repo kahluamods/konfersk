@@ -682,6 +682,8 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
         return
       end
     end
+    ksk.RefreshCSData()
+    local oldadm = ksk.csdata[cid].is_admin
     local nc = ksk.configs[cid]
     nc.users = nil
     nc.nadmins = 0
@@ -699,6 +701,11 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
       ksk.SetDefaultConfig(cid, true, true)
     end
     info(L["configuration %q updated by %q"], white(nc.name), white(sender))
+    ksk.RefreshCSData()
+    local newadm = ksk.csdata[cid].is_admin
+    if (not oldadm and newadm) then
+      ksk:CSendWhisperAM(cid, sender, "GSYNC", "ALERT", 0, true, 0, 0)
+    end
   end
 
   if (not ksk.configs[cfgid]) then
@@ -1526,7 +1533,7 @@ ihandlers.GSYNC = function(sender, proto, cmd, cfg, ...)
 
   if (full) then
     if (ksk.csdata[cfg].is_admin == 2) then
-      info(L["sending sync data to user %s."], aclass(ksk.configs[cfg].users[theiruid]))
+      info(L["[%s] sending sync data to user %s."], white(ksk.configs[cfg].name), aclass(ksk.configs[cfg].users[theiruid]))
       ksk.SendFullSync(cfg, sender, false)
     end
     return
@@ -1557,7 +1564,7 @@ ihandlers.GSYNC = function(sender, proto, cmd, cfg, ...)
       tinsert(mlist, v)
     end
   end
-  info(L["sending sync data to user %s."], aclass(ksk.configs[cfg].users[theiruid]))
+  info(L["[%s] sending sync data to user %s."], white(ksk.configs[cfg].name), aclass(ksk.configs[cfg].users[theiruid]))
   ksk:CSendWhisperAM(cfg, sender, "MSYNC", "ALERT", ksk.csdata[cfg].myuid, theiruid, mlist)
 end
 
@@ -1608,8 +1615,8 @@ ihandlers.FSYNC = function(sender, proto, cmd, cfg, ...)
   if (cfg == ksk.currentid) then
     ksk.MakeAliases()
     ksk.FullRefresh(true)
-    info(L["sync with user %s complete."], aclass(ncf.users[cfgd.d]))
   end
+  info(L["[%s] sync with user %s complete."], white(ncf.name), aclass(ncf.users[cfgd.d]))
 
   --
   -- We will want to clear the list of syncers so that we don't attempt

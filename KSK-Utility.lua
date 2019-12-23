@@ -254,6 +254,7 @@ function ksk.AddEvent(cfgid, event, estr, ufn)
   --
   local myuid = ksk.csdata[cfgid].myuid
   local ov = ksk.csdata[cfgid].is_admin
+
   if (ov == 1 and not ksk.configs[cfgid].syncing) then
     return
   end
