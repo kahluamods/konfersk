@@ -10,14 +10,10 @@ the loot distribution system (KLD or KKoreLoot) and the raid tracking system
 (KRP or KKoreParty). A lot of code that used to be internal to KSK moved into
 those two modules so that all addons that want to keep track of raid / party
 members (in the case of KRP) or loot and loot tables (KLD) can use common
-code that is easier to test in isolation. All of thse modules and KSK itself
-also make extensive use of the basic Kore functionality, most of which was
-written by the Ace3 development team and embedded and repeated in Kore for
-(probably bad) historical reasons.
+code that is easier to test in isolation.
 
 The entire UI is created in code (no XML) using the Kore UI (KUI or KKoreUI)
-module. This is my own creation although it owes a lot in terms of my learning
-curve to AceWidgets.
+module.
 
 Initialisation
 --------------

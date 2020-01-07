@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2019 James Kean Johnston. All rights reserved.
+   Copyright 2008-2020 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -33,35 +33,35 @@ local KK = LibStub:GetLibrary("KKoreKonfer")
 local DB = LibStub:GetLibrary("AceDB-3.0")
 
 if (not K) then
-  error("KahLua KonferSK: could not find KahLua Kore.", 2)
+  error("KSK: could not find KahLua Kore.", 2)
 end
 
 if (tonumber(KM) < 3) then
-  error("KahLua KonferSK: outdated KahLua Kore. Please update all KahLua addons.")
+  error("KSK: outdated KahLua Kore. Please update all KahLua addons.")
 end
 
 if (not H) then
-  error("KahLua KonferSK: could not find KahLua Kore Hash library.", 2)
+  error("KSK: could not find Kore Hash library.", 2)
 end
 
 if (not DB) then
-  error("KahLua KonferSK: could not find KahLua Kore Database library.", 2)
+  error("KSK: could not find Kore Database library.", 2)
 end
 
 if (not KUI) then
-  error("KahLua KonferSK: could not find KahLua Kore UI library.", 2)
+  error("KSK: could not find Kore UI library.", 2)
 end
 
 if (not KRP) then
-  error("KahLua KonferSK: could not find KahLua Kore Raid/Party library.", 2)
+  error("KSK: could not find Kore Raid/Party library.", 2)
 end
 
 if (not KK) then
-  error("KahLua KonferSK: could not find KahLua Kore Konfer library.", 2)
+  error("KSK: could not find Kore Konfer library.", 2)
 end
 
 if (not KLD) then
-  error("KahLua KonferSK: could not find KahLua Kore Loot Distribution library.", 2)
+  error("KSK: could not find Kore Loot Distribution library.", 2)
 end
 
 local L = LibStub("AceLocale-3.0"):GetLocale(MAJOR, false)
@@ -99,13 +99,14 @@ ksk.DB  = DB
 ksk.KK  = KK
 
 ksk.CHAT_MSG_PREFIX = "KSKC"
+ksk.addon_handle = "kskc"
 
 local MakeFrame = KUI.MakeFrame
 
 -- We will be using both KKoreParty and KKoreLoot.
-KRP:RegisterAddon("ksk")
-KLD:RegisterAddon("ksk")
-KK:RegisterAddon("ksk")
+KRP:RegisterAddon(ksk.addon_handle)
+KLD:RegisterAddon(ksk.addon_handle)
+KK:RegisterAddon(ksk.addon_handle)
 
 -------------------------------------------------------------------------------
 --
@@ -149,13 +150,6 @@ ksk.dbversion = 2
 -- in actual initialisation should execute if this is false.
 ksk.initialised = false
 
--- Whether or not KSK is currently suspended. Always only set to true or false.
--- If the mod is suspended then certain callbacks and event handlers must do
--- nothing. Such things should probably always also check ksk.initialised too.
--- We start out with this set to false and during initialisation we may end up
--- setting this to true.
-ksk.suspended = false
-
 -- Maximum number of disenchanters that can be defined in a config
 ksk.MAX_DENCHERS = 4
 
@@ -188,7 +182,7 @@ ksk.HIST_HOW    = 4
 -- Whether or not we are actually in a raid. This is set via a callback from
 -- KKoreParty (IN_GROUP_CHANGED). If we are in a group this will be non-nil.
 -- If we are not in a group it will always be nil, but only for the master
--- looter. For normal users we must check KRP.in_either.
+-- looter. For normal users we must check KRP.in_party.
 ksk.group = nil
 
 -- Handle to the return value from database initialisation. This is set early
@@ -382,14 +376,14 @@ function ksk.UpdateUserSecurity(conf)
   end
 
   if (ksk.initialised and conf == ksk.currentid) then
-    ksk:SendIPC("CONFIG_ADMIN", csd.is_admin ~= nil and true or false)
+    ksk.ConfigAdmin(csd.is_admin ~= nil and true or false)
   end
 
   return true
 end
 
 function ksk.AmIML()
-  if (KRP.in_either and KRP.is_ml and ksk.csd.is_admin) then
+  if (KRP.in_party and KRP.is_ml and ksk.csd.is_admin) then
     return true
   end
   return false
@@ -1084,11 +1078,11 @@ local function ksk_resetpos(input)
 end
 
 local function ksk_suspend(input)
-  KK.SetSuspended("ksk", true)
+  KK.SetSuspended(ksk.addon_handle, true)
 end
 
 local function ksk_resume(input)
-  KK.SetSuspended("ksk", false)
+  KK.SetSuspended(ksk.addon_handle, false)
 end
 
 local function ksk_refresh(input)
@@ -1212,7 +1206,7 @@ function ksk.RefreshCSData()
 
   if (ksk.currentid) then
     ksk.csd = ksk.csdata[ksk.currentid]
-    ksk:SendIPC("CONFIG_ADMIN", ksk.csd.is_admin ~= nil and true or false)
+    ksk.ConfigAdmin(ksk.csd.is_admin ~= nil and true or false)
   end
 end
 
@@ -1270,8 +1264,6 @@ function ksk.FullRefresh(reset)
   ksk.UpdateUserSecurity()
   ksk.RefreshCSData()
   ksk.FullRefreshUI(reset)
-  ksk.nmissing = 0
-  ksk.missing = {}
   KRP.UpdateGroup(true, true, false)
 
   -- JKJ FIXME: this logic should move into the refresh functions above.
@@ -1501,7 +1493,7 @@ end
 -- or when we refresh due to a config change or other events. This registers
 -- messages that only an admin cares about.
 --
-local function ksk_config_admin_evt(evt, onoff, ...)
+function ksk.ConfigAdmin(onoff)
   if (onoff and admin_hooks_registered ~= true) then
     admin_hooks_registered = true
     ksk:RegisterEvent("CHAT_MSG_WHISPER", chat_msg_whisper)
@@ -1510,18 +1502,13 @@ local function ksk_config_admin_evt(evt, onoff, ...)
     ksk:UnregisterEvent("CHAT_MSG_WHISPER")
   end
 
-  local amef = ChatFrame_AddMessageEventFilter
-  local rmef = ChatFrame_RemoveMessageEventFilter
+  local ef = nil
 
   if (onoff) then
     if (chat_filters_installed ~= true) then
       if (ksk.settings.chat_filter) then
         chat_filters_installed = true
-        amef("CHAT_MSG_WHISPER", whisper_filter)
-        amef("CHAT_MSG_WHISPER_INFORM", reply_filter)
-        amef("CHAT_MSG_RAID", reply_filter)
-        amef("CHAT_MSG_GUILD", reply_filter)
-        amef("CHAT_MSG_RAID_LEADER", reply_filter)
+        ef = ChatFrame_AddMessageEventFilter
       end
     end
   end
@@ -1529,24 +1516,30 @@ local function ksk_config_admin_evt(evt, onoff, ...)
   if (not onoff or not ksk.settings.chat_filter) then
     if (chat_filters_installed) then
       chat_filters_installed = false
-      rmef("CHAT_MSG_WHISPER", whisper_filter)
-      rmef("CHAT_MSG_WHISPER_INFORM", reply_filter)
-      rmef("CHAT_MSG_RAID", reply_filter)
-      rmef("CHAT_MSG_GUILD", reply_filter)
-      rmef("CHAT_MSG_RAID_LEADER", reply_filter)
+      ef = ChatFrame_RemoveMessageEventFilter
     end
+  end
+
+  if (ef) then
+    ef("CHAT_MSG_WHISPER", whisper_filter)
+    ef("CHAT_MSG_WHISPER_INFORM", reply_filter)
+    ef("CHAT_MSG_RAID", reply_filter)
+    ef("CHAT_MSG_GUILD", reply_filter)
+    ef("CHAT_MSG_RAID_LEADER", reply_filter)
   end
 end
 
-local function ksk_suspended_evt(evt, onoff, ...)
+local function ksk_suspended(onoff)
+  ksk.frdb.suspended = onoff
+
   if (onoff) then
-    KRP:ActivateAddon("ksk")
-    KLD:ActivateAddon("ksk")
-    KK:ActivateAddon("ksk")
+    KRP:SuspendAddon(ksk.addon_handle)
+    KLD:SuspendAddon(ksk.addon_handle)
+    KK:SuspendAddon(ksk.addon_handle)
   else
-    KRP:SuspendAddon("ksk")
-    KLD:SuspendAddon("ksk")
-    KK:SuspendAddon("ksk")
+    KRP:ActivateAddon(ksk.addon_handle)
+    KLD:ActivateAddon(ksk.addon_handle)
+    KK:ActivateAddon(ksk.addon_handle)
   end
 end
 
@@ -1580,12 +1573,10 @@ local function update_denchers()
 end
 
 --
--- Called by KRP when it is done updating all of the group info. This is a
--- callback fired at the same time as GROUP_ROSTER_CHANGED so there is no
--- need to handle both. One or the other will do.
+-- Called by KRP when it is done updating all of the group info.
 --
 local function krp_update_group_end(_, _, pvt, ...)
-  if (ksk.suspended or not KRP.in_either) then
+  if (not KRP.in_party) then
     return
   end
 
@@ -1606,10 +1597,6 @@ end
 -- player is unique to the current config.
 --
 local function krp_new_player(_, _, pvt, player)
-  if (ksk.suspended) then
-    return
-  end
-
   local nm = player.name
   local unkuser = nil
 
@@ -1627,7 +1614,7 @@ local function krp_new_player(_, _, pvt, player)
     if (not ksk.missing[uid]) then
       ksk.nmissing = ksk.nmissing + 1
       ksk.missing[uid] = unkuser
-      if (KRP.in_either and KLD.master_loot and ksk.csd.is_admin) then
+      if (KRP.in_party and KRP.is_ml and ksk.csd.is_admin) then
         info(L["NOTICE: user %q is in the raid but not in the user list."], class(nm, classid))
       end
     end
@@ -1648,24 +1635,18 @@ local function krp_new_player(_, _, pvt, player)
 end
 
 --
--- Fired when there has been a change in group leadership. This can be fired
--- independently from GROUP_ROSTER_CHANGED, although any processing for that
--- event will also want to call this.
+-- Fired when there has been a change in group leadership.
 --
-local function leader_changed_evt(evt)
+local function krp_leader_changed(_, _, pvt, leader)
   update_bcast_button()
 end
 
 --
 -- This is fired when the state changes from in raid to out, or out to in.
 --
-local function in_group_changed_evt(evt, in_party, in_raid, in_bg)
-  if (ksk.suspended) then
-    return
-  end
-
+local function krp_in_group_changed(_, _, pvt, in_party, in_raid, in_bg)
   if (in_party or in_raid) then
-    local krp_private = KRP:GetPrivate("ksk")
+    local krp_private = KRP:GetPrivate(ksk.addon_handle)
     ksk.group = {}
     if (krp_private and krp_private.users) then
       ksk.group.users = krp_private.users
@@ -1700,10 +1681,11 @@ local function in_group_changed_evt(evt, in_party, in_raid, in_bg)
 end
 
 local function kld_start_loot_info(_, _, pvt)
-  if (ksk.suspended or not ksk.AmIML()) then
+  if (not ksk.AmIML()) then
     return
   end
 
+  debug(1, "Resetting boss loot")
   ksk.ResetBossLoot()
 end
 
@@ -1714,9 +1696,11 @@ end
 -- to be ignored or auto-disenchanted.
 --
 local function kld_loot_item(_, _, pvt, item)
-  if (ksk.suspended or not ksk.AmIML()) then
+  if (not ksk.AmIML()) then
     return
   end
+
+  debug(1, "loot_item")
 
   ksk.announcedloot = ksk.announcedloot or {}
 
@@ -1733,6 +1717,7 @@ local function kld_loot_item(_, _, pvt, item)
     skipit = true
   end
 
+  debug(1, "skipit=%s", tostring(skipit))
   if (item.locked) then
     skipit = true
   end
@@ -1799,7 +1784,7 @@ end
 -- the new data.
 --
 local function kld_end_loot_info()
-  if (ksk.suspended or not ksk.AmIML()) then
+  if (not ksk.AmIML()) then
     return
   end
 
@@ -1872,8 +1857,8 @@ local function kld_end_loot_info()
   end
 end
 
-local function looting_ended_evt(evt)
-  if (ksk.suspended or not ksk.AmIML()) then
+local function kld_looting_ended(_, _, pvt)
+  if (not ksk.AmIML()) then
     return
   end
 
@@ -1890,40 +1875,36 @@ local function looting_ended_evt(evt)
   sentoloot = nil
 end
 
-local function ksk_initialised_evt(evt, ...)
+local function ksk_initialised()
   if (ksk.initialised) then
     return
   end
 
   ksk.initialised = true
 
-  -- JKJ FIXME: The only event that should be globally trapped is
-  -- KRP:LOOT_METHOD_UPDATED. Only the master looter cares about any of
-  -- these other events. All other users, including other admins, get their
-  -- data from the mod, not directly from the game.
-
-  ksk:RegisterIPC("CONFIG_ADMIN", ksk_config_admin_evt)
-  ksk:RegisterIPC("SUSPENDED", ksk_suspended_evt)
-  KRP:RegisterIPC("IN_GROUP_CHANGED", in_group_changed_evt)
-  KRP:RegisterIPC("LEADER_CHANGED", leader_changed_evt)
-  KRP:RegisterIPC("ROLE_CHANGED", leader_changed_evt)
-  KLD:RegisterIPC("LOOTING_ENDED", looting_ended_evt)
   K:RegisterMessage("PLAYER_INFO_UPDATED", player_info_updated)
 
-  KLD:AddonCallback("ksk", "start_loot_info", kld_start_loot_info)
-  KLD:AddonCallback("ksk", "loot_item", kld_loot_item)
-  KLD:AddonCallback("ksk", "end_loot_info", kld_end_loot_info)
-  KRP:AddonCallback("ksk", "update_group_start", krp_update_group_start)
-  KRP:AddonCallback("ksk", "update_group_end", krp_update_group_end)
-  KRP:AddonCallback("ksk", "new_player", krp_new_player)
+  --
+  -- We prefer to use callbacks to messages because callbacks are not called
+  -- if the mod isn't currently active.
+  --
+  local kh = ksk.addon_handle
+  KLD:AddonCallback(kh, "start_loot_info", kld_start_loot_info)
+  KLD:AddonCallback(kh, "loot_item", kld_loot_item)
+  KLD:AddonCallback(kh, "end_loot_info", kld_end_loot_info)
+  KLD:AddonCallback(kh, "looting_ended", kld_looting_ended)
+  KRP:AddonCallback(kh, "update_group_start", krp_update_group_start)
+  KRP:AddonCallback(kh, "update_group_end", krp_update_group_end)
+  KRP:AddonCallback(kh, "new_player", krp_new_player)
+  KRP:AddonCallback(kh, "in_group_changed", krp_in_group_changed)
+  KRP:AddonCallback(kh, "leader_changed", krp_leader_changed)
+  KRP:AddonCallback(kh, "role_changed", krp_leader_changed)
 
-  KRP:ActivateAddon("ksk")
-  KLD:ActivateAddon("ksk")
-  KK:ActivateAddon("ksk")
+  ksk_suspended(ksk.frdb.suspended)
 
   ksk.SetDefaultConfig(ksk.frdb.defconfig, true, true)
   ksk.FullRefresh(true)
-  ksk:SendIPC("CONFIG_ADMIN", ksk.csd.is_admin ~= nil and true or false)
+  ksk.ConfigAdmin(ksk.csd.is_admin ~= nil and true or false)
 
   --
   -- Broadcasts a list of all configurations we have, and the latest events
@@ -1983,7 +1964,7 @@ end
 -- "Register" KSK with the list of all other Konfer addons.
 --
 local konfer = {
-  handle     = "ksk",
+  handle     = ksk.addon_handle,
   name       = L["MODNAME"],
   title      = L["MODTITLE"],
   desc       = L["Suicide Kings loot distribution system."],
@@ -1992,22 +1973,17 @@ local konfer = {
   suspendcmd = L["CMD_SUSPEND"],
   resumecmd  = L["CMD_RESUME"],
   raid       = true,    -- Works in raids
-  party      = true,    -- Does not work in parties
+  party      = true,    -- Works in parties
   bg         = false,   -- Does not work in battlegrounds
 
   is_suspended = function(handle)
-    return ksk.suspended or false
+    return ksk.frdb.suspended or false
   end,
 
   set_suspended = function(handle, onoff)
-    ksk.suspended = onoff or false
-    if (ksk.frdb) then
-      ksk.frdb.suspended = ksk.suspended
-    end
-    if (not ksk.suspended) then
-      ksk.FullRefresh(true)
-    end
-    ksk:SendIPC("SUSPENDED", ksk.suspended)
+    local onoff = onoff or false
+    ksk_suspended(onoff)
+    ksk.FullRefresh(true)
   end,
 
   open_on_loot = function(handle)
@@ -2050,17 +2026,13 @@ local function ksk_initialisation()
 
   ksk.UpdateDatabaseVersion()
 
-  ksk.suspended = ksk.frdb.suspended or false
-
   KK.RegisterKonfer(ksk, konfer)
 
   ksk.InitialiseUI()
 
   K.RegisterComm(ksk, ksk.CHAT_MSG_PREFIX)
 
-  ksk:RegisterIPC("INITIALISED", ksk_initialised_evt)
-
-  ksk:SendIPC("INITIALISED")
+  ksk_initialised()
 end
 
 function ksk:OnLateInit()

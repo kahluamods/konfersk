@@ -7,7 +7,7 @@
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2018 James Kean Johnston. All rights reserved.
+   Copyright 2008-2020 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@
 local K = LibStub:GetLibrary("KKore")
 
 if (not K) then
-  error("KahLua KonferSK: could not find KahLua Kore.", 2)
+  return
 end
 
 local ksk = K:GetAddon("KKonferSK")
@@ -538,7 +538,7 @@ local function insert_member(btn)
     local anm = ksk.users[a.value].name
     local bnm = ksk.users[b.value].name
 
-    if (KRP.in_either) then
+    if (KRP.in_party) then
       local air = KRP.players[anm] and true or false
       local bir = KRP.players[bnm] and true or false
       if (air and not bir) then

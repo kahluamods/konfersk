@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2019 James Kean Johnston. All rights reserved.
+   Copyright 2008-2020 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -24,14 +24,10 @@
 local K = LibStub:GetLibrary("KKore")
 
 if (not K) then
-  error("KahLua KonferSK: could not find KahLua Kore.", 2)
+  return
 end
 
 local ksk = K:GetAddon("KKonferSK")
-if (not ksk) then
-  error("Could not find KSK addon", 2)
-end
-
 local L = ksk.L
 local KUI = ksk.KUI
 local KRP = ksk.KRP
@@ -283,6 +279,7 @@ function ksk:OnCommReceived(prefix, msg, dist, snd)
       printf(ecolor, "WARNING: addon message from %q was fake!", sender)
       userwarn[sender] = true
     end
+    return
   end
   commdispatch(sender, proto, cmd, cfg, K.Deserialise(data))
 end
@@ -362,7 +359,7 @@ ihandlers.OLOOT = function(sender, proto, cmd, cfg, ...)
     ksk.autolooted[uguid] = true
   end
 
-  if (ksk.suspended or not ksk.configs[cfg].settings.auto_bid) then
+  if (ksk.frdb.suspended or not ksk.configs[cfg].settings.auto_bid) then
     return
   end
 
@@ -405,6 +402,10 @@ ihandlers.ALOOT = function(sender, proto, cmd, cfg, ilink)
     return
   end
 
+  if (not KK.IsSenderMasterLooter(sender)) then
+    return
+  end
+
   ksk.AddLoot(ilink, true)
 end
 
@@ -444,6 +445,10 @@ ihandlers.LISEL = function(sender, proto, cmd, cfg, ...)
     return
   end
 
+  if (not KK.IsSenderMasterLooter(sender)) then
+    return
+  end
+
   ksk.SelectLootItem(idx, filter, role, list)
 end
 
@@ -460,6 +465,10 @@ ihandlers.LLSEL = function(sender, proto, cmd, cfg, ...)
   local listid, clearbids = ...
 
   if (cfg ~= ksk.currentid) then
+    return
+  end
+
+  if (not KK.IsSenderMasterLooter(sender)) then
     return
   end
 
@@ -571,7 +580,7 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
     return
   end
 
-  if (not KRP.in_either) then
+  if (not KRP.in_party) then
     --
     -- The only way we can even receive this when we're not in either a party
     -- or a raid is via a guild broadcast. So check see if the sender is
@@ -734,6 +743,10 @@ ihandlers.BIREM = function(sender, proto, cmd, cfg, ...)
     return
   end
 
+  if (not KK.IsSenderMasterLooter(sender)) then
+    return
+  end
+
   ksk.RemoveItemByIdx(itemidx, true)
 end
 
@@ -743,6 +756,10 @@ end
 --
 ihandlers.BICAN = function(sender, proto, cmd, cfg, ...)
   if (cfg ~= ksk.currentid) then
+    return
+  end
+
+  if (not KK.IsSenderMasterLooter(sender)) then
     return
   end
 
@@ -768,6 +785,10 @@ ihandlers.FLTCH = function(sender, proto, cmd, cfg, ...)
     return
   end
 
+  if (not KK.IsSenderMasterLooter(sender)) then
+    return
+  end
+
   ksk.ChangeLootFilter(what, v1, v2)
 end
 
@@ -787,6 +808,10 @@ ihandlers.BIDOP = function(sender, proto, cmd, cfg, ...)
   local idx, timeout = ...
 
   if (cfg ~= ksk.currentid or not ksk.bossloot) then
+    return
+  end
+
+  if (not KK.IsSenderMasterLooter(sender)) then
     return
   end
 
@@ -837,16 +862,15 @@ end
 --          because the recipients may not have an up to date user list. The
 --          UID is sent for completeness sake only and is not used by anyone
 --          except the master looter.
---          Added after release 86: PRIO is the assigned priority. The lower
---          the number the higher the priority (1 = highest). Only used for
---          guild configs and only if the option is enabled. A higher priority
---          will always win over a lower one, regardless of list position.
---          USEPRIO is set to true if priorities are being used.
 --
 ihandlers.BIDER = function(sender, proto, cmd, cfg, ...)
   local name, class, pos, uid = ...
 
   if (cfg ~= ksk.currentid or not ksk.bossloot) then
+    return
+  end
+
+  if (not KK.IsSenderMasterLooter(sender)) then
     return
   end
 
@@ -862,6 +886,10 @@ ihandlers.BIDRM = function(sender, proto, cmd, cfg, ...)
   local name = ...
 
   if (cfg ~= ksk.currentid or not ksk.bossloot) then
+    return
+  end
+
+  if (not KK.IsSenderMasterLooter(sender)) then
     return
   end
 
@@ -890,10 +918,16 @@ end
 --          place. RAID is set to true if we should refresh the raid as well.
 --
 ihandlers.RFUSR = function(sender, proto, cmd, cfg, ...)
-  if (cfg == ksk.currentid) then
-    ksk.RefreshUsers()
-    ksk.RefreshRaid()
+  if (cfg ~= ksk.currentid) then
+    return
   end
+
+  if (not KK.IsSenderMasterLooter(sender)) then
+    return
+  end
+
+  ksk.RefreshUsers()
+  ksk.RefreshRaid()
 end
 
 --
@@ -945,6 +979,14 @@ end
 ihandlers.RSUSR = function(sender, proto, cmd, cfg, ...)
   local uid, onoff = ...
 
+  if (cfg ~= ksk.currentid) then
+    return
+  end
+
+  if (not KK.IsSenderMasterLooter(sender)) then
+    return
+  end
+
   if (not ksk.configs[cfg].users[uid]) then
     return
   end
@@ -959,6 +1001,10 @@ end
 --          are reserved.
 --
 ihandlers.REQRS = function(sender, proto, cmd, cfg, ...)
+  if (cfg ~= ksk.currentid) then
+    return
+  end
+
   if (not ksk.configs[cfg]) then
     return
   end
@@ -970,10 +1016,13 @@ ihandlers.REQRS = function(sender, proto, cmd, cfg, ...)
   if (not ksk.csdata[cfg].reserved) then
     return
   end
+
   local rus = {}
+
   for k,v in pairs(ksk.csdata[cfg].reserved) do
     tinsert(rus, k)
   end
+
   if (#rus ~= 0) then
     ksk:CSendAM(cfg, "ACKRS", "BULK", rus)
   end
@@ -987,6 +1036,10 @@ end
 --
 ihandlers.ACKRS = function(sender, proto, cmd, cfg, ...)
   local utb = ...
+
+  if (cfg ~= ksk.currentid) then
+    return
+  end
 
   if (not ksk.configs[cfg]) then
     return

@@ -7,7 +7,7 @@
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2019 James Kean Johnston. All rights reserved.
+   Copyright 2008-2020 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -25,16 +25,11 @@
 local K = LibStub:GetLibrary("KKore")
 local LibDeformat = LibStub:GetLibrary("LibDeformat-3.0")
 
-if (not K) then
-  error("KahLua KonferSK: could not find KahLua Kore.", 2)
-end
-
-if (not LibDeformat) then
-  error("KahLua KonferSK: could not find LibDeformat.", 2)
+if (not K or not LibDeformat) then
+  return
 end
 
 local dfmt = LibDeformat.Deformat
-
 local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI

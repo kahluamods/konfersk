@@ -6,7 +6,7 @@
      E-mail: cruciformer@gmail.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2019 James Kean Johnston. All rights reserved.
+   Copyright 2008-2020 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
 local K = LibStub:GetLibrary("KKore")
 
 if (not K) then
-  error("KahLua KonferSK: could not find KahLua Kore.", 2)
+  return
 end
 
 local ksk = K:GetAddon("KKonferSK")
