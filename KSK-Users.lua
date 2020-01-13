@@ -95,7 +95,7 @@ local function setup_uinfo()
   uinfo.main = altname or ""
   uinfo.mainid = altidx
   uinfo.frozen = ksk.UserIsFrozen(seluser) or false
-  if (ksk.users[seluser].alts) then
+  if (ksk.cfg.users[seluser].alts) then
     uinfo.ismain = true
   else
     uinfo.ismain = false
@@ -259,9 +259,9 @@ local function rename_user_button(uid)
     local found = nil
     local cname = strlower(newname)
 
-    for k,v in pairs(ksk.users) do
+    for k,v in pairs(ksk.cfg.users) do
       if (strlower(v.name) == cname) then
-        found = ksk.users[k]
+        found = ksk.cfg.users[k]
         break
       end
     end
@@ -280,7 +280,7 @@ local function rename_user_button(uid)
   end
 
   K.RenameDialog(ksk, L["Rename User"], L["Old Name"],
-    ksk.users[uid].name, L["New Name"], 48, rename_helper,
+    ksk.cfg.users[uid].name, L["New Name"], 48, rename_helper,
     uid, true)
 end
 
@@ -401,23 +401,23 @@ local function select_main(btn, lbl)
 
   local ulist = {}
 
-  for k,v in pairs(ksk.users) do
+  for k,v in pairs(ksk.cfg.users) do
     if (k ~= seluser and not ksk.UserIsAlt(k, v.flags)) then
       local ti = { text = aclass(v), value = k }
       tinsert(ulist, ti)
     end
   end
   tsort(ulist, function(a,b)
-    return ksk.users[a.value].name < ksk.users[b.value].name
+    return ksk.cfg.users[a.value].name < ksk.cfg.users[b.value].name
   end)
 
   local function pop_func(puid)
     local ulist = selmain_popup.selectionlist
     changed()
-    qf.useraltnamebox:SetText(aclass(ksk.users[puid]))
+    qf.useraltnamebox:SetText(aclass(ksk.cfg.users[puid]))
     hide_popup()
     uinfo.isalt = true
-    uinfo.main = ksk.users[puid].name
+    uinfo.main = ksk.cfg.users[puid].name
     uinfo.mainid = puid
   end
 
@@ -444,14 +444,14 @@ local function select_main(btn, lbl)
       this.toplevel:StartTimeoutCounter()
     end)
     selmain_popup.usearch:Catch("OnValueChanged", function(this, evt, newv, user)
-      if (not ksk.users or not ulist or selmain_popup.slist.itemcount < 1) then
+      if (not ksk.cfg.users or not ulist or selmain_popup.slist.itemcount < 1) then
         return
       end
       if (user and newv and newv ~= "") then
         local lnv = strlower(newv)
         local tln
         for k,v in pairs(ulist) do
-          tln = strlower(ksk.users[v.value].name)
+          tln = strlower(ksk.cfg.users[v.value].name)
           if (strfind(tln, lnv, 1, true)) then
             selmain_popup.slist:SetSelected(k, true)
             return
@@ -473,7 +473,7 @@ end
 -- users database.
 --
 local function add_missing_button()
-  if (not ksk.group or not ksk.csd.is_admin or not ksk.nmissing or ksk.nmissing == 0) then
+  if (not ksk.users or not ksk.csd.is_admin or not ksk.nmissing or ksk.nmissing == 0) then
     return
   end
 
@@ -512,7 +512,7 @@ function ksk.InitialiseUsersUI()
   qf.usertopbar = tbf
   tbf.SetCurrentUser = function(userid)
     if (userid) then
-      tbf.seluser:SetText(L["Currently Selected: "]..aclass(ksk.users[userid]))
+      tbf.seluser:SetText(L["Currently Selected: "]..aclass(ksk.cfg.users[userid]))
     else
       tbf.seluser:SetText("")
     end
@@ -583,7 +583,7 @@ function ksk.InitialiseUsersUI()
           function(op, ix)
             assert(ksk.sortedusers[ix])
             local uid = ksk.sortedusers[ix].id
-            local tu = ksk.users[uid]
+            local tu = ksk.cfg.users[uid]
             local alt = ksk.UserIsAlt(uid)
             return(alt and "  - " or "") .. aclass(tu)
           end)
@@ -612,17 +612,17 @@ function ksk.InitialiseUsersUI()
     this:SetText("")
   end)
   bls.searchbox:Catch("OnValueChanged", function(this, evt, newv, user)
-    if (not ksk.users) then
+    if (not ksk.cfg.users) then
       return
     end
     if (user and newv and newv ~= "") then
       local lnv = strlower(newv)
       local tln
-      for k,v in pairs(ksk.users) do
+      for k,v in pairs(ksk.cfg.users) do
         tln = strlower(v.name)
         if (strfind(tln, lnv, 1, true)) then
           for kk,vv in ipairs(ksk.sortedusers) do
-            if (ksk.users[vv.id].name == v.name) then
+            if (ksk.cfg.users[vv.id].name == v.name) then
               qf.userlist:SetSelected(kk, true)
               break
             end
@@ -829,7 +829,7 @@ function ksk.RefreshUsers()
   ksk.sortedusers = {}
   seluser = nil
 
-  for k,v in pairs(ksk.users) do
+  for k,v in pairs(ksk.cfg.users) do
     if (not ksk.UserIsAlt(k, v.flags)) then
       local ent = { id = k }
       tinsert(ksk.sortedusers, ent)
@@ -837,11 +837,11 @@ function ksk.RefreshUsers()
   end
 
   tsort(ksk.sortedusers, function(a, b)
-    return ksk.users[a.id].name < ksk.users[b.id].name
+    return ksk.cfg.users[a.id].name < ksk.cfg.users[b.id].name
   end)
 
   for i = #ksk.sortedusers, 1, -1 do
-    local usr = ksk.users[ksk.sortedusers[i].id]
+    local usr = ksk.cfg.users[ksk.sortedusers[i].id]
     if (usr.alts) then
       for j = 1, #usr.alts do
         local ent = {id = usr.alts[j]}
@@ -870,10 +870,11 @@ function ksk.FindUser(name, cfgid)
     return nil
   end
 
+  local name = K.CanonicalName(name)
   assert(name)
 
   cfgid = cfgid or ksk.currentid
-  local name = strlower(name)
+  name = strlower(name)
 
   for k,v in pairs(ksk.frdb.configs[cfgid].users) do
     if (strlower(v.name) == name) then
@@ -1211,7 +1212,7 @@ function ksk.CreateNewUser(name, cls, cfgid, norefresh, bypass, myid, nocmd)
   -- are in a raid, we need to scan the list of missing members to see if
   -- this user was in that list, and if so, remove them from it.
   --
-  if (ksk.group and cfgid == ksk.currentid) then
+  if (ksk.users and cfgid == ksk.currentid) then
     local olduid = "0fff:" .. cls .. ":" .. name
     if (ksk.missing[olduid]) then
       ksk.nmissing = ksk.nmissing - 1
@@ -1354,7 +1355,7 @@ function ksk.DeleteUser(uid, cfgid, alts, nocmd)
     ksk.RefreshHistory()
   end
 
-  if (ksk.group) then
+  if (ksk.users) then
     ksk.RefreshRaid()
   end
 end
@@ -1470,7 +1471,7 @@ function ksk.RefreshMembership()
   if (seluser) then
     local uid = seluser
     if (ksk.cfg.tethered) then
-      local up = ksk.users[seluser]
+      local up = ksk.cfg.users[seluser]
       if (up.main) then
         uid = up.main
       end
@@ -1480,9 +1481,9 @@ function ksk.RefreshMembership()
       for k,v in ipairs(ksk.sortedlists) do
         local il, lp = ksk.UserInList(uid, v.id)
         if (il) then
-          tinsert(umemlist, green(strfmt("%s [%d]", ksk.lists[v.id].name, lp)))
+          tinsert(umemlist, green(strfmt("%s [%d]", ksk.cfg.lists[v.id].name, lp)))
         else
-          tinsert(umemlist, red(ksk.lists[v.id].name))
+          tinsert(umemlist, red(ksk.cfg.lists[v.id].name))
         end
       end
     end
@@ -1506,7 +1507,7 @@ function ksk.RefreshUsersUI(reset)
   ksk.RefreshMembership()
   qf.userbuttons.addmissing:SetEnabled(false)
 
-  if (ksk.group and ksk.csd.is_admin and ksk.nmissing and ksk.nmissing > 0) then
+  if (ksk.users and ksk.csd.is_admin and ksk.nmissing and ksk.nmissing > 0) then
     qf.userbuttons.addmissing:SetEnabled(true)
   end
 

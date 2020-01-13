@@ -698,37 +698,37 @@ local function select_dencher(btn, lbl, num)
   for k,v in ipairs(ksk.sortedusers) do
     local ok = true
     for i = 1, ksk.MAX_DENCHERS do
-      if (ksk.settings.denchers[i] == v.id) then
+      if (ksk.cfg.settings.denchers[i] == v.id) then
         ok = false
       end
     end
     if (ok and ksk.UserIsEnchanter(v.id)) then
-      local ti = { value = v.id, text = aclass(ksk.users[v.id]) }
+      local ti = { value = v.id, text = aclass(ksk.cfg.users[v.id]) }
       tinsert(ulist, ti)
     end
   end
 
   local function pop_func(uid)
     if (uid == 0) then
-      ksk.settings.denchers[which_dencher] = nil
+      ksk.cfg.settings.denchers[which_dencher] = nil
       which_dench_lbl:SetText("")
     else
-      which_dench_lbl:SetText(aclass(ksk.users[uid]))
-      if (ksk.settings.denchers[which_dencher] ~= uid) then
-        ksk.settings.denchers[which_dencher] = uid
+      which_dench_lbl:SetText(aclass(ksk.cfg.users[uid]))
+      if (ksk.cfg.settings.denchers[which_dencher] ~= uid) then
+        ksk.cfg.settings.denchers[which_dencher] = uid
       end
     end
 
     --
     -- If we're in raid, refresh the raid's notion of possible denchers.
     --
-    if (ksk.group) then
-      ksk.group.denchers = {}
+    if (ksk.users) then
+      ksk.denchers = {}
       for i = 1, ksk.MAX_DENCHERS do
-        local duid = ksk.settings.denchers[i]
+        local duid = ksk.cfg.settings.denchers[i]
         if (duid) then
-          if (ksk.group.users[duid]) then
-            tinsert(ksk.group.denchers, duid)
+          if (ksk.users[duid]) then
+            tinsert(ksk.denchers, duid)
           end
         end
       end
@@ -750,9 +750,9 @@ local function select_dencher(btn, lbl, num)
 end
 
 local function change_cfg(which, val)
-  if (ksk.settings) then
-    if (ksk.settings[which] ~= val) then
-      ksk.settings[which] = val
+  if (ksk.cfg.settings) then
+    if (ksk.cfg.settings[which] ~= val) then
+      ksk.cfg.settings[which] = val
     end
   end
 end
@@ -857,8 +857,8 @@ function ksk.InitialiseConfigUI()
   arg = {}
 
   local function oaf_checked(this)
-    if (ksk.settings) then
-      return ksk.settings[this.value]
+    if (ksk.cfg.settings) then
+      return ksk.cfg.settings[this.value]
     end
     return false
   end
@@ -1705,12 +1705,12 @@ end
 
 function ksk.RefreshConfigLists(llist)
   qf.deflistdd:UpdateItems(llist)
-  qf.deflistdd:SetValue(ksk.settings.def_list or "0")
+  qf.deflistdd:SetValue(ksk.cfg.settings.def_list or "0")
 end
 
 function ksk.RefreshConfigLootUI(reset)
   local i
-  local settings = ksk.settings
+  local settings = ksk.cfg.settings
   local cf = qf.lootopts
 
   cf.autobid:SetChecked(settings.auto_bid)
@@ -1730,7 +1730,7 @@ function ksk.RefreshConfigLootUI(reset)
 
   for i = 1, ksk.MAX_DENCHERS do
     if (settings.denchers[i]) then
-      cf["dencher"..i]:SetText(aclass(ksk.users[settings.denchers[i]]))
+      cf["dencher"..i]:SetText(aclass(ksk.cfg.users[settings.denchers[i]]))
     else
       cf["dencher"..i]:SetText("")
     end
@@ -1739,7 +1739,7 @@ end
 
 function ksk.RefreshConfigRollUI(reset)
   local i
-  local settings = ksk.settings
+  local settings = ksk.cfg.settings
   local cf = qf.rollopts
 
   cf.rolltimeout:SetValue(settings.roll_timeout)

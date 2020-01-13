@@ -1661,7 +1661,7 @@ ihandlers.FSYNC = function(sender, proto, cmd, cfg, ...)
   -- Unbelievable bug was here! Setting the new config to the new table
   -- breaks the ksk.cfg reference, which leaves us with a "dangling" reference
   -- and two different contents for the same config. So now after setting
-  -- this we reset all of teh aliases using the new ksk.MakeAliases() function.
+  -- this we reset all of the aliases using the new ksk.MakeAliases() function.
   --
   ksk.frdb.configs[cfg] = ncf
 

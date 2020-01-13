@@ -119,9 +119,9 @@ local function rlist_newitem(objp, num)
       return
     end
     local rp = repliers[idx]
-    busy_with_sync = shortaclass(ksk.users[rp.theiruid])
+    busy_with_sync = shortaclass(ksk.cfg.users[rp.theiruid])
 
-    ksk:SendWhisperAM(ksk.users[rp.theiruid].name, "GSYNC", "ALERT", rp.mylast, false, ksk.cfg.lastevent, ksk.cfg.cksum)
+    ksk:SendWhisperAM(ksk.cfg.users[rp.theiruid].name, "GSYNC", "ALERT", rp.mylast, false, ksk.cfg.lastevent, ksk.cfg.cksum)
     this:Disable()
     rp.synced = true
   end)
@@ -278,7 +278,7 @@ function ksk.RecoverConfig(sender, cfg, cfgid, rdata)
     return
   end
 
-  if (sender ~= ksk.users[recovery.uid].name) then
+  if (sender ~= ksk.cfg.users[recovery.uid].name) then
     return
   end
 
@@ -345,13 +345,13 @@ local function recover_config()
     -- ignore it.
     --
     recovery = { cfg = arg.cfg, uid = arg.uid }
-    ksk:CSendWhisperAM(arg.cfg, ksk.users[arg.uid].name, "RCOVR", "ALERT", ksk.cfg.name)
-    info(L["waiting for recovery reply from %s. Do not use KSK until recovery is complete."], shortaclass(ksk.users[arg.uid]))
+    ksk:CSendWhisperAM(arg.cfg, ksk.cfg.users[arg.uid].name, "RCOVR", "ALERT", ksk.cfg.name)
+    info(L["waiting for recovery reply from %s. Do not use KSK until recovery is complete."], shortaclass(ksk.cfg.users[arg.uid]))
   end
 
   K.ConfirmationDialog(ksk, L["Recover Configuration"],
-    strfmt(L["RECOVERMSG"], aclass(ksk.users[selsyncer]),
-      aclass(ksk.users[selsyncer])),
+    strfmt(L["RECOVERMSG"], aclass(ksk.cfg.users[selsyncer]),
+      aclass(ksk.cfg.users[selsyncer])),
     ksk.cfg.name, real_recover,
     { cfg = ksk.currentid, uid = selsyncer}, false, 250)
   return
@@ -436,7 +436,7 @@ function ksk.InitialiseSyncUI()
   br.rsync = KUI:CreateButton(arg, br)
   br.rsync:Catch("OnClick", function(this, evt)
     clear_syncers_list()
-    ksk:SendWhisperAM(ksk.users[selsyncer].name, "RSYNC", "ALERT")
+    ksk:SendWhisperAM(ksk.cfg.users[selsyncer].name, "RSYNC", "ALERT")
   end)
   arg = {}
   qf.reqsyncbutton = br.rsync
@@ -513,7 +513,7 @@ function ksk.RefreshSyncUI(reset)
     end
   end
   tsort(sortedsyncers, function(a,b)
-    return ksk.users[a].name < ksk.users[b].name
+    return ksk.cfg.users[a].name < ksk.cfg.users[b].name
   end)
 
   qf.syncerslist.itemcount = #sortedsyncers
@@ -610,7 +610,7 @@ function ksk.ProcessSyncAck(cfg, myuid, theiruid, cktheiruid, lastevt, cksum)
 
   local active = ksk.configs[cfg].admins[cktheiruid].active or false
 
-  tinsert(repliers, { name = shortaclass(ksk.users[theiruid]),
+  tinsert(repliers, { name = shortaclass(ksk.cfg.users[theiruid]),
     theiruid = theiruid, myuid = myuid, mylast = mylast,
     last = lastevt, cksum = cksum, active = active, cktheiruid = cktheiruid,
   })
@@ -699,7 +699,7 @@ function ksk.SyncCleanup()
         if (K.player.is_guilded) then
           tinsert(gsend, strfmt("%s:%d:%s", k, ntc, sps))
         end
-        if (ksk.group) then
+        if (ksk.users) then
           tinsert(psend, strfmt("%s:%d:%s", k, ntc, sps))
         end
       end

@@ -179,11 +179,14 @@ ksk.HIST_WHAT   = 2
 ksk.HIST_WHO    = 3
 ksk.HIST_HOW    = 4
 
--- Whether or not we are actually in a raid. This is set via a callback from
--- KKoreParty (IN_GROUP_CHANGED). If we are in a group this will be non-nil.
--- If we are not in a group it will always be nil, but only for the master
--- looter. For normal users we must check KRP.in_party.
-ksk.group = nil
+-- Table of users currently in the group. This is indexed by KSK uid and
+-- contains the full player name. This in turn can be used to access
+-- KRP.players, also indexed by the full name, which contains the detailed
+-- info about the raid / party member.
+ksk.users = nil
+
+-- Table of disenchanters currently available.
+ksk.denchers = nil
 
 -- Handle to the return value from database initialisation. This is set early
 -- on in the initialisation process. No code other than that initialisation
@@ -206,12 +209,6 @@ ksk.currentid = nil
 -- ksk.db.factionreal.configs[ksk.currentid].
 ksk.cfg = nil
 
--- Convenience alias for ksk.cfg.users
-ksk.users = nil
-
--- Convenience alias for ksk.cfg.settings
-ksk.settings = nil
-
 -- The number of raiders currently in the raid group that are missing from the
 -- users list, and the actual list of such missing players. Each entry in the
 -- missing table is itself a table with the members "name" and "class", where
@@ -232,17 +229,11 @@ ksk.csdata = {}
 -- initialisation has completed.
 ksk.csd = nil
 
--- Convenience alias for ksk.cfg.lists
-ksk.lists = nil
-
 -- The sorted list of lists. This is almost never nil, even if the config has
 -- no defined lists (it will just be an empty table). When not empty it
 -- contains the sorted list of lists for the current config. It is refreshed
 -- when the lists UI is refreshed by ksk.RefreshListsUI().
 ksk.sortedlists = nil
-
--- Convenience alias for ksk.cfg.items
-ksk.items = nil
 
 -- Set to true if the main KSK window was automatically opened.
 ksk.autoshown = nil
@@ -383,7 +374,7 @@ function ksk.UpdateUserSecurity(conf)
 end
 
 function ksk.AmIML()
-  if (KRP.in_party and KRP.is_ml and ksk.csd.is_admin) then
+  if (KRP.is_ml and ksk.csd.is_admin) then
     return true
   end
   return false
@@ -761,7 +752,7 @@ end
 local function ksk_deleteuser(input)
   local cmd = L["CMD_DELETEUSER"]
   local rv, nname, _, userid = common_verify_input(input, cmd, true, false,
-    ksk.users, L["user %q does not exist. Try again."], nil)
+    ksk.cfg.users, L["user %q does not exist. Try again."], nil)
 
   if (rv) then
     return true
@@ -774,13 +765,13 @@ local function ksk_deleteuser(input)
 end
 
 local function ksk_renameuser(input)
-  if (not ksk.users) then
+  if (not ksk.cfg.users) then
     return false
   end
 
   local cmd = L["CMD_RENAMEUSER"]
   local rv, _, newname, userid, found = common_verify_input2(input, cmd, true,
-    false, ksk.users,
+    false, ksk.cfg.users,
     L["user %q does not exist. Try again."],
     L["user %q already exists. Try again."])
 
@@ -1002,8 +993,8 @@ local function ksk_additem(input)
     return true
   end
 
-  if (ksk.items[itemid]) then
-    err(L["item %s already exists."], ksk.items[itemid].ilink)
+  if (ksk.cfg.items[itemid]) then
+    err(L["item %s already exists."], ksk.cfg.items[itemid].ilink)
     return true
   end
 
@@ -1242,12 +1233,9 @@ function ksk.MakeAliases()
   ksk.configs = ksk.db.factionrealm.configs
 
   if (ksk.currentid) then
-    local cid = ksk.currentid
-    ksk.cfg = ksk.db.factionrealm.configs[cid]
-    ksk.users = ksk.db.factionrealm.configs[cid].users
-    ksk.settings = ksk.db.factionrealm.configs[cid].settings
-    ksk.lists = ksk.db.factionrealm.configs[cid].lists
-    ksk.items = ksk.db.factionrealm.configs[cid].items
+    ksk.cfg = ksk.db.factionrealm.configs[ksk.currentid]
+  else
+    ksk.cfg = nil
   end
 end
 
@@ -1409,20 +1397,20 @@ local function get_user_pos(uid, ulist)
   local cuid = uid
   local rpos = 0
   if (ksk.cfg.tethered) then
-    if (ksk.users[uid] and ksk.users[uid].main) then
-      cuid = ksk.users[uid].main
+    if (ksk.cfg.users[uid] and ksk.cfg.users[uid].main) then
+      cuid = ksk.cfg.users[uid].main
     end
   end
 
   for k,v in ipairs(ulist) do
-    if (ksk.group) then
+    if (ksk.users) then
       local ir = false
-      if (ksk.group.users[v]) then
+      if (ksk.users[v]) then
         ir = true
       else
-        if (ksk.cfg.tethered and ksk.users[v].alts) then
-          for kk,vv in pairs(ksk.users[v].alts) do
-            if (ksk.group.users[vv]) then
+        if (ksk.cfg.tethered and ksk.cfg.users[v].alts) then
+          for kk,vv in pairs(ksk.cfg.users[v].alts) do
+            if (ksk.users[vv]) then
               ir = true
               break
             end
@@ -1458,7 +1446,7 @@ local function chat_msg_whisper(evt, msg, snd, ...)
       local sentheader = false
       local ndone = 0
       for k,v in pairs(ksk.sortedlists) do
-        local lp = ksk.lists[v.id]
+        local lp = ksk.cfg.lists[v.id]
         local apos, rpos = get_user_pos(uid, lp.users)
         if (apos) then
           ndone = ndone + 1
@@ -1466,7 +1454,7 @@ local function chat_msg_whisper(evt, msg, snd, ...)
             ksk:SendWhisper(strfmt(L["LISTPOSMSG"], L["MODABBREV"], ksk.cfg.name, L["MODTITLE"]), sender)
             sentheader = true
           end
-          if (ksk.group) then
+          if (ksk.users) then
             ksk:SendWhisper(strfmt(L["%s: %s - #%d (#%d in raid)"], L["MODABBREV"], lp.name, apos, rpos), sender)
           else
             ksk:SendWhisper(strfmt("%s: %s - #%d", L["MODABBREV"], lp.name, apos), sender)
@@ -1506,16 +1494,16 @@ function ksk.ConfigAdmin(onoff)
 
   if (onoff) then
     if (chat_filters_installed ~= true) then
-      if (ksk.settings.chat_filter) then
+      if (ksk.cfg.settings.chat_filter) then
         chat_filters_installed = true
         ef = ChatFrame_AddMessageEventFilter
       end
     end
   end
 
-  if (not onoff or not ksk.settings.chat_filter) then
+  if (not onoff or not ksk.cfg.settings.chat_filter) then
     if (chat_filters_installed) then
-      chat_filters_installed = false
+      chat_filters_installed = nil
       ef = ChatFrame_RemoveMessageEventFilter
     end
   end
@@ -1559,32 +1547,7 @@ end
 -- that table as it is about to be re-populated.
 --
 local function krp_update_group_start(_, _, pvt, ...)
-  pvt.users = {}
-end
-
-local function update_denchers()
-  ksk.group.denchers = {}
-
-  for k, v in pairs(KRP.players) do
-    if (v["ksk_dencher"]) then
-      tinsert(ksk.group.denchers, k)
-    end
-  end
-end
-
---
--- Called by KRP when it is done updating all of the group info.
---
-local function krp_update_group_end(_, _, pvt, ...)
-  if (not KRP.in_party) then
-    return
-  end
-
-  ksk.group = ksk.group or {}
-  update_denchers()
-
-  ksk.RefreshAllMemberLists()
-  update_bcast_button()
+  ksk.users = {}
 end
 
 --
@@ -1597,6 +1560,10 @@ end
 -- player is unique to the current config.
 --
 local function krp_new_player(_, _, pvt, player)
+  if (ksk.frdb.tempcfg) then
+    return
+  end
+
   local nm = player.name
   local unkuser = nil
 
@@ -1622,16 +1589,50 @@ local function krp_new_player(_, _, pvt, player)
     player["ksk_missing"] = true
     player["ksk_uid"] = nil
   else
-    pvt.users[uid] = player.name
+    ksk.users[uid] = player.name
     player["ksk_uid"] = uid
     player["ksk_missing"] = nil
 
     for i = 1, ksk.MAX_DENCHERS do
-      if (ksk.settings.denchers[i] == uid and player.online) then
+      if (ksk.cfg.settings.denchers[i] == uid and player.online) then
         player["ksk_dencher"] = true
       end
     end
   end
+end
+
+local function update_denchers()
+  ksk.denchers = {}
+
+  for k, v in pairs(KRP.players) do
+    if (v["ksk_dencher"]) then
+      tinsert(ksk.denchers, k)
+    end
+  end
+end
+
+--
+-- Called by KRP when it is done updating all of the group info.
+--
+local function krp_update_group_end(_, _, pvt, in_p, in_r, in_bg)
+  if (ksk.frdb.tempcfg) then
+    return
+  end
+
+  if (in_p) then
+    assert(ksk.users)
+    update_denchers()
+  else
+    ksk.users = nil
+    ksk.nmissing = 0
+    ksk.missing = {}
+    ksk.ResetBossLoot()
+  end
+
+  ksk.RefreshListsUIForRaid(in_p)
+  ksk.qf.addmissing:SetEnabled((in_p and ksk.nmissing > 0) and true or false)
+  ksk.RefreshAllMemberLists()
+  update_bcast_button()
 end
 
 --
@@ -1645,39 +1646,22 @@ end
 -- This is fired when the state changes from in raid to out, or out to in.
 --
 local function krp_in_group_changed(_, _, pvt, in_party, in_raid, in_bg)
-  if (in_party or in_raid) then
-    local krp_private = KRP:GetPrivate(ksk.addon_handle)
-    ksk.group = {}
-    if (krp_private and krp_private.users) then
-      ksk.group.users = krp_private.users
-    else
-      ksk.group.users = {}
-    end
-    if (not ksk.frdb.tempcfg) then
-      update_denchers()
-      if (ksk.csd.is_admin) then
-        ksk:SendAM("REQRS", "BULK")
-      end
+  if (ksk.frdb.tempcfg) then
+    return
+  end
+
+  if (in_party) then
+    if (ksk.csd.is_admin) then
+      ksk:SendAM("REQRS", "BULK")
     end
 
-    ksk.RefreshListsUIForRaid(true)
-    ksk.qf.addmissing:SetEnabled(ksk.nmissing > 0 and true or false)
-
-    if (not ksk.frdb.tempcfg) then
-      if (KRP.is_ml and not ksk.csd.is_admin) then
+    if (KRP.is_ml and not ksk.csd.is_admin) then
+      if (not ksk.csd.admin_warned) then
+        ksk.csd.admin_warned = true
         info(L["you are the master looter but not an administrator of this configuration. You will be unable to loot effectively. Either change master looter or have the owner of the configuration assign you as an administrator."])
       end
     end
-  else
-    ksk.group = nil
-    ksk.nmissing = 0
-    ksk.missing = {}
-    ksk.RefreshListsUIForRaid(false)
-    ksk.qf.addmissing:SetEnabled(false)
-    ksk.ResetBossLoot()
   end
-
-  update_bcast_button()
 end
 
 local function kld_start_loot_info(_, _, pvt)
@@ -1685,7 +1669,6 @@ local function kld_start_loot_info(_, _, pvt)
     return
   end
 
-  debug(1, "Resetting boss loot")
   ksk.ResetBossLoot()
 end
 
@@ -1699,8 +1682,6 @@ local function kld_loot_item(_, _, pvt, item)
   if (not ksk.AmIML()) then
     return
   end
-
-  debug(1, "loot_item")
 
   ksk.announcedloot = ksk.announcedloot or {}
 
@@ -1717,17 +1698,17 @@ local function kld_loot_item(_, _, pvt, item)
     skipit = true
   end
 
-  debug(1, "skipit=%s", tostring(skipit))
   if (item.locked) then
     skipit = true
   end
 
-  if (ksk.group and ksk.group.denchers) then
-    for k, v in pairs(ksk.group.denchers) do
+  if (ksk.denchers) then
+    for k, v in pairs(ksk.denchers) do
       if (not dencher) then
         -- Check to ensure that the dencher can receive the loot from master
         if (item.candidates[v]) then
           dencher = v
+          break
         end
       end
     end
@@ -1739,15 +1720,15 @@ local function kld_loot_item(_, _, pvt, item)
     end
   end
 
-  if (itemid and ksk.items[itemid]) then
-    if (ksk.items[itemid].ignore) then
+  if (itemid and ksk.cfg.items[itemid]) then
+    if (ksk.cfg.items[itemid].ignore) then
       skipit = true
-    elseif (ksk.items[itemid].autodench) then
+    elseif (ksk.cfg.items[itemid].autodench) then
       if (dencher) then
         skipit = true
         give = dencher
       end
-    elseif (ksk.items[itemid].automl) then
+    elseif (ksk.cfg.items[itemid].automl) then
       if (item.candidates[KRP.master_looter]) then
         skipit = true
         give = KRP.master_looter
@@ -1816,7 +1797,7 @@ local function kld_end_loot_info()
     sentoloot = true
     ksk:SendAM("OLOOT", "ALERT", uname, uguid, realguid, ilist)
 
-    if (ksk.settings.auto_bid == true) then
+    if (ksk.cfg.settings.auto_bid == true) then
       if (not ksk.mainwin:IsVisible()) then
         ksk.autoshown = true
       end
@@ -1824,10 +1805,10 @@ local function kld_end_loot_info()
       ksk.mainwin:SetTab(ksk.LOOT_TAB, ksk.LOOT_ASSIGN_PAGE)
     end
 
-    if (ksk.settings.announce_where ~= 0) then
+    if (ksk.cfg.settings.announce_where ~= 0) then
       ksk.announcedloot = ksk.announcedloot or {}
       local sendfn = ksk.SendGuildText
-      if (ksk.settings.announce_where == 2) then
+      if (ksk.cfg.settings.announce_where == 2) then
         sendfn = ksk.SendText
       end
 
@@ -1841,7 +1822,7 @@ local function kld_end_loot_info()
         ksk.lastannouncetime = ksk.lastannouncetime or time()
         local now = time()
         local elapsed = difftime(now, ksk.lastannounce)
-        if (elapsed < 90) then
+        if (elapsed < 60) then
           dloot = false
         end
       end
@@ -1863,6 +1844,7 @@ local function kld_looting_ended(_, _, pvt)
   end
 
   ksk.CloseLoot()
+  ksk.ResetBossLoot()
 
   if (ksk.autoshown) then
     ksk.autoshown = nil
@@ -1987,14 +1969,14 @@ local konfer = {
   end,
 
   open_on_loot = function(handle)
-    if (ksk.settings and ksk.settings.auto_bid) then
+    if (ksk.cfg.settings and ksk.cfg.settings.auto_bid) then
       return true
     end
     return false
   end,
 }
 
-local function ksk_initialisation()
+function ksk:OnLateInit()
   if (ksk.initialised) then
     return
   end
@@ -2033,8 +2015,4 @@ local function ksk_initialisation()
   K.RegisterComm(ksk, ksk.CHAT_MSG_PREFIX)
 
   ksk_initialised()
-end
-
-function ksk:OnLateInit()
-  ksk_initialisation()
 end

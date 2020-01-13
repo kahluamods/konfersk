@@ -82,14 +82,14 @@ end
 --
 function ksk.CreateRaidList(listid)
   local raiders = {}
-  for k,v in ipairs(ksk.lists[listid].users) do
+  for k,v in ipairs(ksk.cfg.lists[listid].users) do
     if (ksk.UserIsReserved(v)) then
       tinsert(raiders, v)
-    elseif (ksk.group.users[v]) then
+    elseif (ksk.users[v]) then
       tinsert(raiders, v)
-    elseif (ksk.cfg.tethered and ksk.users[v].alts) then
-      for ak,av in pairs(ksk.users[v].alts) do
-        if (ksk.group.users[av]) then
+    elseif (ksk.cfg.tethered and ksk.cfg.users[v].alts) then
+      for ak,av in pairs(ksk.cfg.users[v].alts) do
+        if (ksk.users[av]) then
           tinsert(raiders, v)
           break
         end
@@ -406,7 +406,17 @@ function ksk.UpdateDatabaseVersion()
         tinsert(newhist, { tonumber(when), what, who, how })
       end
       v.history = newhist
+
+      --
+      -- We also dont use Name-Realm names to disambiguate things as that is
+      -- not supported in classic WoW and prevents certain API calls like
+      -- UnitInRange() from working correctly.
+      --
+      for kk,vv in pairs(v.users) do
+        vv.name = K.CanonicalName(vv.name)
+      end
     end
+
     ret = true
   end
 
