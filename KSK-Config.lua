@@ -723,15 +723,7 @@ local function select_dencher(btn, lbl, num)
     -- If we're in raid, refresh the raid's notion of possible denchers.
     --
     if (ksk.users) then
-      ksk.denchers = {}
-      for i = 1, ksk.MAX_DENCHERS do
-        local duid = ksk.cfg.settings.denchers[i]
-        if (duid) then
-          if (ksk.users[duid]) then
-            tinsert(ksk.denchers, duid)
-          end
-        end
-      end
+      ksk.UpdateDenchers()
     end
     ksk.popupwindow:Hide()
     ksk.popupwindow = nil

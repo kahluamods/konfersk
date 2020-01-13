@@ -1601,7 +1601,9 @@ local function krp_new_player(_, _, pvt, player)
   end
 end
 
-local function update_denchers()
+function ksk.UpdateDenchers()
+  assert(ksk.users)
+
   ksk.denchers = {}
 
   for k, v in pairs(KRP.players) do
@@ -1620,8 +1622,7 @@ local function krp_update_group_end(_, _, pvt, in_p, in_r, in_bg)
   end
 
   if (in_p) then
-    assert(ksk.users)
-    update_denchers()
+    ksk.UpdateDenchers()
   else
     ksk.users = nil
     ksk.nmissing = 0
