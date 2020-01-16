@@ -80,6 +80,7 @@ L["ABOUT3"] = "Visit %s for more details."
 L["WHISPERCMD_BID"] = "bid"
 L["WHISPERCMD_RETRACT"] = "retract"
 L["WHISPERCMD_SUICIDE"] = "suicide"
+L["WHISPERCMD_SUICIDE_ALTERNATE"] = "position"
 L["WHISPERCMD_STANDBY"] = "standby"
 L["WHISPERCMD_HELP"] = "ksk"
 
