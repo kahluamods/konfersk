@@ -1358,10 +1358,11 @@ local function extract_cmd(msg)
   if ((lm == L["WHISPERCMD_BID"]) or
       (lm == L["WHISPERCMD_RETRACT"]) or
       (lm == L["WHISPERCMD_SUICIDE"]) or
+      (lm == L["WHISPERCMD_SUICIDE_ALTERNATE"]) or
       (lm == L["WHISPERCMD_STANDBY"]) or
       (lm == L["WHISPERCMD_HELP"]) or
       (lm == "bid") or (lm == "retract") or (lm == "suicide") or
-      (lm == "standby") or (lm == "help")) then
+      (lm == "position") or (lm == "standby") or (lm == "help")) then
     return lm
   end
 end
@@ -1437,7 +1438,7 @@ local function chat_msg_whisper(evt, msg, snd, ...)
       return ksk.NewBidder(sender)
     elseif (cmd == "retract" or cmd == L["WHISPERCMD_RETRACT"]) then
       return ksk.RetractBidder(sender)
-    elseif (cmd == "suicide" or cmd == L["WHISPERCMD_SUICIDE"]) then
+    elseif (cmd == "suicide" or cmd == L["WHISPERCMD_SUICIDE"] or cmd == L["WHISPERCMD_SUICIDE_ALTERNATE"]) then
       local uid = ksk.FindUser(sender)
       if (not uid) then
         ksk:SendWhisper(strfmt(L["%s: you are not on any roll lists (yet)."], L["MODABBREV"]), sender)
