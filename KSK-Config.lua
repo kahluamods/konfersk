@@ -3,7 +3,7 @@
      WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
-     E-mail: cruciformer@gmail.com
+     E-mail: me@cruciformer.com
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
@@ -1312,7 +1312,7 @@ function ksk.InitialiseConfigUI()
   arg = {
     x = 0, y = -10, height = 12, font = "GameFontNormalSmall",
     autosize = false, width = 290,
-    text = strfmt(L["ABOUT2"], white("cruciformer@gmail.com"))
+    text = strfmt(L["ABOUT2"], white("me@cruciformer.com"))
   }
   about.str2 = KUI:CreateStringLabel(arg, about)
 

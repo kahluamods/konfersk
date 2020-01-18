@@ -1,10 +1,10 @@
 ﻿## Interface: 11303
-## Title: Konfer (Suicide Kings) |cffff2222-K-|r
+## Title: Konfer Suicide Kings |cffff2222-K-|r
 ## Notes: Suicide Kings loot distribution system.
 ## Notes-deDE: Suicide Kings Loot Verteilungs System.
 ## Author: Cruciformer
 ## Version: @revision@
-## X-email: cruciformer@gmail.com
+## X-email: me@cruciformer.com
 ## X-Credits: Ace3 development team
 ## X-Category: Loot
 ## X-License: Apache

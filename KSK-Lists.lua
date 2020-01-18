@@ -3,7 +3,7 @@
      WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
-     E-mail: cruciformer@gmail.com
+     E-mail: me@cruciformer.com
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 

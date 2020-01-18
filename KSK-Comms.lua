@@ -3,7 +3,7 @@
      WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
-     E-mail: cruciformer@gmail.com
+     E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
    Copyright 2008-2020 James Kean Johnston. All rights reserved.
@@ -1852,7 +1852,7 @@ end
 -- Command: OROLL ilink timeout
 -- Purpose: Sent when an item is being sent to open roll.
 --
-ihandlers.OROLL = function(sender, proto, cmd, cfg, ilink, timeout)
+ihandlers.OROLL = function(sender, proto, cmd, cfg, ilink, timeout, allowos)
   if (cfg ~= ksk.currentid) then
     return
   end
@@ -1861,7 +1861,7 @@ ihandlers.OROLL = function(sender, proto, cmd, cfg, ilink, timeout)
     return
   end
 
-  ksk.StartOpenRoll(ilink, timeout)
+  ksk.StartOpenRoll(ilink, timeout, allowos)
 end
 
 --

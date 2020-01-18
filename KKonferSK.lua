@@ -3,7 +3,7 @@
      WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
-     E-mail: cruciformer@gmail.com
+     E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
    Copyright 2008-2020 James Kean Johnston. All rights reserved.
@@ -135,7 +135,8 @@ ksk.version = MINOR
 --   1   - internal only (version check)
 --   2   - initial protocol
 --   3   - dates now in UTC seconds since epoch for history
-ksk.protocol = 3
+--   4   - OROLL now has extra param for allowing offspec rolls
+ksk.protocol = 4
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
@@ -1218,14 +1219,15 @@ function ksk.CheckPerm(cfg)
 end
 
 local function update_bcast_button()
+  ksk.UpdateUserSecurity()
   if (ksk.csd.is_admin) then
     if (ksk.AmIML() or KRP.is_aorl or KRP.is_pl or
       ksk.UserIsRanked(ksk.currentid, K.player)) then
       ksk.qf.bcastbutton:SetEnabled(true)
+      return
     end
-  else
-    ksk.qf.bcastbutton:SetEnabled(false)
   end
+  ksk.qf.bcastbutton:SetEnabled(false)
 end
 
 function ksk.MakeAliases()

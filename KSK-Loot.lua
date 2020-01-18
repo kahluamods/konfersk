@@ -3,7 +3,7 @@
      WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
      IRC: #KahLua on irc.freenode.net
-     E-mail: cruciformer@gmail.com
+     E-mail: me@cruciformer.com
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
@@ -914,10 +914,13 @@ local function player_rolled(player, roll, minr, maxr)
       --
       local loot = lootitem.loot
       local slot = loot.slot
-      local klid = KLD.items[slot]
-      if (klid.candidates and not klid.candidates[player]) then
-        ksk:SendWhisper(strfmt(L["%s: you are not eligible to receive loot - %s ignored."], L["MODTITLE"], L["roll"]), player)
-        return
+      if (slot > 0) then
+        -- Slot 0 is for manually added items
+        local klid = KLD.items[slot]
+        if (klid.candidates and not klid.candidates[player]) then
+          ksk:SendWhisper(strfmt(L["%s: you are not eligible to receive loot - %s ignored."], L["MODTITLE"], L["roll"]), player)
+          return
+        end
       end
 
       class = KRP.players[player].class
@@ -2480,7 +2483,7 @@ function ksk.InitialiseLootUI()
     qf.lootwin.remcancel:SetText(K.CANCEL_STR)
     qf.lootwin.remcancel:SetEnabled(true)
 
-    ksk.StartOpenRoll(lootitem.loot.ilink, ksk.cfg.settings.roll_timeout)
+    ksk.StartOpenRoll(lootitem.loot.ilink, ksk.cfg.settings.roll_timeout, ksk.cfg.settings.offspec_rolls)
     lootroll.suicide = sroll
   end
 
@@ -4103,8 +4106,10 @@ function ksk.UndoSuicide(cfg, listid, movers, uid, ilink, nocmd)
   end
 end
 
-function ksk.StartOpenRoll(ilink, timeout)
-  if (ksk.AmIML() and biditem) then
+function ksk.StartOpenRoll(ilink, timeout, allowos)
+  local isml = ksk.AmIML()
+
+  if (isml and biditem) then
     ksk:SendAM("BIDCL", "ALERT", biditem)
   end
 
@@ -4118,7 +4123,7 @@ function ksk.StartOpenRoll(ilink, timeout)
   rolling = 1
 
   qf.bidders.mybid:SetEnabled(true)
-  qf.bidders.forcebid:SetEnabled(ksk.cfg.settings.offspec_rolls)
+  qf.bidders.forcebid:SetEnabled(allowos)
   qf.bidders.forceret:SetEnabled(true)
   qf.bidders.mybid:SetText(L["Roll (main)"])
   qf.bidders.forcebid:SetText(L["Roll (offspec)"])
@@ -4142,7 +4147,7 @@ function ksk.StartOpenRoll(ilink, timeout)
     qf.lootroll:RegisterEvent("CHAT_MSG_SYSTEM")
     qf.lootroll:SetScript("OnEvent", rlf_onevent)
     qf.lootroll.timerbar:SetScript("OnUpdate", rolltimer_onupdate_ml)
-    ksk:SendAM("OROLL", "ALERT", lootitem.loot.ilink, timeout)
+    ksk:SendAM("OROLL", "ALERT", lootitem.loot.ilink, timeout, ksk.cfg.settings.offspec_rolls)
   else
     qf.lootroll.timerbar:SetScript("OnUpdate", rolltimer_onupdate_user)
   end
