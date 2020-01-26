@@ -74,6 +74,9 @@ local HIST_WHAT = ksk.HIST_WHAT
 local HIST_WHO  = ksk.HIST_WHO
 local HIST_HOW  = ksk.HIST_HOW
 
+local HIST_EXP_XML  = 1
+local HIST_EXP_JSON = 2
+
 --
 -- This file contains all of the UI handling code for the loot panel,
 -- as well as all loot manipulation functions. This is a fairly complicated UI
@@ -126,6 +129,8 @@ local HIST_HOW  = ksk.HIST_HOW
 --   frame is qf.lootrules and has the following children:
 --   .warrior, .paladin, .druid etc for all 12 classes
 --   .role - the drop down for the user role
+--   .rank - the dropdown for the guild rank
+--   .nextrank - the button for moving to the next lower rank
 --   .strictarmor - checkbox for strict armor filtering
 --   .strictrole - checkbox for string role filtering
 -- ALF_CONFIRM - the auto-loot confirmation frame. This is displayed when an
@@ -178,6 +183,7 @@ local selectedloot = nil
 --  filter - the class filter
 --  role - the role filter
 --  list - the desired roll list
+--  rank - the rank filter
 --  loot - ksk.bossloot[selectedloot]
 --     slot - the loot slot index for Blizzard API functions
 --     itemid - the item ID
@@ -342,8 +348,15 @@ local function lootrules_setenabled(val)
 
   classes_setenabled(qf.lootrules, onoff)
   qf.lootrules.role:SetEnabled(onoff)
+  qf.lootrules.rank:SetEnabled(onoff)
+  qf.lootrules.nextrank:SetEnabled(onoff)
   qf.lootrules.strictarmour:SetEnabled(onoff)
   qf.lootrules.strictrole:SetEnabled(onoff)
+
+  if (ksk.cfg.cfgtype == KK.CFGTYPE_PUG) then
+    qf.lootrules.rank:SetEnabled(false)
+    qf.lootrules.nextrank:SetEnabled(false)
+  end
 end
 
 local function lootbid_setenabled(val)
@@ -1136,6 +1149,21 @@ local function rlist_selectitem(objp, idx, slot, btn, onoff)
   if (onoff) then
     lootlistid = ksk.sortedlists[idx].id
     local lootlist = ksk.cfg.lists[lootlistid]
+
+    --
+    -- If this list has a default rank, set it now, unless its "None".
+    -- Otherwise, set it to the global one if its not None.
+    --
+    if (lootlist.def_rank) then
+      qf.lootrules.rank:SetValue(lootlist.def_rank)
+    else
+      if (ksk.cfg.settings.def_rank) then
+        qf.lootrules.rank:SetValue(ksk.cfg.settings.def_rank)
+      else
+        qf.lootrules.rank:SetValue(0)
+      end
+    end
+
     --
     -- Set the strict enforcing options
     --
@@ -1267,7 +1295,7 @@ local function lloot_on_click(this)
   local idx = this:GetID()
 
   if (IsModifiedClick("CHATLINK")) then
-    ChatEdit_InsertLink( ksk.bossloot[idx].ilink)
+    ChatEdit_InsertLink(ksk.bossloot[idx].ilink)
     return
   end
 
@@ -1297,6 +1325,7 @@ local function lloot_on_click(this)
   local cf = nil
   local role = 0
   local slist = nil
+  local rank = 0
   local strict = nil
 
   if (ksk.iitems[itemid]) then
@@ -1318,16 +1347,28 @@ local function lloot_on_click(this)
     cf = ii.cfilter or cf
     role = ii.role or role
     slist = ii.list or slist
+    rank = ii.rank or rank
   end
 
   if (not slist and ksk.cfg.settings.def_list ~= "0") then
     slist = ksk.cfg.settings.def_list
   end
 
-  if (not slist) then
+  if (slist ~= nil) then
+    if (not rank and ksk.cfg.lists[slist].def_rank) then
+      rank = ksk.cfg.lists[slist].def_rank
+    end
+  else
     if (lootlistid) then
       slist = lootlistid
+      if (not rank) then
+        rank = ksk.cfg.lists[lootlistid].def_rank
+      end
     end
+  end
+
+  if (not rank and ksk.cfg.settings.def_rank) then
+    rank = ksk.cfg.settings.def_rank
   end
 
   if (not cf) then
@@ -1351,8 +1392,8 @@ local function lloot_on_click(this)
     lootbid_setenabled(true)
     qf.bidders.mybid:SetEnabled(false)
 
-    ksk.SelectLootItem(idx, cf, role, slist)
-    ksk:SendAM("LISEL", "ALERT", idx, cf, role, slist)
+    ksk.SelectLootItem(idx, cf, role, slist, rank)
+    ksk:SendAM("LISEL", "ALERT", idx, cf, role, slist, rank)
     check_missing_members()
   end
 end
@@ -1456,6 +1497,7 @@ local function setup_iinfo()
   iinfo.ignore = ii.ignore or false
   iinfo.list = ii.list or "0"
   iinfo.role = ii.role or 0
+  iinfo.rank = ii.rank or 0
   iinfo.nextuser = ii.user or nil
   iinfo.nextdrop = iinfo.nextuser ~= nil
   iinfo.autodel = ii.del or false
@@ -1475,12 +1517,17 @@ local function enable_uvalues(io, en)
   local en = en or false
   classes_setenabled(io, en)
   io.speclist:SetEnabled(en)
+  io.defrank:SetEnabled(en)
   io.role:SetEnabled(en)
   io.nextdrop:SetEnabled(en)
   io.nextuser:SetEnabled(en and iinfo.nextdrop)
   io.seluser:SetEnabled(en and iinfo.nextdrop)
   io.autodel:SetEnabled(en and iinfo.nextdrop)
   io.suicidelist:SetEnabled(en and iinfo.nextdrop)
+
+  if (ksk.cfg.cfgtype == KK.CFGTYPE_PUG) then
+    io.defrank:SetEnabled(false)
+  end
 end
 
 local function ilist_selectitem(objp, idx, slot, btn, onoff)
@@ -1533,6 +1580,7 @@ local function ilist_selectitem(objp, idx, slot, btn, onoff)
     io.nextdrop:SetChecked(iinfo.nextdrop)
     io.role:SetValue(iinfo.role)
     io.speclist:SetValue(iinfo.list)
+    io.defrank:SetValue(iinfo.rank)
     io.ignore:SetChecked(iinfo.ignore)
     io.deletebtn:SetEnabled(true)
     changed(true, true)
@@ -1861,6 +1909,10 @@ function ksk.MakeCHITM(itemid, ii, cfg, send)
     es = es .. ii.list
   end
   es = es .. ":"
+  if (ii.rank) then
+    es = es .. tostring(ii.rank)
+  end
+  es = es .. ":"
   if (ii.user) then
     es = es .. ii.user .. ":"
     if (ii.suicide) then
@@ -1888,64 +1940,7 @@ function ksk.MakeCHITM(itemid, ii, cfg, send)
   return es
 end
 
-local function export_history_button()
-  if (not exphistdlg) then
-    local ypos = 0
-    local arg = {
-      x = "CENTER", y = "MIDDLE",
-      name = "KSKExportHistoryDialog",
-      title = L["Export Loot History"],
-      border = true,
-      width = 400,
-      height = 125,
-      canmove = true,
-      canresize = false,
-      escclose = true,
-      blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = { text = K.CANCELSTR },
-    }
-    local ret = KUI:CreateDialogFrame(arg)
-
-    arg = {
-      x = 0, y = ypos, len = 99999,
-      label = { text = L["Export string"], pos = "LEFT" },
-      tooltip = { title = "$$", text = L["TIP050"], },
-    }
-    ret.expstr = KUI:CreateEditBox(arg, ret)
-    ret.expstr:Catch("OnValueChanged", function(this, evt, newv)
-      this:HighlightText()
-      this:SetCursorPosition(0)
-      if (newv ~= "") then
-        this:SetFocus()
-        exphistdlg.copymsg:Show()
-      else
-        this:ClearFocus()
-        exphistdlg.copymsg:Hide()
-      end
-    end)
-    ypos = ypos - 30
-
-    arg = {
-      x = 16, y = ypos, width = 300,
-      text = L["Press Ctrl+C to copy the export string"],
-    }
-    ret.copymsg = KUI:CreateStringLabel(arg, ret)
-    ypos = ypos - 24
-
-    ret.OnAccept = function(this)
-      exphistdlg:Hide()
-      ksk.mainwin:Show()
-    end
-
-    ret.OnCancel = function(this)
-      exphistdlg:Hide()
-      ksk.mainwin:Show()
-    end
-
-    exphistdlg = ret
-  end
-
+local function make_xml_string()
   local dstr, tstr
   local classes = {}
   local ulist = {}
@@ -1975,6 +1970,8 @@ local function export_history_button()
   tinsert(llist, strfmt('<l id="u" n="???"/>'))
   lul["D"] = true
   lul["R"] = true
+  lul["M"] = true
+  lul["O"] = true
   lul["B"] = true
   lul["A"] = true
   lul["U"] = true
@@ -2044,11 +2041,184 @@ local function export_history_button()
   dstr = K.YMDStamp()
   tstr = K.HMStamp()
 
-  local fstr = strfmt("<ksk date=%q time=%q><classes>%s</classes><users>%s</users><quals>%s</quals><items>%s</items><lists>%s</lists><history>%s</history></ksk>", dstr, tstr, tconcat(classes, ""), tconcat(ulist, ""), tconcat(iql, ""), tconcat(ilist, ""), tconcat(llist, ""), tconcat(ehl, ""))
-  exphistdlg.expstr:SetText(fstr)
+  return strfmt("<ksk_history date=%q time=%q><classes>%s</classes><users>%s</users><quals>%s</quals><items>%s</items><lists>%s</lists><history>%s</history></ksk_history>", dstr, tstr, tconcat(classes, ""), tconcat(ulist, ""), tconcat(iql, ""), tconcat(ilist, ""), tconcat(llist, ""), tconcat(ehl, ""))
+end
+
+local function make_json_string()
+  local dstr, tstr
+  local cs = '{"id": "00", "v": "unkclass" }'
+  local ulist = {}
+  local llist = {}
+  local ilist = {}
+  local uul = {}
+  local lul = {}
+  local iil = {}
+  local iqual = {}
+  local iql = {}
+  local ehl = {}
+
+  for k,v in pairs(K.IndexClass) do
+    if (v.u) then
+      cs = cs .. strfmt(',\n{"id": %q, "v": %q}', tostring(k), strlower(tostring(v.u)))
+    end
+  end
+
+  tinsert(llist, strfmt('{ "id": "D", "n": %q }', L["Disenchanted"]))
+  tinsert(llist, strfmt('{ "id": "R", "n": %q }', L["Won Roll"]))
+  tinsert(llist, strfmt('{ "id": "M", "n": %q }', L["Main Spec Roll"]))
+  tinsert(llist, strfmt('{ "id": "O", "n": %q }', L["Off Spec Roll"]))
+  tinsert(llist, strfmt('{ "id": "B", "n": %q }', L["BoE assigned to ML"]))
+  tinsert(llist, strfmt('{ "id": "A", "n": %q }', L["Auto-assigned"]))
+  tinsert(llist, strfmt('{ "id": "U", "n": %q }', L["Undo"]))
+  tinsert(llist, strfmt('{ "id": "u", "n": "???" }'))
+  lul["D"] = true
+  lul["R"] = true
+  lul["M"] = true
+  lul["O"] = true
+  lul["B"] = true
+  lul["A"] = true
+  lul["U"] = true
+  lul["u"] = true
+
+  iqual["9d9d9d"] = { id="0", v="poor" }
+  iqual["ffffff"] = { id="1", v="common" }
+  iqual["1eff00"] = { id="2", v="uncommon" }
+  iqual["0070dd"] = { id="3", v="rare" }
+  iqual["a335ee"] = { id="4", v="epic" }
+  iqual["ff8000"] = { id="5", v="legendary" }
+  iqual["e6cc80"] = { id="6", v="artifact" }
+  for k,v in pairs(iqual) do
+    tinsert(iql, strfmt('{ "id": %q, "v": %q }', v.id, v.v))
+  end
+
+  for k,v in pairs(ksk.cfg.history) do
+    local when, what, who, how = unpack(v)
+    local uid = nil
+    local cls = nil
+    local name = nil
+
+    if (ksk.cfg.users[who]) then
+      uid = who
+      cls = ksk.cfg.users[who].class
+      name = ksk.cfg.users[uid].name
+    else
+      name, cls = strsplit("/", who)
+      uid = name
+      if (not cls) then
+        cls = "00"
+      end
+    end
+
+    if (not uul[uid]) then
+      uul[uid] = true
+      tinsert(ulist, strfmt('{ "id": %q, "n": %q, "c": %q }', uid, name, cls))
+    end
+
+    if (strlen(how) > 1) then
+      if (not ksk.cfg.lists[how]) then
+        how = "u"
+      end
+    end
+
+    if (not lul[how]) then
+      lul[how] = true
+      tinsert(llist, strfmt('{ "id": %q, "n": %q }',
+        how, ksk.cfg.lists[how].name))
+    end
+
+    dstr = K.YMDStamp(when)
+    tstr = K.HMStamp(when)
+
+    local iqv = iqual[strsub(what, 5, 10)].id
+    local iname = strmatch(what, "|h%[(.*)%]|h")
+    local itemid = strmatch(what, "item:(%d+)")
+
+    if (not (iil[itemid])) then
+      iil[itemid] = true
+      tinsert(ilist, strfmt('{ "id": %q, "n": %q, "q": %q }',
+        itemid, iname, iqv))
+    end
+
+    tinsert(ehl, strfmt('{ "d": %q, "t": %q, "id": %q, "u": %q, "w": %q}',
+      dstr, tstr, itemid, uid, how))
+  end
+
+  dstr = K.YMDStamp()
+  tstr = K.HMStamp()
+
+  return strfmt('{"ksk_history": { "date": %q, "time": %q, "classes": [%s], "users": [%s], "quals": [%s], "items": [%s], "lists": [%s], "history": [%s] }}', dstr, tstr, cs, tconcat(ulist, ","), tconcat(iql, ","), tconcat(ilist, ",\n"), tconcat(llist, ",\n"), tconcat(ehl, ",\n"))
+end
+
+local function export_history_button(fmt)
+  if (not exphistdlg) then
+    local ypos = 0
+    local arg = {
+      x = "CENTER", y = "MIDDLE",
+      name = "KSKExportHistoryDialog",
+      title = L["Export Loot History"],
+      border = true,
+      width = 400,
+      height = 125,
+      canmove = true,
+      canresize = false,
+      escclose = true,
+      blackbg = true,
+      okbutton = { text = K.ACCEPTSTR },
+      cancelbutton = { text = K.CANCELSTR },
+    }
+    local ret = KUI:CreateDialogFrame(arg)
+
+    arg = {
+      x = 0, y = ypos, len = 99999,
+      label = { text = L["Export string"], pos = "LEFT" },
+      tooltip = { title = "$$", text = L["TIP050"], },
+    }
+    ret.expstr = KUI:CreateEditBox(arg, ret)
+    ret.expstr:Catch("OnValueChanged", function(this, evt, newv)
+      this:HighlightText()
+      this:SetCursorPosition(0)
+      if (newv ~= "") then
+        this:SetFocus()
+        exphistdlg.copymsg:Show()
+      else
+        this:ClearFocus()
+        exphistdlg.copymsg:Hide()
+      end
+    end)
+    ypos = ypos - 30
+
+    arg = {
+      x = 16, y = ypos, width = 300,
+      text = L["Press Ctrl+C to copy the export string"],
+    }
+    ret.copymsg = KUI:CreateStringLabel(arg, ret)
+    ypos = ypos - 24
+
+    ret.OnAccept = function(this)
+      exphistdlg:Hide()
+      ksk.mainwin:Show()
+    end
+
+    ret.OnCancel = function(this)
+      exphistdlg:Hide()
+      ksk.mainwin:Show()
+    end
+
+    exphistdlg = ret
+  end
+
+  local fstr
+  if (fmt == HIST_EXP_XML) then
+    fstr = make_xml_string()
+  elseif (fmt == HIST_EXP_JSON) then
+    fstr = make_json_string()
+  else
+    fstr = ""
+  end
 
   ksk.mainwin:Hide()
   exphistdlg:Show()
+  exphistdlg.expstr:SetText(fstr)
 end
 
 local function undo_button()
@@ -2613,6 +2783,42 @@ function ksk.InitialiseLootUI()
   bm.role:SetValue(0)
 
   arg = {
+    x = 0, y = ypos, mode = "SINGLE", itemheight = 16,
+    name = "KSKLootRankFilter", dwidth = 150, items = KUI.emptydropdown,
+    label = { text = L["Guild Rank"], pos = "LEFT" },
+    tooltip = { title = "$$", text = L["TIP051"], },
+  }
+  bm.rank = KUI:CreateDropDown(arg, bm)
+  bm.rank:Catch("OnValueChanged", function (this, evt, newv, user)
+    if (lootitem) then
+      lootitem.rank = newv
+    end
+
+    if (ksk.AmIML() and user) then
+      ksk:SendAM("FLTCH", "ALERT", "G", newv)
+    end
+  end)
+  -- Must remain visible in ksk.qf so the ranks can be updated from main.
+  ksk.qf.lootrank = bm.rank
+
+  arg = {
+    x = 350, y = ypos, width = 16, height = 16, text = "-",
+  }
+  bm.nextrank = KUI:CreateButton(arg, bm)
+  bm.nextrank:ClearAllPoints()
+  bm.nextrank:SetPoint("TOPLEFT", bm.rank.button, "TOPRIGHT", 2, -4)
+  bm.nextrank:Catch("OnClick", function (this, evt, ...)
+    if (ksk.AmIML() and lootitem and lootitem.rank) then
+      if (lootitem.rank < K.guild.numranks) then
+        lootitem.rank = lootitem.rank + 1
+        bm.rank:SetValue (lootitem.rank)
+        ksk:SendAM("FLTCH", "ALERT", "G", lootitem.rank)
+      end
+    end
+  end)
+  ypos = ypos - 30
+
+  arg = {
     x = 0, y = ypos, label = { text = L["Strict Class Armor"] },
     font = "GameFontHighlightSmall", height = 16,
     tooltip = { title = "$$", text = L["TIP039"], }, 
@@ -2854,6 +3060,7 @@ function ksk.InitialiseLootUI()
     io.nextdrop:SetChecked(false)
     io.role:SetValue(0)
     classes_setchecked(io, false)
+    io.defrank:SetValue(0)
     io.speclist:SetValue("0")
   end
 
@@ -2953,6 +3160,22 @@ function ksk.InitialiseLootUI()
   -- This in turn calls ksk.RefreshItemList() below.
   --
   qf.itemlistdd = rs.speclist
+  ypos = ypos - 48
+
+  arg = {
+    x = 0, y = ypos, name = "KSKItemRankDropdown",
+    dwidth = 200, mode = "SINGLE", itemheight = 16, items = KUI.emptydropdown,
+    label = { text = L["Initial Guild Rank Filter"], },
+    enabled = false,
+    tooltip = { title = "$$", text = L["TIP061"], },
+  }
+  rs.defrank = KUI:CreateDropDown(arg, rs)
+  -- Must remain visible in ksk.qf so it can be updated from main.
+  ksk.qf.itemrankdd = rs.defrank
+  rs.defrank:Catch("OnValueChanged", function (this, evt, nv, user)
+    changed(nil, user)
+    iinfo.rank = nv
+  end)
   ypos = ypos - 48
 
   arg = {
@@ -3189,6 +3412,10 @@ function ksk.InitialiseLootUI()
         ksk.cfg.items[selitemid].list = iinfo.list
       end
 
+      if (iinfo.rank) then
+        ksk.cfg.items[selitemid].rank = iinfo.rank
+      end
+
       if (iinfo.nextdrop and iinfo.nextdrop ~= false and iinfo.nextuser and iinfo.nextuser ~= "" and iinfo.nextuser ~= 0) then
         ksk.cfg.items[selitemid].user = iinfo.nextuser
         if (iinfo.suicide and iinfo.suicide ~= "0") then
@@ -3244,7 +3471,7 @@ function ksk.InitialiseLootUI()
   end)
 
   arg = {
-    x = 85, y = ypos, width = 200, text = L["Clear all except last week"],
+    x = 85, y = ypos, width = 195, text = L["Clear all except last week"],
     tooltip = { title = "$$", text = L["TIP068"], },
   }
   bf.clearweek = KUI:CreateButton(arg, bf)
@@ -3285,12 +3512,21 @@ function ksk.InitialiseLootUI()
   ypos = ypos - 24
 
   arg = {
-    x = "CENTER", y = ypos, text = L["Export"],
-    tooltip = { title = "$$", text = L["TIP070"], },
+    x = 50, y = ypos, text = L["Export as XML"], width = 180,
+    tooltip = { title = "$$", text = L["TIP070.1"], },
   }
   bf.export = KUI:CreateButton(arg, bf)
   bf.export:Catch("OnClick", function(this, evt, ...)
-    export_history_button()
+    export_history_button(HIST_EXP_XML)
+  end)
+
+  arg = {
+    x = 250, y = ypos, text = L["Export as JSON"], width = 180,
+    tooltip = { title = "$$", text = L["TIP070.2"], },
+  }
+  bf.export = KUI:CreateButton(arg, bf)
+  bf.export:Catch("OnClick", function(this, evt, ...)
+    export_history_button(HIST_EXP_JSON)
   end)
 
   arg = {
@@ -3544,12 +3780,12 @@ end
 -- or disable the loot buttons. The enabling of the loot control buttons
 -- should be done in the onclick handler, which is only run by the ML.
 --
-function ksk.SelectLootItem(idx, filter, role, list)
+function ksk.SelectLootItem(idx, filter, role, list, rank)
   local loot = ksk.bossloot[idx]
 
   selectedloot = idx
   lootitem = { idx = idx, filter = filter, role = role,
-               list = list, loot = loot }
+               list = list, rank = rank, loot = loot }
 
   ksk.qf.lootscroll:SetSelected(idx, true, true)
 
@@ -3572,6 +3808,7 @@ function ksk.SelectLootItem(idx, filter, role, list)
   -- Set up the various filters
   set_classes_from_filter(filter)
   qf.lootrules.role:SetValue(role)
+  qf.lootrules.rank:SetValue(rank)
 
   qf.bidders.mybid:SetText(L["Bid"])
   qf.bidders.mybid.retract = nil
@@ -3743,10 +3980,28 @@ function ksk.NewBidder(u)
   end
 
   -- Fifth check. Verify the user matches the currently selected class
-  -- and role filters. They are individual checks but we clump
+  -- and role and rank filters. They are individual checks but we clump
   -- them together.
   if (not verify_user_class(u, usr.class, L["bid"])) then
     return
+  end
+
+  local grprio = 1
+
+  if (ksk.cfg.cfgtype == KK.CFGTYPE_GUILD and K.player.is_guilded) then
+    local gi = K.guild.roster.name[u]
+    local ri = K.guild.numranks
+
+    if (gi) then
+      ri = K.guild.roster.id[gi].rank
+    end
+
+    if (lootitem.rank and lootitem.rank > 0 and (ri > lootitem.rank)) then
+      ksk:SendWhisper(strfmt(L["%s: you do not meet the current guild rank requirement (%q) - %s ignored."], L["MODTITLE"], K.guild.ranks[lootitem.rank], L["bid"]), u)
+      return
+    end
+
+    grprio = ksk.cfg.settings.rank_prio[ri] or 1
   end
 
   if (lootitem.strictrole and lootitem.role ~= ksk.KK.ROLE_UNSET) then
@@ -3766,10 +4021,11 @@ function ksk.NewBidder(u)
   -- a bid has taken place (but not who has bid). Otherwise, broadcast to the
   -- raid the bidder info so uses can update their mod's view of the bidders.
   --
-  ksk.AddBidder(usr.name, usr.class, 0, uid, true)
+  ksk.AddBidder(usr.name, usr.class, 0, uid, grprio,
+    ksk.cfg.cfgtype == KK.CFGTYPE_GUILD and ksk.cfg.settings.use_ranks, true)
 end
 
-function ksk.AddBidder(name, cls, idx, uid, announce)
+function ksk.AddBidder(name, cls, idx, uid, prio, useprio, announce)
   --
   -- Ignore the IDX value passed in and recalculate it from the current
   -- loot members list. Helps prevent a timing issue where a user may
@@ -3785,10 +4041,22 @@ function ksk.AddBidder(name, cls, idx, uid, announce)
     end
   end
 
-  local ti = { name = name, class = cls, idx = idx, uid = uid }
+  local ti = { name = name, class = cls, idx = idx, uid = uid, prio = prio }
   tinsert(bidders, ti)
   tsort(bidders, function(a, b)
-    return(a.idx < b.idx)
+    if (not useprio) then
+      return(a.idx < b.idx)
+    end
+    if (a.prio < b.prio) then
+      return true
+    end
+    if (a.prio > b.prio) then
+      return false
+    end
+    if (a.idx < b.idx) then
+      return true
+    end
+    return false
   end)
 
   refresh_bidders()
@@ -3820,7 +4088,7 @@ function ksk.AddBidder(name, cls, idx, uid, announce)
     if (ksk.cfg.settings.ann_bid_progress) then
       ksk:SendText(strfmt(L["%s: %s (position %d) has bid (highest bidder is %s)."], L["MODABBREV"], K.ShortName(name), idx, K.ShortName(bidders[1].name)))
     end
-    ksk:SendAM("BIDER", "ALERT", name, cls, idx, uid)
+    ksk:SendAM("BIDER", "ALERT", name, cls, idx, uid, prio, useprio)
   end
 end
 
@@ -4200,6 +4468,8 @@ function ksk.ChangeLootFilter(what, v1, v2)
     qf.lootrules[w]:SetChecked(v2)
   elseif (what == "R") then
     qf.lootrules.role:SetValue(v1)
+  elseif (what == "G") then
+    qf.lootrules.rank:SetValue(v1)
   elseif (what == "A") then
     qf.lootrules.strictarmour:SetChecked(v1)
   elseif (what == "L") then

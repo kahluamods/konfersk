@@ -432,14 +432,14 @@ ihandlers.BIDCL = function(sender, proto, cmd, cfg, ...)
 end
 
 --
--- Command: LISEL idx filter role list
+-- Command: LISEL idx filter role list rank
 -- Purpose: Select loot item at index position IDX. The item should have
 --          item id of ITEMID. FILTER is the class filter string, ROLE is the
 --          user role filter, and LIST is the list ID of the list that it
 --          will be rolled on (unless the master looter changes the list).
 --
 ihandlers.LISEL = function(sender, proto, cmd, cfg, ...)
-  local idx, filter, role, list = ...
+  local idx, filter, role, list, rank = ...
 
   if (cfg ~= ksk.currentid or not ksk.bossloot) then
     return
@@ -449,7 +449,7 @@ ihandlers.LISEL = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.SelectLootItem(idx, filter, role, list)
+  ksk.SelectLootItem(idx, filter, role, list, rank)
 end
 
 --
@@ -481,16 +481,18 @@ end
 
 local function prepare_config_from_bcast(cfd)
   local ncf = {}
-  local cfgid, cfgname, tethered, owner, ts, crc
+  local cfgid, cfgname, cfgtype, tethered, owner, ts, oranks, crc
   cfgid = nil
 
-  if (cfd.v == 3) then
-    cfgid, cfgname, tethered, owner, crc = strsplit(":", cfd.c)
+  if (cfd.v == 4) then
+    cfgid, cfgname, cfgtype, tethered, owner, oranks, crc = strsplit(":", cfd.c)
     ncf.name = cfgname
+    ncf.cfgtype = tonumber(cfgtype)
     ncf.tethered = getbool(tethered)
     ncf.owner = owner
     ncf.cksum = tonumber(crc)
     ncf.lastevent = 0
+    ncf.oranks = oranks
 
     ncf.history = {}
 
@@ -518,9 +520,9 @@ local function prepare_config_from_bcast(cfd)
     ncf.nlists = cfd.l[1]
     ncf.lists = {}
     for k,v in pairs(cfd.l[2]) do
-      local lid, lname, sorder, sc, sr, el, numu, ulist = strsplit(":", v)
+      local lid, lname, sorder, drank, sc, sr, el, numu, ulist = strsplit(":",v)
       ncf.lists[lid] = { name = lname, sortorder = tonumber(sorder),
-        strictcfilter = getbool(sc),
+        def_rank = tonumber(drank), strictcfilter = getbool(sc),
         strictrfilter = getbool(sr), extralist = el, nusers = tonumber(numu),
         users = ksk.SplitRaidList(ulist) }
     end
@@ -574,31 +576,35 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
   end
 
   local ncf, cfgid = prepare_config_from_bcast(cfd)
+  local cfgtype = ncf.cfgtype
 
   if (not cfgid) then
       debug(2, "invalid config in BCAST")
     return
   end
 
-  if (not KRP.in_party) then
-    --
-    -- The only way we can even receive this when we're not in either a party
-    -- or a raid is via a guild broadcast. So check see if the sender is
-    -- ranked.
+  if (K.player.is_guilded and cfgtype == KK.CFGTYPE_GUILD) then
+    -- Guild config
     if (not ksk.UserIsRanked(cfg, sender)) then
-      debug(2, "BCAST returning: not ranked")
+      debug (2, "BCAST returning: cfgtype=1 not ranked")
       return
     end
-  else
+  elseif (cfgtype == KK.CFGTYPE_PUG) then
+    if (not KRP.in_party) then
+      debug (2, "BCAST returning: cfgtype=1 not in raid")
+      return
+    end
     if (not KRP.players or not KRP.players[sender]) then
       debug(2, "BCAST returning: not in players")
       return
     end
-
     if (not KRP.players[sender].is_aorl and not KRP.players[sender].is_pl) then
       debug(2, "BCAST returning: not raid ranked")
       return -- Weird, user should not have been able to press broadcast button
     end
+  else
+    debug (2, "BCAST returning: cfgtype=%d", cfgtype)
+    return
   end
 
   local tcf = ksk.configs[cfgid]
@@ -634,6 +640,7 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
       tcf.name = ncf.name
       tcf.tethered = ncf.tethered
       tcf.owner = ncf.owner
+      tcf.oranks = ncf.oranks
       tcf.admins = tcf.admins or {}
       tcf.nadmins = 0
 
@@ -717,12 +724,14 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
     end
   end
 
-  if (not ksk.configs[cfgid]) then
-    K.ConfirmationDialog(ksk, L["Accept Configuration"],
+  if (cfgtype == KK.CFGTYPE_PUG) then
+    if (not ksk.configs[cfgid]) then
+      K.ConfirmationDialog(ksk, L["Accept Configuration"],
       strfmt(L["PUGCONFIG"], white(sender), L["MODTITLE"]),
       ncf.name, function(cfgdata) handle_cfgdata(cfgdata, cfgid) end, ncf,
       ksk.mainwin:IsShown(), 220, nil)
-    return
+      return
+    end
   end
 
   handle_cfgdata(ncf, cfgid)
@@ -853,7 +862,7 @@ ihandlers.BIDRT = function(sender, proto, cmd, cfg, ...)
 end
 
 --
--- Command: BIDER name class pos uid
+-- Command: BIDER name class pos uid prio useprio
 -- Purpose: Sent to the raid when a user bids, so that users who have the mod
 --          can see who is bidding. NAME is the user who bid on the item and
 --          POS is their position within the list being bid on. Note that this
@@ -864,7 +873,7 @@ end
 --          except the master looter.
 --
 ihandlers.BIDER = function(sender, proto, cmd, cfg, ...)
-  local name, class, pos, uid = ...
+  local name, class, pos, uid, prio, useprio = ...
 
   if (cfg ~= ksk.currentid or not ksk.bossloot) then
     return
@@ -874,7 +883,7 @@ ihandlers.BIDER = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.AddBidder(name, class, pos, uid, false)
+  ksk.AddBidder(name, class, pos, uid, prio, useprio, false)
 end
 
 --
@@ -1202,7 +1211,7 @@ ehandlers.CPLST = function(adm, sender, proto, cmd, cfg, ...)
 end
 
 --
--- Command: CHLST listid sort stricta strictr list
+-- Command: CHLST listid sort rank stricta strictr list
 -- Purpose: Syncer-only event sent when a list's paramaters are modified.
 --          SORT is the sort order,
 --          STRICTA is true if strict class armor filtering is in place,
@@ -1210,7 +1219,7 @@ end
 --          the additional list to suicide on.
 --
 ehandlers.CHLST = function(adm, sender, proto, cmd, cfg, ...)
-  local listid, sortorder, stricta, strictr, slist = ...
+  local listid, sortorder, rank, stricta, strictr, slist = ...
 
   local llist = ksk.configs[cfg].lists[listid]
   if (not llist) then
@@ -1218,6 +1227,7 @@ ehandlers.CHLST = function(adm, sender, proto, cmd, cfg, ...)
   end
 
   llist.sortorder = tonumber(sortorder)
+  llist.def_rank = tonumber(rank)
   llist.strictcfilter = getbool(stricta)
   llist.strictrfilter = getbool(strictr)
   if (slist == "0") then
@@ -1326,7 +1336,7 @@ ehandlers.RMITM = function(adm, sender, proto, cmd, cfg, itemid)
 end
 
 --
--- Command: CHITM itemid ign cfilter role list nextuser suicide del autodench automl
+-- Command: CHITM itemid ign cfilter role list rank nextuser suicide del autodench automl
 -- Purpose: This is a syncer-only event and deals with modifying an item in
 --          the item database. The item must already exist. IGN is set to
 --          Y if the item is to be ignored, N otherwise. If it is ignored
@@ -1343,7 +1353,7 @@ end
 --          in SUICIDE, otherwise its empty.
 --
 ehandlers.CHITM = function(adm, sender, proto, cmd, cfg, ...)
-  local itemid, ign, cfilt, role, lst, nextuser, slist, del, autodench, automl = ...
+  local itemid, ign, cfilt, role, lst, rank, nextuser, slist, del, autodench, automl = ...
 
   local ilist = ksk.configs[cfg].items
   if (not ilist[itemid]) then
@@ -1362,6 +1372,9 @@ ehandlers.CHITM = function(adm, sender, proto, cmd, cfg, ...)
     end
     if (lst and lst ~= "") then
       ii.list = lst
+    end
+    if (rank and rank ~= "") then
+      ii.rank = tonumber(rank)
     end
     if (nextuser and nextuser ~= "") then
       ii.user = nextuser
@@ -2019,4 +2032,34 @@ ehandlers.SUNDO = function(adm, sender, proto, cmd, cfg, ...)
   local rilink = gsub(ilink, "\7", ":")
   local movelist = ksk.SplitRaidList(movers)
   ksk.UndoSuicide(cfg, listid, movelist, uid, ilink, true)
+end
+
+--
+-- Command: ORANK oranks
+-- Purpose: Sent to the guild when the GM has changed the list of which ranks
+--          are considered officer ranks. We only process this message if the
+--          sender is the GM.
+--
+ihandlers.ORANK = function (sender, proto, cmd, cfg, ...)
+  local oranks = ...
+
+  if (not ksk.configs[cfg]) then
+    return
+  end
+
+  local cfp = ksk.configs[cfg]
+
+  if (cfp.settings.cfgtype ~= KK.CFGTYPE_GUILD) then
+    return
+  end
+
+  if (not K.player.is_guilded) then
+    return
+  end
+
+  if (sender ~= K.guild.gmname) then
+    return
+  end
+
+  cfp.oranks = oranks
 end

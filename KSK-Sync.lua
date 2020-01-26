@@ -195,8 +195,8 @@ end
 -- This function will prepare the table to be broadcast for a specified
 -- config.
 -- a table suitable for transmission with the following values:
---   v=3 (version 3 broadcast)
---   c=cfgid:name:type:tethered:limit:ownerid:crc
+--   v=4 (version 4 broadcast)
+--   c=cfgid:name:type:tethered:ownerid:oranks:crc
 --   u={numusers,userlist}
 --     Each element in userlist is name:class:role:ench:frozen:exempt:alt:main
 --   a={numadmins,adminlist}
@@ -214,9 +214,9 @@ local function prepare_broadcast(cfg)
   local ci = {}
   local tc = ksk.configs[cfg]
 
-  ci.v = 3
-  ci.c = strfmt("%s:%s:%s:%s:0x%s", cfg, tc.name,
-    tc.tethered and "Y" or "N", tc.owner, K.hexstr(tc.cksum))
+  ci.v = 4
+  ci.c = strfmt("%s:%s:%d:%s:%s:%s:0x%s", cfg, tc.name, tc.cfgtype,
+    tc.tethered and "Y" or "N", tc.owner, tc.oranks, K.hexstr(tc.cksum))
 
   local ulist = {}
   for k,v in pairs(tc.users) do
@@ -256,8 +256,8 @@ local function prepare_broadcast(cfg)
     for kk,vv in pairs(v.users) do
       ulist = ulist .. vv
     end
-    local ls = strfmt("%s:%s:%d:%s:%s:%s:%d:%s", k, v.name,
-      v.sortorder, v.strictcfilter and "Y" or "N",
+    local ls = strfmt("%s:%s:%d:%d:%s:%s:%s:%d:%s", k, v.name,
+      v.sortorder, v.def_rank, v.strictcfilter and "Y" or "N",
       v.strictrfilter and "Y" or "N", tostring(v.extralist),
       v.nusers, ulist)
     tinsert(llist, ls)
@@ -268,9 +268,14 @@ local function prepare_broadcast(cfg)
   return ci
 end
 
-local function broadcast_config()
+local function broadcast_config(isshifted)
+  debug(1, "broadcast called")
   local ci = prepare_broadcast(nil)
-  ksk:SendAM("BCAST", "ALERT", ci)
+  if (ishshifted and K.player.is_guilded) then
+    ksk:SendGuildAM("BCAST", "ALERT", ci)
+  else
+    ksk:SendAM("BCAST", "ALERT", ci)
+  end
 end
 
 function ksk.RecoverConfig(sender, cfg, cfgid, rdata)
@@ -462,7 +467,7 @@ function ksk.InitialiseSyncUI()
   }
   br.bcast = KUI:CreateButton(arg, br)
   br.bcast:Catch("OnClick", function(this, evt)
-    broadcast_config()
+    broadcast_config(IsShiftKeyDown())
   end)
   arg = {}
   -- Keep this in ksk.qf as its accessed from KKonferSK.lua

@@ -52,6 +52,9 @@ local aclass = ksk.aclass
 local info = ksk.info
 local err = ksk.err
 
+local CFGTYPE_GUILD = KK.CFGTYPE_GUILD
+local CFGTYPE_PUG   = KK.CFGTYPE_PUG
+
 --[[
 This file implements the configuration UI and provides functions for
 manipulating various config options and refreshing the data. Most of
@@ -80,6 +83,8 @@ local coadmin_selected = nil
 local sortedadmins = nil
 local newcfgdlg = nil
 local copycfgdlg = nil
+local orankdlg = nil
+local rankpriodlg = nil
 local coadmin_popup = nil
 local silent_delete = nil
 
@@ -110,8 +115,17 @@ local function config_setenabled(onoff)
   local onoff = onoff or false
 
   if (qf.cfgopts) then
+    local en = false
+
     qf.cfgopts.cfgowner:SetEnabled(onoff)
     qf.cfgopts.tethered:SetEnabled(onoff)
+    qf.cfgopts.cfgtype:SetEnabled(onoff)
+
+    if (onoff and K.player.is_guilded and K.player.is_gm) then
+      en = true
+    end
+
+    qf.cfgopts.orankedit:SetEnabled(en)
 
     qf.cfgdelbutton:SetEnabled(onoff)
     qf.cfgrenbutton:SetEnabled(onoff)
@@ -174,14 +188,24 @@ local function config_selectitem(objp, idx, slot, btn, onoff)
 
     qf.cfgopts.cfgowner:SetValue(lcf.owner)
     qf.cfgopts.tethered:SetChecked(lcf.tethered)
+    qf.cfgopts.cfgtype:SetValue(lcf.cfgtype)
 
     en = ksk.csdata[admincfg].is_admin == 2 and true or false
 
     qf.cfgopts.cfgowner:SetEnabled(en)
     qf.cfgopts.tethered:SetEnabled(en)
 
+    if (lcf.cfgtype ~= CFGTYPE_GUILD) then
+      qf.cfgopts.orankedit:SetEnabled(false)
+    end
+
     qf.coadadd:SetEnabled(en and lcf.nadmins < 36)
     qf.cfgrenbutton:SetEnabled(en)
+
+    if (not ksk.CanChangeConfigType()) then
+      en = false
+    end
+    qf.cfgopts.cfgtype:SetEnabled(en)
 
     if (ksk.frdb.nconfigs > 1) then
       qf.cfgdelbutton:SetEnabled(true)
@@ -538,14 +562,15 @@ local function copy_space_button(cfgid, newname, newid, shown)
           if (copycfgdlg.do_copycfg) then
             local dl = dc.lists[dlid]
             dl.sortorder = sl.sortorder
+            dl.def_rank = sl.def_rank
             dl.strictcfilter = sl.strictcfilter
             dl.strictrfilter = sl.strictrfilter
             if (sl.extralist ~= "0") then
               dl.extralist = ksk.FindList(sc.lists[sl.extralist].name, newid) or "0"
             end
             -- If this changes MUST change in KSK-Comms.lua(CHLST)
-            local es = strfmt("%s:%d:%s:%s:%s", dlid,
-              dl.sortorder, dl.strictcfilter and "Y" or "N",
+            local es = strfmt("%s:%d:%d:%s:%s:%s", dlid,
+              dl.sortorder, dl.def_rank, dl.strictcfilter and "Y" or "N",
               dl.strictrfilter and "Y" or "N", dl.extralist)
             ksk.AddEvent(newid, "CHLST", es)
           end
@@ -592,7 +617,9 @@ local function copy_space_button(cfgid, newname, newid, shown)
           end
         end
         dc.tethered = sc.tethered
+        dc.cfgtype = sc.cfgtype
         dc.owner = ksk.FindUser(sc.users[sc.owner].name, newid)
+        dc.oranks = sc.oranks
       end
 
       --
@@ -747,6 +774,184 @@ local function change_cfg(which, val)
       ksk.cfg.settings[which] = val
     end
   end
+end
+
+local function rank_editor ()
+  if (not rankpriodlg) then
+    local ypos = 0
+    local arg = {
+      x = "CENTER", y = "MIDDLE",
+      name = "KSKRankEditorDialog",
+      title = L["Edit Rank Priorities"],
+      border = true,
+      width = 320,
+      height = ((K.guild.numranks +1) * 28) + 70,
+      canmove = true,
+      canresize = false,
+      escclose = true,
+      blackbg = true,
+      okbutton = { text = K.ACCEPTSTR },
+      cancelbutton = { text = K.CANCELSTR },
+    }
+    local ret = KUI:CreateDialogFrame(arg)
+    arg = {}
+
+    arg = {
+      x = 8, y = 0, height = 20, text = L["Guild Rank"],
+      font = "GameFontNormal",
+    }
+    ret.glbl = KUI:CreateStringLabel(arg, ret)
+
+    arg.x = 225
+    arg.text = L["Priority"]
+    ret.plbl = KUI:CreateStringLabel(arg, ret)
+    arg = {}
+
+    arg = {
+      x = 8, y = 0, width = 215, text = "",
+    }
+    earg = {
+      x = 225, y = 0, width = 36, initialvalue = "1", numeric = true, len = 2,
+    }
+    for i = 1, 10 do
+      local rlbl = "ranklbl" .. tostring(i)
+      local rpe = "rankprio" .. tostring(i)
+      arg.y = arg.y - 24
+      ret[rlbl] = KUI:CreateStringLabel(arg, ret)
+      earg.x = 225
+      earg.y = earg.y - 24
+      ret[rpe] = KUI:CreateEditBox(earg, ret)
+      ret[rlbl]:Hide()
+      ret[rpe]:Hide()
+    end
+
+    ret.OnCancel = function(this)
+      this:Hide()
+      ksk.mainwin:Show()
+    end
+
+    ret.OnAccept = function(this)
+      ksk.cfg.settings.rank_prio = {}
+      for i = 1, K.guild.numranks do
+        local rpe = "rankprio" .. tostring(i)
+        local tv = ret[rpe]:GetText()
+        if (tv == "") then
+          tv = "1"
+        end
+        local rrp = tonumber(tv)
+        if (rrp < 1) then
+          rrp = 1
+        end
+        if (rrp > 10) then
+          rrp = 10
+        end
+        ksk.cfg.settings.rank_prio[i] = rrp
+      end
+      this:Hide()
+      ksk.mainwin:Show()
+    end
+
+    rankpriodlg = ret
+  end
+
+  local rp = rankpriodlg
+  rp:SetHeight(((K.guild.numranks + 1) * 28) + 50)
+
+  for i = 1, 10 do
+    local rlbl = "ranklbl" .. tostring(i)
+    local rpe = "rankprio" .. tostring(i)
+    rp[rlbl]:Hide()
+    rp[rpe]:Hide()
+  end
+
+  for i = 1, K.guild.numranks do
+    local rlbl = "ranklbl" .. tostring(i)
+    local rpe = "rankprio" .. tostring(i)
+    rp[rlbl]:SetText(K.guild.ranks[i])
+    rp[rpe]:SetText(tostring(ksk.cfg.settings.rank_prio[i] or 1))
+    rp[rlbl]:Show()
+    rp[rpe]:Show()
+  end
+
+  rp:Show()
+end
+
+local function orank_edit_button()
+  if (not orankdlg) then
+    local arg = {
+      x = "CENTER", y = "MIDDLE",
+      name = "KSKiOfficerRankEditDlg",
+      title = L["Set Guild Officer Ranks"],
+      border = true,
+      width = 240,
+      height = 372,
+      canmove = true,
+      canresize = false,
+      escclose = true,
+      blackbg = true,
+      okbutton = { text = K.ACCEPTSTR },
+      cancelbutton = {text = K.CANCELSTR },
+    }
+
+    local y = 24
+
+    local ret = KUI:CreateDialogFrame(arg)
+
+    arg = {
+      width = 170, height = 24
+    }
+    for i = 1, 10 do
+      y = y - 24
+      local cbn = "orankcb" .. tostring(i)
+      arg.y = y
+      arg.x = 10
+      arg.label = { text = " " }
+      ret[cbn] = KUI:CreateCheckBox(arg, ret)
+    end
+
+    ret.OnCancel = function(this)
+      this:Hide()
+      ksk.mainwin:Show()
+    end
+
+    ret.OnAccept = function(this)
+      local ccs
+      local oranks = ""
+      for i = 1, K.guild.numranks do
+        ccs = "orankcb" .. tostring(i)
+        if (this[ccs]:GetChecked()) then
+          oranks = oranks .. "1"
+        else
+          oranks = oranks .. "0"
+        end
+      end
+      oranks = strsub(oranks .. "0000000000", 1, 10)
+      ksk.frdb.configs[admincfg].oranks = oranks
+      ksk:SendAM("ORANK", "ALERT", oranks)
+      this:Hide()
+      ksk.mainwin:Show()
+    end
+
+    orankdlg = ret
+  end
+
+  local rp = orankdlg
+  local lcf = ksk.frdb.configs[admincfg]
+  rp:SetHeight(((K.guild.numranks + 1) * 28) + 10)
+
+  for i = 1, 10 do
+    local rcb = "orankcb" .. tostring(i)
+    if (K.guild.ranks[i]) then
+      rp[rcb]:SetText(K.guild.ranks[i])
+      rp[rcb]:Show()
+      rp[rcb]:SetChecked(strsub(lcf.oranks, i, i) == "1")
+    else
+      rp[rcb]:Hide()
+    end
+  end
+
+  ksk.mainwin:Hide()
+  rp:Show()
 end
 
 function ksk.InitialiseConfigUI()
@@ -929,6 +1134,21 @@ function ksk.InitialiseConfigUI()
   qf.deflistdd = cf.deflist
 
   arg = {
+    x = 4, y = ypos, name = "KSKGDefRankDropdown", mode = "SINGLE",
+    dwidth = 175, items = KUI.emptydropdown, itemheight = 16,
+    label = { text = L["Initial Guild Rank Filter"], pos = "LEFT" },
+    tooltip = { title = "$$", text = L["TIP011"] },
+  }
+  cf.gdefrank = KUI:CreateDropDown(arg, cf)
+  -- Must remain visible in ksk.qf so it can be updated from main.
+  ksk.qf.gdefrankdd = cf.gdefrank
+  cf.gdefrank:Catch("OnValueChanged", function (this, evt, nv)
+    change_cfg("def_rank", nv)
+  end)
+  arg = {}
+  ypos = ypos - 24
+
+  arg = {
     x = 0, y = ypos, label = {text = L["Hide Absent Members in Loot Lists"] },
     tooltip = { title = "$$", text = L["TIP012"] },
   }
@@ -978,6 +1198,36 @@ function ksk.InitialiseConfigUI()
     change_cfg("disenchant_below", val)
   end)
   ypos = ypos - 24
+
+  arg = {
+    x = 0, y = ypos, label = { text = L["Use Guild Rank Priorities"] },
+    tooltip = { title = "$$", text = L["TIP013"] },
+  }
+  cf.rankprio = KUI:CreateCheckBox(arg, cf)
+  cf.rankprio:Catch("OnValueChanged", function (this, evt, val)
+    if (ksk.cfg.cfgtype == CFGTYPE_PUG) then
+      val = false
+    end
+    change_cfg("use_ranks", val)
+    cf.rankedit:SetEnabled(val)
+  end)
+  arg = {}
+
+  arg = {
+    x = 180, y = ypos+2, width = 50, height = 24, text = L["Edit"],
+    enabled = false,
+    tooltip = { title = "$$", text = L["TIP014"] },
+  }
+  cf.rankedit = KUI:CreateButton(arg, cf)
+  cf.rankedit:ClearAllPoints()
+  cf.rankedit:SetPoint("TOPLEFT", cf.rankprio, "TOPRIGHT", 16, 0)
+  cf.rankedit:Catch("OnClick", function (this, evt)
+    ksk.mainwin:Hide()
+    K.UpdatePlayerAndGuild()
+    rank_editor()
+  end)
+  arg = {}
+  ypos = ypos - 30
 
   arg = {
     x = 4, y = ypos, width = 300, font="GameFontNormal",
@@ -1300,6 +1550,57 @@ function ksk.InitialiseConfigUI()
   end)
   arg = {}
 
+  arg = {
+    name = "KSKCfgTypeDropDown", enabled = false, itemheight = 16,
+    x = 4, y = -58, label = { text = L["Config Type"], pos = "LEFT" },
+    dwidth = 100, mode = "SINGLE", width = 75,
+    tooltip = { title = "$$", text = L["TIP025"] },
+    items = {
+      { text = L["Guild"], value = CFGTYPE_GUILD },
+      { text = L["PUG"], value = CFGTYPE_PUG },
+    },
+  }
+  tr.cfgtype = KUI:CreateDropDown(arg, tr)
+  tr.cfgtype:Catch ("OnValueChanged", function (this, evt, newv)
+    local lcf = ksk.frdb.configs[admincfg]
+    local en
+    lcf.cfgtype = newv
+    if (newv == CFGTYPE_GUILD and K.player.is_guilded and K.player.is_gm) then
+      qf.cfgopts.orankedit:SetEnabled(true)
+    else
+      qf.cfgopts.orankedit:SetEnabled(false)
+    end
+    if (newv == CFGTYPE_PUG) then
+      lcf.settings.def_rank = 0
+      lcf.settings.use_ranks = false
+      lcf.settings.ann_winners_guild = false
+      lcf.settings.rank_prio = {}
+      for k, v in pairs (lcf.lists) do
+        v.def_rank = 0
+      end
+      ksk.RefreshConfigLootUI (false)
+    end
+  end)
+  ksk.qf.cfgtype = tr.cfgtype
+  arg = {}
+
+  arg = {
+    name = "KSKCfgGuildOfficerButton",
+    x = 4, y = -92, width = 160, height = 24,
+    text = L["Edit Officer Ranks"], enabled = false,
+    tooltip = { title = "$$", text = L["TIP100"] }
+  }
+  tr.orankedit = KUI:CreateButton(arg, tr)
+  tr.orankedit:Catch ("OnClick", function (this, evt)
+    local ct = ksk.frdb.configs[admincfg].cfgtype
+    if (ct == CFGTYPE_GUILD and K.player.is_guilded and K.player.is_gm) then
+      ksk.mainwin:Hide()
+      K:UpdatePlayerAndGuild()
+      orank_edit_button()
+    end
+  end)
+  arg = {}
+
   -- NOW we can set qf.cfgopts
   qf.cfgopts = tr
 
@@ -1508,6 +1809,8 @@ function ksk.CreateNewConfig(name, initial, nouser, mykey)
   local sp = ksk.frdb.configs[newkey]
   sp.name = name
   sp.tethered = false
+  sp.cfgtype = CFGTYPE_PUG
+  sp.oranks = "1000000000"
   sp.settings = {}
   sp.history = {}
   sp.users = {}
@@ -1545,6 +1848,22 @@ function ksk.CreateNewConfig(name, initial, nouser, mykey)
     real_delete_config("1")
     silent_delete = nil
     ksk.frdb.tempcfg = nil
+  end
+
+  --
+  -- If we have no guild configs, and we are the GM, make this
+  -- a guild config initially. They can change it immediately if this is wrong.
+  --
+  if (K.player.is_gm) then
+    local ng = 0
+    for k,v in pairs(ksk.frdb.configs) do
+      if (v.cfgtype == CFGTYPE_GUILD) then
+        ng = ng + 1
+      end
+    end
+    if (ng == 0) then
+      sp.cfgtype = CFGTYPE_GUILD
+    end
   end
 
   ksk.FullRefresh(true)
@@ -1704,6 +2023,7 @@ function ksk.RefreshConfigLootUI(reset)
   local i
   local settings = ksk.cfg.settings
   local cf = qf.lootopts
+  local en = true
 
   cf.autobid:SetChecked(settings.auto_bid)
   cf.silentbid:SetChecked(settings.silent_bid)
@@ -1712,13 +2032,25 @@ function ksk.RefreshConfigLootUI(reset)
   cf.history:SetChecked(settings.history)
   cf.announcewhere:SetValue(settings.announce_where)
   cf.deflist:SetValue(settings.def_list)
+  cf.gdefrank:SetValue(settings.def_rank)
   cf.hideabsent:SetChecked(settings.hide_absent)
   cf.autoloot:SetChecked(settings.auto_loot)
   cf.threshold:SetValue(settings.bid_threshold)
   cf.denchbelow:SetChecked(settings.disenchant_below)
+  cf.rankprio:SetChecked(settings.use_ranks)
   cf.boetoml:SetChecked(settings.boe_to_ml)
   cf.tryroll:SetChecked(settings.try_roll)
   cf.dench:SetChecked(settings.disenchant)
+
+  if (ksk.cfg.cfgtype == CFGTYPE_PUG) then
+    en = false
+  end
+  cf.gdefrank:SetEnabled(en)
+  cf.rankprio:SetEnabled(en)
+  ksk.qf.lootrank:SetEnabled(en)
+  ksk.qf.defrankdd:SetEnabled(en)
+  ksk.qf.gdefrankdd:SetEnabled(en)
+  ksk.qf.itemrankdd:SetEnabled(en)
 
   for i = 1, ksk.MAX_DENCHERS do
     if (settings.denchers[i]) then

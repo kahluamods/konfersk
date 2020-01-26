@@ -108,6 +108,7 @@ local function setup_linfo()
 
   linfo = {}
   linfo.sortorder = current_list.sortorder
+  linfo.def_rank = current_list.def_rank
   linfo.strictcfilter = current_list.strictcfilter
   linfo.strictrfilter = current_list.strictrfilter
   linfo.extralist = current_list.extralist
@@ -214,10 +215,15 @@ local function rlist_setenabled(onoff)
 
   if (qf.listconf) then
     qf.listconf.sortorder:SetEnabled(onoff)
+    qf.listconf.defrank:SetEnabled(onoff)
     qf.listconf.cfilter:SetEnabled(onoff)
     qf.listconf.rfilter:SetEnabled(onoff)
     qf.listconf.slistdd:SetEnabled(onoff)
     qf.insert:SetEnabled(onoff)
+
+    if (ksk.cfg.cfgtype == KK.CFGTYPE_PUG) then
+      qf.listconf.defrank:SetEnabled(false)
+    end
   end
 
   onoff = onoff and ksk.csd.is_admin
@@ -246,6 +252,7 @@ local function rlist_selectitem(objp, idx, slot, btn, onoff)
     current_list = ksk.cfg.lists[current_listid]
     setup_linfo()
     qf.listconf.sortorder:SetValue(current_list.sortorder)
+    qf.listconf.defrank:SetValue(current_list.def_rank)
     qf.listconf.cfilter:SetChecked(current_list.strictcfilter)
     qf.listconf.rfilter:SetChecked(current_list.strictrfilter)
     qf.listconf.slistdd:SetValue(current_list.extralist)
@@ -923,12 +930,109 @@ local function import_list_button()
   implistdlg:Show()
 end
 
+local EXP_CUR_CSV = 1
+local EXP_CUR_JSON = 2
+local EXP_CUR_XML = 3
+local EXP_CUR_BBCODE = 4
+local EXP_ALL_JSON = 5
+local EXP_ALL_XML = 6
+local EXP_ALL_BBCODE = 7
+
+local thestring, lststring
+local uu, uv
+
+local function do_json_list(listid)
+  if (lststring ~= "") then
+    lststring = lststring .. ",\n"
+  end
+
+  lststring = lststring .. strfmt('{ "id": %q, "n": %q,\n   "users": [', listid, ksk.cfg.lists[listid].name)
+
+  local ll = ksk.cfg.lists[listid]
+  local lul = {}
+  for k,v in ipairs(ll.users) do
+    local up=ksk.cfg.users[v]
+    if (not uu[v]) then
+      uu[v] = true
+      tinsert(uv, strfmt('{ "id": %q, "n":%q, "c":%q}', v, up.name, up.class))
+    end
+    tinsert(lul, strfmt("%q", tostring(v)))
+  end
+  lststring = lststring .. tconcat(lul, ",") .. "]}"
+end
+
+local function do_xml_list(listid)
+  lststring = lststring .. strfmt("<list id=%q n=%q>", listid, ksk.cfg.lists[listid].name)
+  local ll = ksk.cfg.lists[listid]
+  local lul = {}
+  for k,v in ipairs(ll.users) do
+    local up=ksk.cfg.users[v]
+    if (not uu[v]) then
+      uu[v] = true
+      tinsert(uv, strfmt("<u id=%q n=%q c=%q/>", v, up.name, up.class))
+    end
+    tinsert(lul, strfmt("<u id=%q/>", tostring(v)))
+  end
+  lststring = lststring .. tconcat(lul, "") .. "</list>"
+end
+
+local function do_bbcode_list(listid)
+  lststring = lststring .. strfmt("[center][b]List: %q[/b][/center]\n[list]", ksk.cfg.lists[listid].name)
+  local ll = ksk.cfg.lists[listid]
+  local lul = {}
+  for k,v in ipairs(ll.users) do
+    local up=ksk.cfg.users[v]
+    tinsert(lul, strfmt("[*][color=#%s]%s[/color]\n", K.ClassColorsHex[up.class], up.name))
+  end
+  lststring = lststring .. tconcat(lul, "") .. "[/list]\n"
+end
+
+local function final_json_string()
+  local dstr = K.YMDStamp()
+  local tstr = K.HMStamp()
+  local cs = ""
+  for k,v in pairs(K.IndexClass) do
+    if (v.u) then
+      if (cs ~= "") then
+        cs = cs .. ",\n"
+      end
+      cs = cs .. strfmt('{"id": %q, "v": %q}', tostring(k), strlower(tostring(v.u)))
+    end
+  end
+  thestring = strfmt('{"ksk": { "date": %q, "time": %q, "classes": [%s], "users": [ %s ], "lists": [%s] }}', dstr, tstr, cs, tconcat(uv, ","), lststring)
+end
+
+local function final_bbcode_string()
+  local dstr = K.YMDStamp()
+  local tstr = K.HMStamp()
+  thestring = strfmt("[center][b]KSK Lists as of %s %s[/b][/center]\n", dstr, tstr) .. lststring
+end
+
+local function final_xml_string()
+  local dstr = K.YMDStamp()
+  local tstr = K.HMStamp()
+  local cs = ""
+  for k,v in pairs(K.IndexClass) do
+    if (v.u) then
+      cs = cs .. strfmt("<c id=%q v=%q/>", tostring(k), strlower(tostring(v.u)))
+    end
+  end
+  thestring = strfmt("<ksk date=%q time=%q><classes>%s</classes><users>%s</users><lists>%s</lists></ksk>", dstr, tstr, cs, tconcat(uv, ""), lststring)
+end
+
+local function final_bbcode_string()
+  local dstr = K.YMDStamp()
+  local tstr = K.HMStamp()
+  thestring = strfmt("[center][b]KSK Lists as of %s %s[/b][/center]\n", dstr, tstr) .. lststring
+end
+
 local function export_list_button()
   local selwhat = nil
-  local thestring = ""
-  local lststring = ""
-  local uu = {}
-  local uv = {}
+
+  thestring = ""
+  lststring = ""
+  uu = {}
+  uv = {}
 
   if (not explistdlg) then
     local ypos = 0
@@ -949,92 +1053,66 @@ local function export_list_button()
     local ret = KUI:CreateDialogFrame(arg)
 
     arg = {
-      x = 0, y = ypos, width = 300, font = "GameFontNormal",
+      x = 5, y = ypos, width = 300, font = "GameFontNormal",
       text = "",
     }
     ret.clistmsg = KUI:CreateStringLabel(arg, ret)
     ypos = ypos - 24
 
+
     arg = {
       label = { text = L["Select"], pos = "LEFT" },
       name = "KSKWhatToExport", mode = "SINGLE",
-      x = 0, y = ypos, dwidth = 250, items = {
+      x = 5, y = ypos, dwidth = 250, items = {
         { text = L["Nothing"], value = 0 },
-        { text = L["Export current list as CSV"], value = 1 },
-        { text = L["Export current list as XML"], value = 2 },
-        { text = L["Export current list as BBcode"], value = 3 },
-        { text = L["Export all lists as XML"], value = 4 },
-        { text = L["Export all lists as BBcode"], value = 5 },
+        { text = L["Export current list as CSV"], value = EXP_CUR_CSV },
+        { text = L["Export current list as JSON"], value = EXP_CUR_JSON },
+        { text = L["Export current list as XML"], value = EXP_CUR_XML },
+        { text = L["Export current list as BBcode"], value = EXP_CUR_BBCODE },
+        { text = L["Export all lists as JSON"], value = EXP_ALL_JSON },
+        { text = L["Export all lists as XML"], value = EXP_ALL_XML },
+        { text = L["Export all lists as BBcode"], value = EXP_ALL_BBCODE },
       }, initialvalue = 0, itemheight = 16,
     }
     ret.what = KUI:CreateDropDown(arg, ret)
     ret.what:Catch("OnValueChanged", function(this, evt, newv)
       selwhat = newv
-      local function do_xml_list(listid)
-        lststring = lststring .. strfmt("<list id=%q n=%q>", listid, ksk.cfg.lists[listid].name)
-        local ll = ksk.cfg.lists[listid]
-        local lul = {}
-        for k,v in ipairs(ll.users) do
-          local up=ksk.cfg.users[v]
-          if (not uu[v]) then
-            uu[v] = true
-            tinsert(uv, strfmt("<u id=%q n=%q c=%q/>", v, up.name, up.class))
-          end
-          tinsert(lul, strfmt("<u id=%q/>", tostring(v)))
-        end
-        lststring = lststring .. tconcat(lul, "") .. "</list>"
-      end
-
-      local function do_bbcode_list(listid)
-        lststring = lststring .. strfmt("[center][b]List: %q[/b][/center]\n[list]", ksk.cfg.lists[listid].name)
-        local ll = ksk.cfg.lists[listid]
-        local lul = {}
-        for k,v in ipairs(ll.users) do
-          local up=ksk.cfg.users[v]
-          tinsert(lul, strfmt("[*][color=#%s]%s[/color]\n", K.ClassColorsHex[up.class], up.name))
-        end
-        lststring = lststring .. tconcat(lul, "") .. "[/list]\n"
-      end
-
-      local function final_xml_string()
-        local dstr = K.YMDStamp()
-        local tstr = K.HMStamp()
-        local cs = ""
-        for k,v in pairs(K.IndexClass) do
-          if (v.u) then
-            cs = cs .. strfmt("<c id=%q v=%q/>", tostring(k), strlower(tostring(v.u)))
-          end
-        end
-        thestring = strfmt("<ksk date=%q time=%q><classes>%s</classes><users>%s</users><lists>%s</lists></ksk>", dstr, tstr, cs, tconcat(uv, ""), lststring)
-      end
-
-      local function final_bbcode_string()
-        local dstr = K.YMDStamp()
-        local tstr = K.HMStamp()
-        thestring = strfmt("[center][b]KSK Lists as of %s %s[/b][/center]\n", dstr, tstr) .. lststring
-      end
-
-      if (selwhat == 1 and current_listid) then
+      if (selwhat == EXP_CUR_CSV and current_listid) then
         local tt = {}
         for k,v in ipairs(current_list.users) do
           tinsert(tt, ksk.cfg.users[v].name)
         end
         thestring = tconcat(tt, ",")
-      elseif (selwhat == 2 and current_listid) then
+      elseif (selwhat == EXP_CUR_JSON and current_listid) then
+        uu = {}
+        uv = {}
+        lststring = ""
+        do_json_list(current_listid)
+        final_json_string()
+        lststring = ""
+      elseif (selwhat == EXP_CUR_XML and current_listid) then
         uu = {}
         uv = {}
         lststring = ""
         do_xml_list(current_listid)
         final_xml_string()
         lststring = ""
-      elseif (selwhat == 3 and current_listid) then
+      elseif (selwhat == EXP_CUR_BBCODE and current_listid) then
         uu = {}
         uv = {}
         lststring = ""
         do_bbcode_list(current_listid)
         final_bbcode_string()
         lststring = ""
-      elseif (selwhat == 4) then
+      elseif (selwhat == EXP_ALL_JSON) then
+        uu = {}
+        uv = {}
+        lststring = ""
+        for k,v in ipairs(ksk.sortedlists) do
+          do_json_list(v.id)
+        end
+        final_json_string()
+      elseif (selwhat == EXP_ALL_XML) then
         uu = {}
         uv = {}
         lststring = ""
@@ -1042,7 +1120,7 @@ local function export_list_button()
           do_xml_list(v.id)
         end
         final_xml_string()
-      elseif (selwhat == 5) then
+      elseif (selwhat == EXP_ALL_BBCODE) then
         uu = {}
         uv = {}
         lststring = ""
@@ -1058,7 +1136,7 @@ local function export_list_button()
     ypos = ypos - 32
 
     arg = {
-      x = 0, y = ypos, len = 99999,
+      x = 5, y = ypos, len = 99999,
       label = { text = L["Export string"], pos = "LEFT" },
     }
     ret.expstr = KUI:CreateEditBox(arg, ret)
@@ -1095,7 +1173,7 @@ local function export_list_button()
     explistdlg = ret
   end
 
-  explistdlg.what:SetValue(selwhat)
+  explistdlg.what:SetValue(0)
   explistdlg.expstr:SetText("")
   explistdlg.clistmsg:SetText(strfmt(L["Current list: %s"], white(current_list.name)))
 
@@ -1592,6 +1670,24 @@ function ksk.InitialiseListsUI()
   ypos = ypos - 48
 
   arg = {
+    x = 0, y = ypos, name = "KSKDefRankDropdown", itemheight = 16,
+    dwidth = 175, items = KUI.emptydropdown, mode = "SINGLE",
+    label = { text = L["Initial Guild Rank Filter"], },
+    tooltip = { title = "$$", text = L["TIP038"] },
+  }
+  tr.defrank = KUI:CreateDropDown(arg, tr)
+  -- Must remain visible in ksk.qf so it can be changed from main.
+  ksk.qf.defrankdd = tr.defrank
+  tr.defrank:Catch ("OnValueChanged", function(this, evt, nv, user)
+    if (user) then
+      changed()
+    end
+    linfo.def_rank = tonumber(nv)
+  end)
+  arg = {}
+  ypos = ypos - 48
+
+  arg = {
     x = 0, y = ypos, label = { text = L["Strict Class Armor Filtering"] },
     tooltip = { title = "$$", text = L["TIP039"] },
   }
@@ -1647,8 +1743,8 @@ function ksk.InitialiseListsUI()
     ksk.RefreshAllLists()
     tr.updatebtn:SetEnabled(false)
     -- If this changes MUST change CHLST is KSK-Config.lua
-    local es = strfmt("%s:%d:%s:%s:%s", current_listid,
-      linfo.sortorder, linfo.strictcfilter and "Y" or "N",
+    local es = strfmt("%s:%d:%d:%s:%s:%s", current_listid,
+      linfo.sortorder, linfo.def_rank, linfo.strictcfilter and "Y" or "N",
       linfo.strictrfilter and "Y" or "N", linfo.extralist)
     ksk.AddEvent(ksk.currentid, "CHLST", es)
   end)
@@ -1902,6 +1998,7 @@ function ksk.CreateNewList(name, cfg, myid, nocmd)
 
   rl.name = name
   rl.sortorder = 1
+  rl.def_rank = 0
   rl.strictcfilter = false
   rl.strictrfilter = false
   rl.extralist = "0"
@@ -2048,6 +2145,7 @@ function ksk.CopyList(listid, newname, cfg, myid, nocmd)
   local dst = ksk.configs[cfg].lists[cid]
 
   dst.sortorder = src.sortorder
+  dst.def_rank = src.def_rank
   dst.strictcfilter = src.strictcfilter
   dst.strictrfilter = src.strictrfilter
   dst.extralist = src.extralist

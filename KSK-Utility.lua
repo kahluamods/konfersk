@@ -33,6 +33,7 @@ local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
 local DB = ksk.DB
+local KK = ksk.KK
 
 -- Local aliases for global or Lua library functions
 local _G = _G
@@ -56,7 +57,11 @@ local debug = ksk.debug
 -- Returns true if the user is thought to be a guild master, false
 -- if we cant tell or can tell if they are not.
 --
-function ksk.UserIsRanked(cfg, name)
+function ksk.UserIsRanked (cfg, name)
+  if (K.UserIsRanked(name)) then
+    return true
+  end
+
   if (not K.player.is_guilded or not K.guild) then
     return false
   end
@@ -71,6 +76,13 @@ function ksk.UserIsRanked(cfg, name)
 
   if (not K.guild.roster.name[name]) then
     return false
+  end
+
+  local gi = K.guild.roster.name[name]
+  local gu = K.guild.roster.id[gi]
+  local ri = gu.rank
+  if (strsub(ksk.frdb.configs[cfg].oranks, ri, ri) == "1") then
+    return true
   end
 
   return false
@@ -342,6 +354,9 @@ function ksk.RepairDatabases(users, lists)
         if (not lv.sortorder) then
           lv.sortorder = 1
         end
+        if (not lv.def_rank) then
+          lv.def_rank = 0
+        end
         if (not lv.strictcfilter) then
           lv.strictcfilter = false
         end
@@ -388,10 +403,6 @@ function ksk.UpdateDatabaseVersion()
     -- format of the history items.
     --
     for k,v in pairs(ksk.frdb.configs) do
-      v.cfgtype = nil
-      v.settings.def_rank = nil
-      v.settings.use_ranks = nil
-      v.settings.rank_prio = nil
       local newhist = {}
       for kk,vv in pairs(v.history) do
         local when,what,who,how = strsplit("\7", vv)
@@ -414,6 +425,34 @@ function ksk.UpdateDatabaseVersion()
       --
       for kk,vv in pairs(v.users) do
         vv.name = K.CanonicalName(vv.name)
+      end
+    end
+
+    ret = true
+    ksk.frdb.dbversion = 2
+  end
+
+  if (ksk.frdb.dbversion == 2) then
+    --
+    -- Version 3 added back the config type. We sneakily changed the version 1
+    -- mod code above to not remove it. So if we have a value we leave it alone
+    -- otherwise we have to add it back and we default to a PUG config.
+    --
+    for k,v in pairs(ksk.frdb.configs) do
+      if (v.cfgtype == nil) then
+        v.cfgtype = KK.CFGTYPE_PUG
+      end
+      if (v.oranks == nil) then
+        v.oranks = "1000000000"
+      end
+      if (v.settings.def_rank == nil) then
+        v.settings.def_rank = 0
+      end
+      if (v.settings.use_ranks == nil) then
+        v.settings.use_ranks = false
+      end
+      if (v.settings.rank_prio == nil) then
+        v.settings.rank_prio = {}
       end
     end
 

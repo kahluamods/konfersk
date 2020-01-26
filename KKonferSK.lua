@@ -136,14 +136,15 @@ ksk.version = MINOR
 --   2   - initial protocol
 --   3   - dates now in UTC seconds since epoch for history
 --   4   - OROLL now has extra param for allowing offspec rolls
-ksk.protocol = 4
+--   5   - resurect guild config and rank priorities
+ksk.protocol = 5
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
 -- KSK-Utility.lua (ksk.UpdateDatabaseVersion()) will update older databases
 -- dating all the way back to version 1. Once a database version has been
 -- upgraded it cannot be reverted.
-ksk.dbversion = 2
+ksk.dbversion = 3
 
 -- Whether or not KSK has been fully initialised. This can take a while as
 -- certain bits of information are not immediately available on login.
@@ -246,6 +247,7 @@ ksk.defaults = {
   tooltips = true,
   announce_where = 0,
   def_list = "0",
+  def_rank = 0,
   auto_loot = true,
   boe_to_ml = true,   -- Assign BoE items to Master-Looter
   disenchant = true,  -- Assign to disenchanter
@@ -271,6 +273,8 @@ ksk.defaults = {
   ann_no_bids = true,
   ann_missing = true,
   hide_absent = false,
+  use_ranks = false,
+  rank_prio = {},
   denchers = {},
 }
 
@@ -1218,11 +1222,29 @@ function ksk.CheckPerm(cfg)
   return false
 end
 
+function ksk.CanChangeConfigType()
+  if (K.player.is_guilded == false) then
+    return false
+  else
+    if (K.player.is_gm == true) then
+      return true
+    end
+    if (K.UserIsRanked(K.player.name)) then
+      return true
+    end
+  end
+  return false
+end
+
+
 local function update_bcast_button()
   ksk.UpdateUserSecurity()
   if (ksk.csd.is_admin) then
-    if (ksk.AmIML() or KRP.is_aorl or KRP.is_pl or
-      ksk.UserIsRanked(ksk.currentid, K.player)) then
+    if (ksk.cfg.cfgtype == KK.CFGTYPE_GUILD) then
+      ksk.qf.bcastbutton:SetEnabled(true)
+      return
+    elseif (ksk.AmIML() or KRP.is_aorl or KRP.is_pl or
+      ksk.UserIsRanked(ksk.currentid, K.player.name)) then
       ksk.qf.bcastbutton:SetEnabled(true)
       return
     end
@@ -1279,7 +1301,9 @@ function ksk.FullRefresh(reset)
   ksk.qf.historytab:SetShown(en)
   ksk.qf.listcfgtab:SetShown(en)
 
-  en = (KRP.is_aorl or KRP.is_pl) and ksk.csd.is_admin
+  if (ksk.cfg.cfgtype == KK.CFGTYPE_PUG) then
+    en = (KRP.is_aorl or KRP.is_pl) and ksk.csd.is_admin
+  end
   ksk.qf.bcastbutton:SetEnabled(en)
 
   -- Only the config owner can see most of the config tab
@@ -1305,6 +1329,37 @@ local function player_info_updated(evt, ...)
 
   RequestRaidInfo()
   ksk.FullRefreshUI(false)
+end
+
+local function guild_info_updated(evt, ...)
+  local iv = { text = L["None"], value = 0 }
+  local rvals = {}
+  tinsert (rvals, iv)
+
+  if (K.player.is_guilded) then
+    for i = 1, K.guild.numranks do
+      iv = {text = K.guild.ranks[i], value = i }
+      tinsert (rvals, iv)
+    end
+  end
+
+  oldr = ksk.qf.lootrank:GetValue() or 0
+  ksk.qf.lootrank:UpdateItems (rvals)
+  ksk.qf.lootrank:SetValue (oldr)
+
+  oldr = ksk.qf.defrankdd:GetValue() or 0
+  ksk.qf.defrankdd:UpdateItems (rvals)
+  ksk.qf.defrankdd:SetValue (oldr)
+
+  oldr = ksk.qf.gdefrankdd:GetValue() or 0
+  ksk.qf.gdefrankdd:UpdateItems (rvals)
+  ksk.qf.gdefrankdd:SetValue (oldr)
+
+  oldr = ksk.qf.itemrankdd:GetValue() or 0
+  ksk.qf.itemrankdd:UpdateItems (rvals)
+  ksk.qf.itemrankdd:SetValue (oldr)
+
+  ksk.qf.cfgtype:SetEnabled(ksk.UserIsRanked(ksk.currentid, K.player.name))
 end
 
 function ksk.RefreshRaid()
@@ -1869,6 +1924,7 @@ local function ksk_initialised()
   ksk.initialised = true
 
   K:RegisterMessage("PLAYER_INFO_UPDATED", player_info_updated)
+  K:RegisterMessage("GUILD_INFO_UPDATED", guild_info_updated)
 
   --
   -- We prefer to use callbacks to messages because callbacks are not called
