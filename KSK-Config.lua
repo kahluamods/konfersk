@@ -769,7 +769,7 @@ local function select_dencher(btn, lbl, num)
 end
 
 local function change_cfg(which, val)
-  if (ksk.cfg.settings) then
+  if (ksk.cfg and ksk.cfg.settings) then
     if (ksk.cfg.settings[which] ~= val) then
       ksk.cfg.settings[which] = val
     end
@@ -1054,7 +1054,7 @@ function ksk.InitialiseConfigUI()
   arg = {}
 
   local function oaf_checked(this)
-    if (ksk.cfg.settings) then
+    if (ksk.cfg and ksk.cfg.settings) then
       return ksk.cfg.settings[this.value]
     end
     return false

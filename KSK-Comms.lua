@@ -643,6 +643,7 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
       tcf.oranks = ncf.oranks
       tcf.admins = tcf.admins or {}
       tcf.nadmins = 0
+      tcf.cfgtype = ncf.cfgtype
 
       --
       -- An owner broadcast is authoritative with respects to co-admins.

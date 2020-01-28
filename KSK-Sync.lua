@@ -269,7 +269,6 @@ local function prepare_broadcast(cfg)
 end
 
 local function broadcast_config(isshifted)
-  debug(1, "broadcast called")
   local ci = prepare_broadcast(nil)
   if (ishshifted and K.player.is_guilded) then
     ksk:SendGuildAM("BCAST", "ALERT", ci)

@@ -1236,7 +1236,6 @@ function ksk.CanChangeConfigType()
   return false
 end
 
-
 local function update_bcast_button()
   ksk.UpdateUserSecurity()
   if (ksk.csd.is_admin) then
@@ -2005,7 +2004,7 @@ end
 --
 -- "Register" KSK with the list of all other Konfer addons.
 --
-local konfer = {
+ksk.konfer = {
   handle     = ksk.addon_handle,
   name       = L["MODNAME"],
   title      = L["MODTITLE"],
@@ -2029,7 +2028,7 @@ local konfer = {
   end,
 
   open_on_loot = function(handle)
-    if (ksk.cfg.settings and ksk.cfg.settings.auto_bid) then
+    if (ksk.cfg and ksk.cfg.settings and ksk.cfg.settings.auto_bid) then
       return true
     end
     return false
@@ -2068,7 +2067,7 @@ function ksk:OnLateInit()
 
   ksk.UpdateDatabaseVersion()
 
-  KK.RegisterKonfer(ksk, konfer)
+  KK.RegisterKonfer(ksk)
 
   ksk.InitialiseUI()
 
