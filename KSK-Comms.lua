@@ -481,14 +481,13 @@ end
 
 local function prepare_config_from_bcast(cfd)
   local ncf = {}
-  local cfgid, cfgname, cfgtype, tethered, owner, ts, oranks, crc
+  local cfgid, cfgname, cfgtype, owner, ts, oranks, crc
   cfgid = nil
 
-  if (cfd.v == 4) then
-    cfgid, cfgname, cfgtype, tethered, owner, oranks, crc = strsplit(":", cfd.c)
+  if (cfd.v == 5) then
+    cfgid, cfgname, cfgtype, owner, oranks, crc = strsplit(":", cfd.c)
     ncf.name = cfgname
     ncf.cfgtype = tonumber(cfgtype)
-    ncf.tethered = getbool(tethered)
     ncf.owner = owner
     ncf.cksum = tonumber(crc)
     ncf.lastevent = 0
@@ -520,11 +519,11 @@ local function prepare_config_from_bcast(cfd)
     ncf.nlists = cfd.l[1]
     ncf.lists = {}
     for k,v in pairs(cfd.l[2]) do
-      local lid, lname, sorder, drank, sc, sr, el, numu, ulist = strsplit(":",v)
+      local lid, lname, sorder, drank, sc, sr, el, alt, numu, ulist = strsplit(":",v)
       ncf.lists[lid] = { name = lname, sortorder = tonumber(sorder),
         def_rank = tonumber(drank), strictcfilter = getbool(sc),
-        strictrfilter = getbool(sr), extralist = el, nusers = tonumber(numu),
-        users = ksk.SplitRaidList(ulist) }
+        strictrfilter = getbool(sr), extralist = el, tethered = getbool(alt),
+        nusers = tonumber(numu), users = ksk.SplitRaidList(ulist) }
     end
 
     if (cfd.s) then
@@ -638,7 +637,6 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
       -- info so we set it here.
       --
       tcf.name = ncf.name
-      tcf.tethered = ncf.tethered
       tcf.owner = ncf.owner
       tcf.oranks = ncf.oranks
       tcf.admins = tcf.admins or {}
@@ -1212,7 +1210,7 @@ ehandlers.CPLST = function(adm, sender, proto, cmd, cfg, ...)
 end
 
 --
--- Command: CHLST listid sort rank stricta strictr list
+-- Command: CHLST listid sort rank stricta strictr list tethered
 -- Purpose: Syncer-only event sent when a list's paramaters are modified.
 --          SORT is the sort order,
 --          STRICTA is true if strict class armor filtering is in place,
@@ -1220,7 +1218,7 @@ end
 --          the additional list to suicide on.
 --
 ehandlers.CHLST = function(adm, sender, proto, cmd, cfg, ...)
-  local listid, sortorder, rank, stricta, strictr, slist = ...
+  local listid, sortorder, rank, stricta, strictr, slist, tethered = ...
 
   local llist = ksk.configs[cfg].lists[listid]
   if (not llist) then
@@ -1235,8 +1233,11 @@ ehandlers.CHLST = function(adm, sender, proto, cmd, cfg, ...)
     slist = 0
   end
   llist.extralist = slist
+  llist.tethered = getbool(tethered)
 
   if (cfg == ksk.currentid) then
+    ksk.FixupLists(cfg)
+    ksk.RefreshListsUI(false)
     ksk.RefreshAllLists()
   end
 end

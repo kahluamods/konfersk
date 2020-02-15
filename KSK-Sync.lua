@@ -195,15 +195,15 @@ end
 -- This function will prepare the table to be broadcast for a specified
 -- config.
 -- a table suitable for transmission with the following values:
---   v=4 (version 4 broadcast)
---   c=cfgid:name:type:tethered:ownerid:oranks:crc
+--   v=5 (version 5 broadcast)
+--   c=cfgid:name:type:ownerid:oranks:crc
 --   u={numusers,userlist}
 --     Each element in userlist is name:class:role:ench:frozen:exempt:alt:main
 --   a={numadmins,adminlist}
 --     Each element in adminlist is uid:adminid
 --   l={numlists,listinfo}
 --     Each element in listinfo is
---       listid:name:order:strictc:strictr:xlist:tout:next:nusers:ulist
+--       listid:name:order:strictc:strictr:xlist:tethered:tout:next:nusers:ulist
 --   s=syncers data (for FSYNC)
 --   i=item database (for FSYNC)
 --   e=last event ID (for FSYNC)
@@ -214,9 +214,9 @@ local function prepare_broadcast(cfg)
   local ci = {}
   local tc = ksk.configs[cfg]
 
-  ci.v = 4
-  ci.c = strfmt("%s:%s:%d:%s:%s:%s:0x%s", cfg, tc.name, tc.cfgtype,
-    tc.tethered and "Y" or "N", tc.owner, tc.oranks, K.hexstr(tc.cksum))
+  ci.v = 5
+  ci.c = strfmt("%s:%s:%d:%s:%s:0x%s", cfg, tc.name, tc.cfgtype,
+    tc.owner, tc.oranks, K.hexstr(tc.cksum))
 
   local ulist = {}
   for k,v in pairs(tc.users) do
@@ -256,10 +256,10 @@ local function prepare_broadcast(cfg)
     for kk,vv in pairs(v.users) do
       ulist = ulist .. vv
     end
-    local ls = strfmt("%s:%s:%d:%d:%s:%s:%s:%d:%s", k, v.name,
+    local ls = strfmt("%s:%s:%d:%d:%s:%s:%s:%s:%d:%s", k, v.name,
       v.sortorder, v.def_rank, v.strictcfilter and "Y" or "N",
       v.strictrfilter and "Y" or "N", tostring(v.extralist),
-      v.nusers, ulist)
+      v.tethered and "Y" or "N", v.nusers, ulist)
     tinsert(llist, ls)
   end
 

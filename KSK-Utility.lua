@@ -94,12 +94,13 @@ end
 --
 function ksk.CreateRaidList(listid)
   local raiders = {}
-  for k,v in ipairs(ksk.cfg.lists[listid].users) do
+  local ll = ksk.cfg.lists[listid]
+  for k,v in ipairs(ll.users) do
     if (ksk.UserIsReserved(v)) then
       tinsert(raiders, v)
     elseif (ksk.users[v]) then
       tinsert(raiders, v)
-    elseif (ksk.cfg.tethered and ksk.cfg.users[v].alts) then
+    elseif (ll.tethered and ksk.cfg.users[v].alts) then
       for ak,av in pairs(ksk.cfg.users[v].alts) do
         if (ksk.users[av]) then
           tinsert(raiders, v)
@@ -454,6 +455,24 @@ function ksk.UpdateDatabaseVersion()
       if (v.settings.rank_prio == nil) then
         v.settings.rank_prio = {}
       end
+    end
+
+    ret = true
+    ksk.frdb.dbversion = 3
+  end
+
+  if (ksk.frdb.dbversion == 3) then
+    --
+    -- Version 4 made alts being tethered to mains a list option not a global
+    -- one. So pick up the current setting and change all of the lists. If
+    -- we are the owner of a config also send out CHLST events with the new
+    -- setting so that all admins have the same value.
+    --
+    for k,v in pairs(ksk.frdb.configs) do
+      for kk,vv in pairs(v.lists) do
+        vv.tethered = v.tethered
+      end
+      v.tethered = nil
     end
 
     ret = true

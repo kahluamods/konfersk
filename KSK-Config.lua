@@ -118,7 +118,6 @@ local function config_setenabled(onoff)
     local en = false
 
     qf.cfgopts.cfgowner:SetEnabled(onoff)
-    qf.cfgopts.tethered:SetEnabled(onoff)
     qf.cfgopts.cfgtype:SetEnabled(onoff)
 
     if (onoff and K.player.is_guilded and K.player.is_gm) then
@@ -187,13 +186,11 @@ local function config_selectitem(objp, idx, slot, btn, onoff)
     local en
 
     qf.cfgopts.cfgowner:SetValue(lcf.owner)
-    qf.cfgopts.tethered:SetChecked(lcf.tethered)
     qf.cfgopts.cfgtype:SetValue(lcf.cfgtype)
 
     en = ksk.csdata[admincfg].is_admin == 2 and true or false
 
     qf.cfgopts.cfgowner:SetEnabled(en)
-    qf.cfgopts.tethered:SetEnabled(en)
 
     if (lcf.cfgtype ~= CFGTYPE_GUILD) then
       qf.cfgopts.orankedit:SetEnabled(false)
@@ -568,10 +565,12 @@ local function copy_space_button(cfgid, newname, newid, shown)
             if (sl.extralist ~= "0") then
               dl.extralist = ksk.FindList(sc.lists[sl.extralist].name, newid) or "0"
             end
+            dl.tethered = sl.tethered
             -- If this changes MUST change in KSK-Comms.lua(CHLST)
-            local es = strfmt("%s:%d:%d:%s:%s:%s", dlid,
+            local es = strfmt("%s:%d:%d:%s:%s:%s:%s", dlid,
               dl.sortorder, dl.def_rank, dl.strictcfilter and "Y" or "N",
-              dl.strictrfilter and "Y" or "N", dl.extralist)
+              dl.strictrfilter and "Y" or "N", dl.extralist,
+              dl.tethered and "Y" or "N")
             ksk.AddEvent(newid, "CHLST", es)
           end
         end
@@ -616,7 +615,6 @@ local function copy_space_button(cfgid, newname, newid, shown)
             dc.settings.denchers[k] = ksk.FindUser(sc.users[v].name, newid)
           end
         end
-        dc.tethered = sc.tethered
         dc.cfgtype = sc.cfgtype
         dc.owner = ksk.FindUser(sc.users[sc.owner].name, newid)
         dc.oranks = sc.oranks
@@ -1522,8 +1520,9 @@ function ksk.InitialiseConfigUI()
   -- are shown in the top right panel. Below them is some version information
   -- and contact information.
   --
+  ypos = 0
   arg = {
-    x = 0, y = 0, name = "KSKConfigOWnerDD", itemheight = 16,
+    x = 4, y = ypos, name = "KSKConfigOWnerDD", itemheight = 16,
     dwidth = 150, mode = "SINGLE", items = KUI.emptydropdown,
     label = { pos = "LEFT", text = L["Config Owner"] },
     tooltip = { title = "$$", text = L["TIP023"] },
@@ -1536,23 +1535,11 @@ function ksk.InitialiseConfigUI()
     ksk.FullRefresh(true)
   end)
   arg = {}
-
-  arg = {
-    x = 0, y = -30, label = { text = L["Alts Tethered to Mains"] },
-    tooltip = { title = "$$", text = L["TIP024"] },
-  }
-  tr.tethered = KUI:CreateCheckBox(arg, tr)
-  tr.tethered:Catch("OnValueChanged", function(this, evt, val)
-    local lcf = ksk.frdb.configs[admincfg]
-    lcf.tethered = val
-    ksk.FixupLists(admincfg)
-    ksk.RefreshListsUI(false)
-  end)
-  arg = {}
+  ypos = ypos - 32
 
   arg = {
     name = "KSKCfgTypeDropDown", enabled = false, itemheight = 16,
-    x = 4, y = -58, label = { text = L["Config Type"], pos = "LEFT" },
+    x = 4, y = ypos, label = { text = L["Config Type"], pos = "LEFT" },
     dwidth = 100, mode = "SINGLE", width = 75,
     tooltip = { title = "$$", text = L["TIP025"] },
     items = {
@@ -1583,10 +1570,11 @@ function ksk.InitialiseConfigUI()
   end)
   ksk.qf.cfgtype = tr.cfgtype
   arg = {}
+  ypos = ypos - 32
 
   arg = {
     name = "KSKCfgGuildOfficerButton",
-    x = 4, y = -92, width = 160, height = 24,
+    x = 4, y = ypos, width = 160, height = 24,
     text = L["Edit Officer Ranks"], enabled = false,
     tooltip = { title = "$$", text = L["TIP100"] }
   }
@@ -1808,7 +1796,6 @@ function ksk.CreateNewConfig(name, initial, nouser, mykey)
   ksk.csdata[newkey].reserved = {}
   local sp = ksk.frdb.configs[newkey]
   sp.name = name
-  sp.tethered = false
   sp.cfgtype = CFGTYPE_PUG
   sp.oranks = "1000000000"
   sp.settings = {}

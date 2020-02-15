@@ -112,6 +112,7 @@ local function setup_linfo()
   linfo.strictcfilter = current_list.strictcfilter
   linfo.strictrfilter = current_list.strictrfilter
   linfo.extralist = current_list.extralist
+  linfo.tethered = current_list.tethered
 end
 
 --
@@ -153,7 +154,7 @@ local function refresh_member_list(listid)
         tinsert(members, ti)
       end
 
-      if (ksk.cfg.tethered) then
+      if (current_list.tethered) then
         for i = #members, 1, -1 do
           local usr = ksk.cfg.users[members[i].id]
           if (usr.alts) then
@@ -219,6 +220,7 @@ local function rlist_setenabled(onoff)
     qf.listconf.cfilter:SetEnabled(onoff)
     qf.listconf.rfilter:SetEnabled(onoff)
     qf.listconf.slistdd:SetEnabled(onoff)
+    qf.listconf.tethered:SetEnabled(onoff)
     qf.insert:SetEnabled(onoff)
 
     if (ksk.cfg.cfgtype == KK.CFGTYPE_PUG) then
@@ -256,6 +258,7 @@ local function rlist_selectitem(objp, idx, slot, btn, onoff)
     qf.listconf.cfilter:SetChecked(current_list.strictcfilter)
     qf.listconf.rfilter:SetChecked(current_list.strictrfilter)
     qf.listconf.slistdd:SetValue(current_list.extralist)
+    qf.listconf.tethered:SetChecked(current_list.tethered)
     qf.listctl.announcebutton:SetEnabled(ksk.csd.is_admin and ksk.users ~= nil)
   else
     current_listid = nil
@@ -342,7 +345,7 @@ local function mlist_setitem(objp, idx, slot, btn)
   -- Also, if we are tethered, then members points to a different array that
   -- has different info we care about.
   --
-  if (ksk.cfg.tethered) then
+  if (current_list.tethered) then
     if (members[idx].isalt) then
       uc = members[idx].main
       at = "    - "
@@ -369,7 +372,7 @@ local function mlist_selectitem(objp, idx, slot, btn, onoff)
   if (onoff) then
     current_memberid = members[idx].id
     local ridx = idx
-    if (ksk.cfg.tethered) then
+    if (current_list.tethered) then
       ridx = members[idx].idx
       if (members[idx].isalt) then
         current_memberid = members[idx].main
@@ -524,7 +527,7 @@ local function insert_member(btn)
     if (not ksk.UserInList(k)) then
       local doit = false
       local ti = nil
-      if (ksk.cfg.tethered) then
+      if (current_list.tethered) then
         if (not ksk.UserIsAlt(k, v.flags)) then
           doit = true
         end
@@ -558,7 +561,7 @@ local function insert_member(btn)
     return strlower(anm) < strlower(bnm)
   end)
 
-  if (ksk.cfg.tethered) then
+  if (current_list.tethered) then
     for i = #ulist, 1, -1 do
       if (ksk.cfg.users[ulist[i].value].alts) then
         for k,v in pairs(ksk.cfg.users[ulist[i].value].alts) do
@@ -571,7 +574,7 @@ local function insert_member(btn)
   end
 
   local function pop_func(puid)
-    if (ksk.cfg.tethered) then
+    if (current_list.tethered) then
       if (ksk.UserIsAlt(puid)) then
         id = ksk.cfg.users[puid].main
       end
@@ -666,7 +669,7 @@ local function move_member(btn, dir)
   end
 
   local uid = members[c].id
-  if (ksk.cfg.tethered and members[c].isalt) then
+  if (current_list.tethered and members[c].isalt) then
     uid = members[c].main
   end
 
@@ -735,7 +738,7 @@ local function delete_member(btn)
   end
 
   local uid = members[c].id
-  if (ksk.cfg.tethered and members[c].isalt) then
+  if (current_list.tethered and members[c].isalt) then
     uid = members[c].main
   end
 
@@ -1241,7 +1244,7 @@ local function add_missing_button()
       if (whatv == 1 and ksk.users) then
         for k,v in pairs(ksk.users) do
           local uid = k
-          if (ksk.cfg.tethered) then
+          if (current_list.tethered) then
             if (ksk.UserIsAlt(uid)) then
               uid = ksk.cfg.users[uid].main
             end
@@ -1262,7 +1265,7 @@ local function add_missing_button()
       elseif (whatv == 2) then
         for k,v in pairs(ksk.cfg.users) do
           local doit = false
-          if (ksk.cfg.tethered) then
+          if (current_list.tethered) then
             if (not ksk.UserIsAlt(k, v.flags)) then
               doit = true
             end
@@ -1733,6 +1736,20 @@ function ksk.InitialiseListsUI()
   ypos = ypos - 48
 
   arg = {
+    x = 0, y = ypos, label = { text = L["Alts Tethered to Mains"] },
+    tooltip = { title = "$$", text = L["TIP024"] },
+  }
+  tr.tethered = KUI:CreateCheckBox(arg, tr)
+  tr.tethered:Catch("OnValueChanged", function(this, evt, val, user)
+    if (user) then
+      changed()
+    end
+    linfo.tethered = val
+  end)
+  arg = {}
+  ypos = ypos - 24
+
+  arg = {
     x = 0, y = ypos, text = L["Update"], enabled = false,
     tooltip = { title = "$$", text = L["TIP042"] },
   }
@@ -1743,10 +1760,13 @@ function ksk.InitialiseListsUI()
     ksk.RefreshAllLists()
     tr.updatebtn:SetEnabled(false)
     -- If this changes MUST change CHLST is KSK-Config.lua
-    local es = strfmt("%s:%d:%d:%s:%s:%s", current_listid,
+    local es = strfmt("%s:%d:%d:%s:%s:%s:%s", current_listid,
       linfo.sortorder, linfo.def_rank, linfo.strictcfilter and "Y" or "N",
-      linfo.strictrfilter and "Y" or "N", linfo.extralist)
+      linfo.strictrfilter and "Y" or "N", linfo.extralist,
+      linfo.tethered and "Y" or "N")
     ksk.AddEvent(ksk.currentid, "CHLST", es)
+    ksk.FixupLists(ksk.currentid)
+    ksk.RefreshListsUI(false)
   end)
 
   --
@@ -2002,6 +2022,7 @@ function ksk.CreateNewList(name, cfg, myid, nocmd)
   rl.strictcfilter = false
   rl.strictrfilter = false
   rl.extralist = "0"
+  rl.tethered = false
   rl.users = {}
   rl.nusers = 0
 
@@ -2149,6 +2170,7 @@ function ksk.CopyList(listid, newname, cfg, myid, nocmd)
   dst.strictcfilter = src.strictcfilter
   dst.strictrfilter = src.strictrfilter
   dst.extralist = src.extralist
+  dst.tethered = src.tethered
   dst.nusers = src.nusers
   K.CopyTable(src.users, dst.users)
 
@@ -2366,34 +2388,36 @@ function ksk.FixupLists(cfg, rec)
   local changed = false
 
   for k,v in pairs(ksk.configs[cfg].lists) do
-    local il = 1
-    while (il <= #v.users) do
-      local inc = 1
-      local vv = v.users[il]
-      local ia, mid = ksk.UserIsAlt(vv, nil, cfg)
+    if (v.tethered) then
+      local il = 1
+      while (il <= #v.users) do
+        local inc = 1
+        local vv = v.users[il]
+        local ia, mid = ksk.UserIsAlt(vv, nil, cfg)
 
-      if (ia) then
-        assert(mid)
-        if (not ksk.UserInList(mid, k, cfg)) then
-          --
-          -- The user is marked as an alt but their main isn't in the list.
-          -- This means we have to replace this alt (in the same position)
-          -- with the alt's main.
-          --
-          v.users[il] = mid
-          changed = true
-        else
-          --
-          -- The alt's main is already in the list, so we can now safely
-          -- remove this alt from the roll list.
-          --
-          tremove(v.users, il)
-          v.nusers = v.nusers - 1
-          changed = true
-          inc = 0
+        if (ia) then
+          assert(mid)
+          if (not ksk.UserInList(mid, k, cfg)) then
+            --
+            -- The user is marked as an alt but their main isn't in the list.
+            -- This means we have to replace this alt (in the same position)
+            -- with the alt's main.
+            --
+            v.users[il] = mid
+            changed = true
+          else
+            --
+            -- The alt's main is already in the list, so we can now safely
+            -- remove this alt from the roll list.
+            --
+            tremove(v.users, il)
+            v.nusers = v.nusers - 1
+            changed = true
+            inc = 0
+          end
         end
+        il = il + inc
       end
-      il = il + inc
     end
   end
 

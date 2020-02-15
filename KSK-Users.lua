@@ -1469,16 +1469,17 @@ end
 
 function ksk.RefreshMembership()
   if (seluser) then
-    local uid = seluser
-    if (ksk.cfg.tethered) then
-      local up = ksk.cfg.users[seluser]
-      if (up.main) then
-        uid = up.main
-      end
-    end
     umemlist = {}
     if (ksk.sortedlists and #ksk.sortedlists > 0) then
       for k,v in ipairs(ksk.sortedlists) do
+        local lootlist = ksk.cfg.lists[v.id]
+        local uid = seluser
+        if (lootlist.tethered) then
+          local up = ksk.cfg.users[seluser]
+          if (up.main) then
+            uid = up.main
+          end
+        end
         local il, lp = ksk.UserInList(uid, v.id)
         if (il) then
           tinsert(umemlist, green(strfmt("%s [%d]", ksk.cfg.lists[v.id].name, lp)))

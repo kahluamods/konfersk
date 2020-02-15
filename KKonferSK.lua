@@ -137,14 +137,15 @@ ksk.version = MINOR
 --   3   - dates now in UTC seconds since epoch for history
 --   4   - OROLL now has extra param for allowing offspec rolls
 --   5   - resurect guild config and rank priorities
-ksk.protocol = 5
+--   6   - alt tethered now a list option not global
+ksk.protocol = 6
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
 -- KSK-Utility.lua (ksk.UpdateDatabaseVersion()) will update older databases
 -- dating all the way back to version 1. Once a database version has been
 -- upgraded it cannot be reverted.
-ksk.dbversion = 3
+ksk.dbversion = 4
 
 -- Whether or not KSK has been fully initialised. This can take a while as
 -- certain bits of information are not immediately available on login.
@@ -1450,10 +1451,11 @@ local function reply_filter(self, evt, msg, snd, ...)
   end
 end
 
-local function get_user_pos(uid, ulist)
+local function get_user_pos(uid, lp)
   local cuid = uid
   local rpos = 0
-  if (ksk.cfg.tethered) then
+  local ulist = lp.users
+  if (lp.tethered) then
     if (ksk.cfg.users[uid] and ksk.cfg.users[uid].main) then
       cuid = ksk.cfg.users[uid].main
     end
@@ -1465,7 +1467,7 @@ local function get_user_pos(uid, ulist)
       if (ksk.users[v]) then
         ir = true
       else
-        if (ksk.cfg.tethered and ksk.cfg.users[v].alts) then
+        if (lp.tethered and ksk.cfg.users[v].alts) then
           for kk,vv in pairs(ksk.cfg.users[v].alts) do
             if (ksk.users[vv]) then
               ir = true
@@ -1504,7 +1506,7 @@ local function chat_msg_whisper(evt, msg, snd, ...)
       local ndone = 0
       for k,v in pairs(ksk.sortedlists) do
         local lp = ksk.cfg.lists[v.id]
-        local apos, rpos = get_user_pos(uid, lp.users)
+        local apos, rpos = get_user_pos(uid, lp)
         if (apos) then
           ndone = ndone + 1
           if (not sentheader) then

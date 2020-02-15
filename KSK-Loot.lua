@@ -1250,7 +1250,8 @@ local function mlist_setitem(objp, idx, slot, btn)
   -- Also, if we are tethered, then members points to a different array that
   -- has different info we care about.
   --
-  if (ksk.cfg.tethered and not ksk.cfg.settings.hide_absent) then
+  local lootlist = ksk.cfg.lists[lootlistid]
+  if (lootlist.tethered and not ksk.cfg.settings.hide_absent) then
     if (members[idx].isalt) then
       uc = members[idx].main
       at = "    - "
@@ -1278,7 +1279,8 @@ local function mlist_selectitem(objp, idx, slot, btn, onoff)
     local mid = members[idx].id
     memberid = mid
     realmemberid = mid
-    if (ksk.cfg.tethered) then
+    local lootlist = ksk.cfg.lists[lootlistid]
+    if (lootlist.tethered) then
       if (members[idx].isalt) then
         memberid = members[idx].main
       end
@@ -3669,7 +3671,7 @@ function ksk.RefreshLootMembers()
           tinsert(members, {id = v, idx = k})
         end
 
-        if (ksk.cfg.tethered and usr.alts) then
+        if (lootlist.tethered and usr.alts) then
           for kk,vv in pairs(usr.alts) do
             if (ksk.users and ksk.cfg.settings.hide_absent) then
               if (ksk.users[vv]) then
@@ -4179,10 +4181,11 @@ end
 
 function ksk.SuicideUser(listid, rlist, uid, cfgid, ilink, chain)
   local cfgid = cfgid or ksk.currentid
+  local ll = ksk.configs[cfgid].lists[listid]
 
   local ia, ruid = ksk.UserIsAlt(uid, nil, cfgid)
 
-  if (not ia or not ksk.configs[cfgid].tethered) then
+  if (not ia or not ll.tethered) then
     ruid = uid
   end
 
@@ -4192,7 +4195,6 @@ function ksk.SuicideUser(listid, rlist, uid, cfgid, ilink, chain)
   ksk.AddEvent(cfgid, "SULST", es, true)
 
   if (chain) then
-    local ll = ksk.configs[cfgid].lists[listid]
     if (ll.extralist and ll.extralist ~= "0") then
       local trlist = ksk.CreateRaidList(ll.extralist)
       ksk.SuicideUserLowLevel(ll.extralist, trlist, ruid, cfgid, ilink)

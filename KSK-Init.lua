@@ -120,12 +120,12 @@ local mainwin = {
   }
 }
 
+ksk.mainwin = KUI:CreateTabbedDialog(mainwin)
+
 function ksk.InitialiseUI()
   if (ksk.initialised) then
     return
   end
-
-  ksk.mainwin = KUI:CreateTabbedDialog(mainwin)
 
   --
   -- Every panel and every sub-panel needs to display the current config and
