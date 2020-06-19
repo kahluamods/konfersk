@@ -138,14 +138,14 @@ ksk.version = MINOR
 --   4   - OROLL now has extra param for allowing offspec rolls
 --   5   - resurect guild config and rank priorities
 --   6   - alt tethered now a list option not global
-ksk.protocol = 6
+ksk.protocol = 7
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
 -- KSK-Utility.lua (ksk.UpdateDatabaseVersion()) will update older databases
 -- dating all the way back to version 1. Once a database version has been
 -- upgraded it cannot be reverted.
-ksk.dbversion = 4
+ksk.dbversion = 5
 
 -- Whether or not KSK has been fully initialised. This can take a while as
 -- certain bits of information are not immediately available on login.
@@ -181,6 +181,7 @@ ksk.HIST_WHEN   = 1
 ksk.HIST_WHAT   = 2
 ksk.HIST_WHO    = 3
 ksk.HIST_HOW    = 4
+ksk.HIST_POS    = 5
 
 -- Table of users currently in the group. This is indexed by KSK uid and
 -- contains the full player name. This in turn can be used to access

@@ -1751,7 +1751,7 @@ ihandlers.MSYNC = function(sender, proto, cmd, cfg, ...)
     cp.admins[theiruid].sync = {}
   end
   ksk.SyncUpdateReplier(theiruid, ksk.configs[cfg].admins[cktheiruid].lastevent)
-  info(L["sync with user %s complete."], aclass(ksk.configs[cfg].users[theiruid]))
+  info(L["[%s] sync with user %s complete."], white(ksk.configs[cfg].name), aclass(ksk.configs[cfg].users[theiruid]))
   ksk.FullRefresh(true)
 end
 
@@ -1972,7 +1972,7 @@ ihandlers.TROLL = function(sender, proto, cmd, cfg, ...)
 end
 
 --
--- Command: LHADD timestamp ilink who how
+-- Command: LHADD timestamp ilink who how pos
 -- Purpose: Sent when a master looter assigns loot through KSK. This is sent
 --          to all admins. However, each admin can decide whether or not they
 --          are actually recording loot history. If they are not then this
@@ -1982,15 +1982,20 @@ end
 --          the userid of who it was assigned to, and HOW is how it was
 --          assigned to them ("D" for disenchanted, "R" for won on a roll
 --          and a listid if it was rolled for on a list). "B" for BOE
---          assigned to ML, "A" is for auto-assigned.
+--          assigned to ML, "A" is for auto-assigned. pos is set to the
+--          list position the user occupied before the suicide.
 --
 ehandlers.LHADD = function(adm, sender, proto, cmd, cfg, ...)
-  local when, what, who, how = ...
+  local when, what, who, how, spos = ...
 
   local cfp = ksk.configs[cfg]
 
   if (not cfp.settings.history) then
     return
+  end
+
+  if (not spos) then
+    spos = 0
   end
 
   local itemlink = gsub(what, "\7", ":")
@@ -2010,7 +2015,7 @@ ehandlers.LHADD = function(adm, sender, proto, cmd, cfg, ...)
     otm.sec = 0
     when = time(otm) - K.utcdiff
   end
-  ksk.AddLootHistory(cfg, when, itemlink, who, how, rf, true)
+  ksk.AddLootHistory(cfg, when, itemlink, who, how, spos, rf, true)
 end
 
 --

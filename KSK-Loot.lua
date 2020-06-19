@@ -501,7 +501,7 @@ local function boe_to_ml_or_de(isroll)
   local ilink = loot.ilink
 
   if (loot.boe and ksk.cfg.settings.boe_to_ml) then
-    ksk.AddLootHistory(nil, K.time(), ilink, ksk.csd.myuid, "B")
+    ksk.AddLootHistory(nil, K.time(), ilink, ksk.csd.myuid, "B", 0)
     KLD.GiveMasterLoot(slot, KRP.master_looter)
     ksk.RemoveItemByIdx(selectedloot, false)
     select_alf(ALF_LOOT)
@@ -568,20 +568,22 @@ local function auto_loot_ok()
   local li = qf.autoloot
   local lh = li.listid
   local uname = li.name
+  local pos = ""
+  local ipos = 0
+
+  if (li.suicide) then
+    local il, lp = ksk.UserInList(li.uid, li.suicide)
+    if (il) then
+      pos = strfmt("[%d]", lp)
+      ipos = lp
+    end
+  end
 
   if (li.slot) then
     KLD.GiveMasterLoot(li.slot, li.name)
   end
 
   if (li.announce) then
-    local pos = ""
-    if (li.suicide) then
-      local il, lp = ksk.UserInList(li.uid, li.suicide)
-      if (il) then
-        pos = strfmt("[%d]", lp)
-      end
-    end
-
     if (ksk.cfg.settings.ann_winners_raid) then
       ksk:SendText(strfmt(L["%s: %s%s (group %d) won %s. Grats!"],
         L["MODABBREV"], uname, pos, li.party, li.ilink))
@@ -615,7 +617,7 @@ local function auto_loot_ok()
     elseif (not lh) then
       lh = "A"
     end
-    ksk.AddLootHistory(nil, K.time(), li.ilink, li.uid, lh)
+    ksk.AddLootHistory(nil, K.time(), li.ilink, li.uid, lh, ipos)
   end
 
   ksk.RemoveItemByIdx(li.bosslootidx, false)
@@ -632,6 +634,14 @@ local function auto_loot_cancel()
   if (not li.announce and not li.leaveloot) then
     if (li.uid) then
       local lh = li.listid
+      local ipos = 0
+      if (li.suicide) then
+        local il, lp = ksk.UserInList(li.uid, li.suicide)
+        if (il) then
+          ipos = lp
+        end
+      end
+
       if (li.denched) then
         lh = "D"
       elseif (li.rolled and li.rolled == 1) then
@@ -641,7 +651,7 @@ local function auto_loot_cancel()
       elseif (not lh) then
         lh = "A"
       end
-      ksk.AddLootHistory(nil, K.time(), li.ilink, li.uid, lh)
+      ksk.AddLootHistory(nil, K.time(), li.ilink, li.uid, lh, ipos)
     end
     ksk.RemoveItemByIdx(li.bosslootidx, false)
     ksk.ResetBidders(true)
@@ -780,14 +790,16 @@ local function rolltimer_onupdate_ml()
       local gpos = ""
 
       if (lootroll.suicide and not missing) then
+        local ipos = 0
         local il, lp = ksk.UserInList(uid, suicide)
         if (il) then
           gpos = strfmt("[%d]", lp)
+          ipos = lp
         end
         suicide = lootlistid
         local sulist = ksk.CreateRaidList(lootlistid)
         ksk.SuicideUser(suicide, sulist, uid, ksk.currentid, ilink, true)
-        ksk.AddLootHistory(nil, K.time(), ilink, uid, suicide)
+        ksk.AddLootHistory(nil, K.time(), ilink, uid, suicide, ipos)
       end
 
       local ts = strfmt(L["%s: %s%s (group %d) won %s. Grats!"],
@@ -812,7 +824,7 @@ local function rolltimer_onupdate_ml()
           lh = "O"
         end
         if (not suicide) then
-          ksk.AddLootHistory(nil, K.time(), ilink, uid, lh)
+          ksk.AddLootHistory(nil, K.time(), ilink, uid, lh, 0)
         end
         ksk.RemoveItemByIdx(selectedloot, false)
         ksk.ResetBidders(false)
@@ -1613,7 +1625,7 @@ local function hlist_newitem(objp, num)
   what:ClearAllPoints()
   what:SetPoint("TOPLEFT", when, "TOPRIGHT", 4, 0)
   what:SetPoint("BOTTOMLEFT", when, "BOTTOMRIGHT", 4, 0)
-  what:SetWidth(170)
+  what:SetWidth(150)
   what:SetJustifyH("LEFT")
   what:SetJustifyV("TOP")
   rf.what = what
@@ -1631,7 +1643,7 @@ local function hlist_newitem(objp, num)
   how:ClearAllPoints()
   how:SetPoint("TOPLEFT", who, "TOPRIGHT", 4, 0)
   how:SetPoint("BOTTOMLEFT", who, "BOTTOMRIGHT", 4, 0)
-  how:SetWidth(110)
+  how:SetWidth(130)
   how:SetJustifyH("LEFT")
   how:SetJustifyV("TOP")
   rf.how = how
@@ -1676,7 +1688,7 @@ local histhow = {
 }
 
 local function hlist_setitem(objp, idx, slot, btn)
-  local when, what, who, how = unpack(ksk.cfg.history[idx])
+  local when, what, who, how, ipos = unpack(ksk.cfg.history[idx])
   local usr = who
   if (ksk.cfg.users[who]) then
     usr = shortaclass(ksk.cfg.users[who])
@@ -1689,10 +1701,14 @@ local function hlist_setitem(objp, idx, slot, btn)
 
   local hs = histhow[how] or nil
   if (not hs) then
+    local ps = ""
+    if (ipos and ipos > 0) then
+      ps = strfmt("[%d] ", ipos)
+    end
     if (ksk.cfg.lists[how]) then
-      hs = strfmt(L["Bid: %s"], white(ksk.cfg.lists[how].name))
+      hs = ps .. white(ksk.cfg.lists[how].name)
     else
-      hs = strfmt(L["Bid: %s"], white("???"))
+      hs = white("[?] ???")
     end
   end
 
@@ -1820,14 +1836,16 @@ local function open_close_bids()
       local party = KRP.players[winname].subgroup
       local ilink = lootitem.loot.ilink
       local gpos = ""
+      local ipos = 0
       local il, lp = ksk.UserInList(winuid, lootlistid)
 
       if (il) then
+        ipos = lp
         gpos = strfmt("[%d]", lp)
       end
 
       ksk.SuicideUser(lootlistid, sulist, winuid, ksk.currentid, ilink, true)
-      ksk.AddLootHistory(nil, K.time(), ilink, winuid, lootlistid)
+      ksk.AddLootHistory(nil, K.time(), ilink, winuid, lootlistid, ipos)
 
       local ts = strfmt(L["%s: %s%s (group %d) won %s. Grats!"],
                         L["MODABBREV"], winname, gpos, party, ilink) 
@@ -3540,11 +3558,11 @@ function ksk.InitialiseLootUI()
   arg.text = L["What"]
   tf.str2 = KUI:CreateStringLabel(arg, tf)
 
-  arg.x = 248
+  arg.x = 228
   arg.text = L["Who"]
   tf.str3 = KUI:CreateStringLabel(arg, tf)
 
-  arg.x = 350
+  arg.x = 330
   arg.text = L["How"]
   tf.str4 = KUI:CreateStringLabel(arg, tf)
 
@@ -4285,12 +4303,12 @@ function ksk.RefreshHistory()
   qf.histscroll:SetSelected(nil, false, true)
 end
 
-function ksk.AddLootHistory(cfg, when, what, who, how, norefresh, nocmd)
+function ksk.AddLootHistory(cfg, when, what, who, how, spos, norefresh, nocmd)
   local cfg = cfg or ksk.currentid
   --
   -- IMPORTANT: If this changes, change KSK-Users.lua too in DeleteUser
   --
-  local ts = { tonumber(when), what, who, how }
+  local ts = { tonumber(when), what, who, how, spos }
 
   if (ksk.configs[cfg].settings.history) then
     tinsert(ksk.configs[cfg].history, ts)
@@ -4301,8 +4319,8 @@ function ksk.AddLootHistory(cfg, when, what, who, how, norefresh, nocmd)
   end
 
   if (not nocmd) then
-    ksk.AddEvent(cfg, "LHADD", strfmt("%d:%s:%s:%s", tonumber(when),
-      gsub(what, ":", "\7"), who, how))
+    ksk.AddEvent(cfg, "LHADD", strfmt("%d:%s:%s:%s:%d", tonumber(when),
+      gsub(what, ":", "\7"), who, how, spos))
   end
 end
 
@@ -4338,7 +4356,7 @@ end
 
 function ksk.UndoSuicide(cfg, listid, movers, uid, ilink, nocmd)
   ksk.AddLoot(ilink, nocmd)
-  ksk.AddLootHistory(cfg, K.time(), ilink, uid, "U")
+  ksk.AddLootHistory(cfg, K.time(), ilink, uid, "U", 0)
 
   local mpos = {}
   for k,v in ipairs(movers) do

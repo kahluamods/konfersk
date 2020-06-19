@@ -48,6 +48,7 @@ local strfind = string.find
 local pairs, ipairs = pairs, ipairs
 local bxor = bit.bxor
 local debug = ksk.debug
+local HIST_POS = ksk.HIST_POS
 
 --
 -- This file contains general purpose utility functions used throughout KSK.
@@ -476,6 +477,19 @@ function ksk.UpdateDatabaseVersion()
     end
 
     ret = true
+    ksk.frdb.dbversion = 4
+  end
+
+  if (ksk.frdb.dbversion == 4) then
+    --
+    -- Version 5 added the list position to the loot history if the user
+    -- suicided on a list.
+    --
+    for k,v in pairs(ksk.frdb.configs) do
+      for kk,vv in pairs(v.history) do
+        vv[HIST_POS] = 0
+      end
+    end
   end
 
   --
