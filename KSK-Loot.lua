@@ -1701,14 +1701,14 @@ local function hlist_setitem(objp, idx, slot, btn)
 
   local hs = histhow[how] or nil
   if (not hs) then
-    local ps = ""
-    if (ipos and ipos > 0) then
-      ps = strfmt("[%d] ", ipos)
-    end
     if (ksk.cfg.lists[how]) then
+      local ps = ""
+      if (ipos and tonumber(ipos) > 0) then
+        ps = strfmt("[%s] ", tostring(ipos))
+      end
       hs = ps .. white(ksk.cfg.lists[how].name)
     else
-      hs = white("[?] ???")
+      hs = white("???")
     end
   end
 

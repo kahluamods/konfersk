@@ -1801,15 +1801,17 @@ local function kld_loot_item(_, _, pvt, item)
     end
   end
 
-  local bthresh = ksk.cfg.settings.bid_threshold
-  if (not skipit and dencher and bthresh and bthresh ~= 0) then
-    if (item.quality < bthresh and item.quality >= KRP.loot_threshold) then
+  if (ksk.cfg.settings.disenchant_below and not skipit) then
+    local bthresh = ksk.cfg.settings.bid_threshold
+    if (dencher and bthresh and bthresh ~= 0 and item.quality < bthresh) then
       skipit = true
       give = dencher
     end
   end
 
   item["ksk_skipit"] = skipit
+  item["ksk_give"] = give
+
   if (give) then
     KLD.GiveMasterLoot(item.lootslot, give)
   end
