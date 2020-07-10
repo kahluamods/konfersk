@@ -1801,11 +1801,19 @@ local function kld_loot_item(_, _, pvt, item)
     end
   end
 
+  local bthresh = tonumber(ksk.cfg.settings.bid_threshold or "0")
+  local iqual = tonumber(item.quality or "0")
+
   if (ksk.cfg.settings.disenchant_below and not skipit) then
-    local bthresh = ksk.cfg.settings.bid_threshold
-    if (dencher and bthresh and bthresh ~= 0 and item.quality < bthresh) then
+    if (dencher and bthresh ~= 0 and iqual < bthresh) then
       skipit = true
       give = dencher
+    end
+  end
+
+  if (not skipit) then
+    if (bthresh ~= 0 and iqual < bthresh) then
+      skipit = true
     end
   end
 
