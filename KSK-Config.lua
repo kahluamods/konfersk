@@ -756,7 +756,7 @@ local function select_dencher(btn, lbl, num)
 
   if (not dencher_popup) then
     dencher_popup = K.PopupSelectionList(ksk, "KSKDencherPopup",
-      ulist, L["Select Enchanter"], 225, 400, btn, 16, 
+      ulist, L["Select Enchanter"], 225, 400, btn, 16,
       function(idx) pop_func(idx) end)
   end
   dencher_popup:UpdateList(ulist)
@@ -1067,42 +1067,42 @@ function ksk.InitialiseConfigUI()
     dwidth = 175, mode = "MULTI", title = { text = L["Other Announcements"],},
     tooltip = { title = "$$", text = L["TIP007"] },
     items = {
-      { 
+      {
         text = L["Announce Bid List Changes"],
         value = "ann_bidchanges", checked = oaf_checked, func = oaf_func,
         tooltip = { title = "$$", text = L["TIP007.1"] },
       },
-      { 
+      {
         text = L["Announce Winners in Raid"],
         value = "ann_winners_raid", checked = oaf_checked, func = oaf_func,
         tooltip = { title = "$$", text = L["TIP007.2"] },
       },
-      { 
+      {
         text = L["Announce Winners in Guild Chat"],
         value = "ann_winners_guild", checked = oaf_checked, func = oaf_func,
         tooltip = { title = "$$", text = L["TIP007.3"] },
       },
-      { 
+      {
         text = L["Announce Bid Progression"],
         value = "ann_bid_progress", checked = oaf_checked, func = oaf_func,
         tooltip = { title = "$$", text = L["TIP007.4"] },
       },
-      { 
+      {
         text = L["Usage Message When Bids Open"],
         value = "ann_bid_usage", checked = oaf_checked, func = oaf_func,
         tooltip = { title = "$$", text = L["TIP007.5"] },
       },
-      { 
+      {
         text = L["Announce Bid / Roll Cancelation"],
         value = "ann_cancel", checked = oaf_checked, func = oaf_func,
         tooltip = { title = "$$", text = L["TIP007.9"] },
       },
-      { 
+      {
         text = L["Announce When No Successful Bids"],
         value = "ann_no_bids", checked = oaf_checked, func = oaf_func,
         tooltip = { title = "$$", text = L["TIP007.10"] },
       },
-      { 
+      {
         text = L["Raiders Not on Current List"],
         value = "ann_missing", checked = oaf_checked, func = oaf_func,
         tooltip = { title = "$$", text = L["TIP007.11"] },
@@ -1194,6 +1194,17 @@ function ksk.InitialiseConfigUI()
   cf.denchbelow = KUI:CreateCheckBox(arg, cf)
   cf.denchbelow:Catch("OnValueChanged", function(this, evt, val)
     change_cfg("disenchant_below", val)
+  end)
+  ypos = ypos - 24
+
+  arg = {
+    x = 0, y = ypos,
+    label = { text = L["Unless Item is in Loot List"] },
+    tooltip = { title = "$$", text = L["TIP101"] },
+  }
+  cf.threshold_except_list = KUI:CreateCheckBox(arg, cf)
+  cf.threshold_except_list:Catch("OnValueChanged", function(this, evt, val)
+    change_cfg("threshold_except_list", val)
   end)
   ypos = ypos - 24
 
@@ -2024,6 +2035,7 @@ function ksk.RefreshConfigLootUI(reset)
   cf.autoloot:SetChecked(settings.auto_loot)
   cf.threshold:SetValue(settings.bid_threshold)
   cf.denchbelow:SetChecked(settings.disenchant_below)
+  cf.threshold_except_list:SetChecked(settings.threshold_except_list)
   cf.rankprio:SetChecked(settings.use_ranks)
   cf.boetoml:SetChecked(settings.boe_to_ml)
   cf.tryroll:SetChecked(settings.try_roll)

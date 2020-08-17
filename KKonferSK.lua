@@ -261,6 +261,7 @@ ksk.defaults = {
   try_roll = false,
   bid_threshold = 0,
   disenchant_below = false,
+  threshold_except_list = false,
   offspec_rolls = true,
   suicide_rolls = false,
   ann_bidchanges = true,
@@ -332,7 +333,7 @@ ksk.aclass = KRP.AlwaysClassString
 ksk.shortaclass = KRP.ShortAlwaysClassString
 
 local white = K.white
-local class = KRP.ClassString 
+local class = KRP.ClassString
 
 -- cfg is known to be valid before this is called
 local function get_my_ids(cfg)
@@ -1801,19 +1802,20 @@ local function kld_loot_item(_, _, pvt, item)
     end
   end
 
-  local bthresh = tonumber(ksk.cfg.settings.bid_threshold or "0")
-  local iqual = tonumber(item.quality or "0")
-
-  if (ksk.cfg.settings.disenchant_below and not skipit) then
-    if (dencher and bthresh ~= 0 and iqual < bthresh) then
-      skipit = true
-      give = dencher
-    end
-  end
-
   if (not skipit) then
-    if (bthresh ~= 0 and iqual < bthresh) then
+    local bthresh = tonumber(ksk.cfg.settings.bid_threshold or "0")
+    local iqual = tonumber(item.quality or "0")
+
+    local on_list = itemid and ksk.cfg.items[itemid] and ksk.cfg.settings.threshold_except_list
+
+    local below_threshold = bthresh ~= 0 and iqual < bthresh and not on_list
+
+    if (below_threshold) then
       skipit = true
+
+      if (ksk.cfg.settings.disenchant_below and dencher) then
+        give = dencher
+      end
     end
   end
 
