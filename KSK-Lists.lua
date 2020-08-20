@@ -50,6 +50,7 @@ local strsplit = string.split
 local pairs, ipairs = pairs, ipairs
 local assert = assert 
 local strlower = string.lower
+local rand = math.random
 
 local info = ksk.info
 local err = ksk.err
@@ -589,7 +590,7 @@ local function insert_member(btn)
     local rlist = ksk.cfg.lists[current_listid]
     local pos = rlist.nusers + 1
     if (random_insert) then
-      pos = math.random(pos)
+      pos = rand(pos)
     end
     ksk.InsertMember(puid, current_listid, pos)
     info(L["added %s to list %q at position %s."],
@@ -854,7 +855,7 @@ local function import_list_button()
           local pos = nil
           if (not ksk.UserInList(v)) then
             if (insrand) then
-              pos = math.random(current_list.nusers + 1)
+              pos = rand(current_list.nusers + 1)
             end
             insert_list_member(v, current_listid, pos)
           end
@@ -891,7 +892,7 @@ local function import_list_button()
             local pos = nil
             if (not ksk.UserInList(v)) then
               if (csvopt == 3) then
-                pos = math.random(current_list.nusers + 1)
+                pos = rand(current_list.nusers + 1)
               end
               insert_list_member(v, current_listid, pos)
             end
@@ -1253,7 +1254,7 @@ local function add_missing_button()
           if (not ksk.UserInList(uid)) then
             local pos = ksk.cfg.lists[current_listid].nusers + 1
             if (insrandom) then
-              pos = math.random(pos)
+              pos = rand(pos)
             end
             insert_list_member(uid, current_listid, pos)
             info(L["added %s to list %q at position %s."],
@@ -1276,7 +1277,7 @@ local function add_missing_button()
             if (not ksk.UserInList(k)) then
               local pos = ksk.cfg.lists[current_listid].nusers + 1
               if (insrandom) then
-                pos = math.random(pos)
+                pos = rand(pos)
               end
               insert_list_member(k, current_listid, pos)
               info(L["added %s to list %q at position %s."], shortaclass(v),

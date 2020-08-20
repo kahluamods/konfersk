@@ -973,7 +973,7 @@ function ksk.UserIsAlt(userid, flags, cfg)
   local rv = find_flag(userid, flags, "A", cfg)
 
   if (rv == true) then
-    local mid, ts, ts2, ts3
+    local mid, ts, ts2, ts3 = nil, nil, nil, nil
     local ut = ksk.frdb.configs[cfg].users
 
     mid = ut[userid].main

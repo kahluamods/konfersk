@@ -169,7 +169,6 @@ local HIST_EXP_JSON = 2
 local lootlistid = nil
 local members = nil
 local memberid = nil
-local realmemberid = nil
 local biditem = nil
 local selitemid = nil
 local iinfo = {}
@@ -942,7 +941,7 @@ local function player_rolled(player, roll, minr, maxr)
       if (slot > 0) then
         -- Slot 0 is for manually added items
         local klid = KLD.items[slot]
-        if (klid.candidates and not klid.candidates[player]) then
+        if (not klid.candidates[player]) then
           ksk:SendWhisper(strfmt(L["%s: you are not eligible to receive loot - %s ignored."], L["MODTITLE"], L["roll"]), player)
           return
         end
@@ -1185,7 +1184,7 @@ local function rlist_selectitem(objp, idx, slot, btn, onoff)
     lootlistid = nil
   end
 
-  -- Updates members, memberid, realmemberid
+  -- Updates members, memberid
   ksk.RefreshLootMembers()
 end
 
@@ -1290,16 +1289,8 @@ local function mlist_selectitem(objp, idx, slot, btn, onoff)
   if (onoff) then
     local mid = members[idx].id
     memberid = mid
-    realmemberid = mid
-    local lootlist = ksk.cfg.lists[lootlistid]
-    if (lootlist.tethered) then
-      if (members[idx].isalt) then
-        memberid = members[idx].main
-      end
-    end
   else
     memberid = nil
-    realmemberid = nil
   end
 
   qf.bidders.forcebid:SetEnabled(ksk.AmIML() and onoff and biditem ~= nil)
@@ -1894,7 +1885,7 @@ local function open_close_bids()
     ksk.ResetBidders(true)
     ksk.OpenBid(selectedloot)
 
-    qf.bidders.forcebid:SetEnabled(realmemberid ~= nil and true or false)
+    qf.bidders.forcebid:SetEnabled(memberid ~= nil and true or false)
     qf.lootwin.oclbids:SetText(L["Close Bids"])
     qf.lootwin.remcancel:SetText(K.CANCEL_STR)
     lootbid_setenabled(true)
@@ -3002,7 +2993,7 @@ function ksk.InitialiseLootUI()
     if (rolling) then
       RandomRoll(101, 200)
     else
-      ksk.NewBidder(ksk.cfg.users[realmemberid].name)
+      ksk.NewBidder(ksk.cfg.users[memberid].name)
     end
   end)
   ypos = ypos - 24
@@ -3641,10 +3632,18 @@ local function refresh_bidders()
   qf.bidscroll.itemcount = 0
   if (bidders) then
     local newbidders = {}
+    local ll = ksk.cfg.lists[lootlistid]
 
     for k,v in ipairs(bidders) do
       if (ksk.UserInList(v.uid, lootlistid, nil)) then
         tinsert(newbidders, v)
+      elseif (ll.tethered and ksk.cfg.users[v.uid].alts) then
+        local ia, main = ksk.UserIsAlt(v)
+        if (ia) then
+          if (ksk.UserInList(main, lootlistid, nil)) then
+            tinsert(newbidders, main)
+          end
+        end
       end
     end
 
@@ -3670,7 +3669,6 @@ function ksk.RefreshLootMembers()
   local oldidx = nil
 
   memberid = nil
-  realmemberid = nil
   members = nil
 
   if (lootlistid) then
@@ -3957,7 +3955,7 @@ function ksk.NewBidder(u)
 
   --
   -- If the loot was added manually with /ksk addloot it will have a slot of
-  -- 0, which teh API never returns. So we need to check for that here and
+  -- 0, which the API never returns. So we need to check for that here and
   -- avoid looking in KLD for the item because it isn't there. The other
   -- alternative is to change the KLD API to allow us to manually add things
   -- to the loot table, but that's more complicated so working around this
@@ -3968,7 +3966,7 @@ function ksk.NewBidder(u)
   if (slot > 0) then
     klid = KLD.items[slot]
 
-    if (not klid or not klid.candidates or not klid.candidates[u]) then
+    if (not klid or not klid.candidates[u]) then
       ksk:SendWhisper(strfmt(L["%s: you are not eligible to receive loot - %s ignored."], L["MODTITLE"], L["bid"]), u)
       return
     end
@@ -4534,7 +4532,6 @@ function ksk.RefreshLootUI(reset)
     lootlistid = nil
     members = nil
     memberid = nil
-    realmemberid = nil
     selitemid = nil
     lootroll = nil
     selectedbidder = nil

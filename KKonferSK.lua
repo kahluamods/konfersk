@@ -186,7 +186,10 @@ ksk.HIST_POS    = 5
 -- Table of users currently in the group. This is indexed by KSK uid and
 -- contains the full player name. This in turn can be used to access
 -- KRP.players, also indexed by the full name, which contains the detailed
--- info about the raid / party member.
+-- info about the raid / party member. The uid index used is for the actual
+-- character in the raid. If the character is an alt, it will be the alt's
+-- uid that is used and any code will need to check for that if it is
+-- important.
 ksk.users = nil
 
 -- Table of disenchanters currently available.
@@ -210,7 +213,7 @@ ksk.currentid = nil
 
 -- The config database for the currently selected configuration or nil if no
 -- config is currently active. This is a convenience alias for
--- ksk.db.factionreal.configs[ksk.currentid].
+-- ksk.db.factionrealm.configs[ksk.currentid].
 ksk.cfg = nil
 
 -- The number of raiders currently in the raid group that are missing from the
