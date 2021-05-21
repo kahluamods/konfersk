@@ -6,7 +6,7 @@
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2020 James Kean Johnston. All rights reserved.
+   Copyright 2008-2021 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -34,6 +34,8 @@ local KRP = ksk.KRP
 local KLD = ksk.KLD
 local H = ksk.H
 local KK = ksk.KK
+local ZL = ksk.ZL
+local LS = ksk.LS
 
 local MakeFrame = KUI.MakeFrame
 
@@ -479,10 +481,34 @@ ihandlers.LLSEL = function(sender, proto, cmd, cfg, ...)
   ksk.SelectLootListByID(listid)
 end
 
-local function prepare_config_from_bcast(cfd)
+--
+-- In order to save bandwidth and to stop running against the ridiculously
+-- low tripwire of the addon spam catcher, we have the payload compressed.
+-- The compressed data is serialised with libserialize so we have to
+-- decompress and deserialize before we can move on.
+--
+local function prepare_config_from_bcast(zdata)
   local ncf = {}
   local cfgid, cfgname, cfgtype, owner, ts, oranks, crc
+  local unz, und, ok, cfd
+
   cfgid = nil
+
+  und = ZL:DecodeForWoWAddonChannel(zdata)
+  if (not und) then
+    debug(1, "failed to decode bcast payload")
+    return ncf, cfgid
+  end
+  unz = ZL:DecompressDeflate(und)
+  if (not unz) then
+    debug(1, "failed to deflate bcast payload")
+    return ncf, cfgid
+  end
+  ok, cfd = LS:Deserialize(unz)
+  if (not ok or not cfd) then
+    debug(1, "failed to deser bcast payload")
+    return ncf, cfgid
+  end
 
   if (cfd.v == 5) then
     cfgid, cfgname, cfgtype, owner, oranks, crc = strsplit(":", cfd.c)
@@ -553,17 +579,10 @@ end
 
 --
 -- Command: BCAST configdata
--- Purpose: This has changed significantly with the removal of the two config
---          types (PUG and guild). There was very little value to so-called
---          guild configs and it just added extra code. Now there are only
---          two ways a config can be broadcast:
---          1. from within a party / raid by the leader.
---          2. from a ranked user within a guild.
---          If a normal (non-ranked) guild user wants to share a config with
---          someone they will need to create a party and do so within that
---          party.
+-- Purpose: Broadcasts the current config to the raid (for PUG configs) or the
+--          guild (for guild configs).
 --
-ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
+ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
   --
   -- If I am the config owner ignore all broadcasts.
   --
@@ -574,7 +593,7 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, cfd)
     end
   end
 
-  local ncf, cfgid = prepare_config_from_bcast(cfd)
+  local ncf, cfgid = prepare_config_from_bcast(zdata)
   local cfgtype = ncf.cfgtype
 
   if (not cfgid) then
@@ -1032,7 +1051,7 @@ ihandlers.REQRS = function(sender, proto, cmd, cfg, ...)
   end
 
   if (#rus ~= 0) then
-    ksk:CSendAM(cfg, "ACKRS", "BULK", rus)
+    ksk:CSendAM(cfg, "ACKRS", "ALERT", rus)
   end
 end
 

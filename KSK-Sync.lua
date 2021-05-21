@@ -30,6 +30,8 @@ end
 local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
+local ZL = ksk.ZL
+local LS = ksk.LS
 local MakeFrame = KUI.MakeFrame
 
 -- Local aliases for global or Lua library functions
@@ -62,6 +64,29 @@ local function clear_syncers_list()
   qf.syncers:UpdateList()
   qf.syncers:SetSelected(nil)
   repliers = nil
+end
+
+local function compress_it(whence, ...)
+  local ser = LS:Serialize(...)
+
+  if (not ser) then
+    debug(1, "compress: serialize failed (%s)", whence)
+    return nil
+  end
+
+  local cz = ZL:CompressDeflate(ser, { level = 5 })
+  if (not cz) then
+    debug(1, "compress: compress failed (%s)", whence)
+    return nil
+  end
+
+  local es = ZL:EncodeForWoWAddonChannel(cz)
+  if (not es) then
+    debug(1, "compress: encode failed (%s)", whence)
+    return nil
+  end
+
+  return es
 end
 
 --
@@ -270,10 +295,16 @@ end
 
 local function broadcast_config(isshifted)
   local ci = prepare_broadcast(nil)
+  local zd = compress_it("BCAST", ci)
+
+  if (not zd) then
+    return
+  end
+
   if (ishshifted and K.player.is_guilded) then
-    ksk:SendGuildAM("BCAST", "ALERT", ci)
+    ksk:SendGuildAM("BCAST", "ALERT", zd)
   else
-    ksk:SendAM("BCAST", "ALERT", ci)
+    ksk:SendAM("BCAST", "ALERT", zd)
   end
 end
 
@@ -666,9 +697,9 @@ function ksk.SendFullSync(cfg, dest, isrecover)
   if (not isrecover) then
     ksk.configs[cfg].syncing = true
     qf.reqsyncallbutton:SetEnabled(true)
-    ksk:CSendWhisperAM(cfg, dest, "FSYNC", "ALERT", ci)
+    ksk:CSendWhisperAM(cfg, dest, "FSYNC", "ALERT", compress_it("FSYNC", ci))
   else
-    ksk:CSendWhisperAM(cfg, dest, "RCACK", "ALERT", ci)
+    ksk:CSendWhisperAM(cfg, dest, "RCACK", "ALERT", compress_it("RCACK", ci))
   end
 end
 
@@ -711,11 +742,11 @@ function ksk.SyncCleanup()
   end
 
   if (#gsend > 0) then
-    ksk:SendGuildAM("CSYNC", "BULK", gsend)
+    ksk:SendGuildAM("CSYNC", "ALERT", gsend)
   end
 
   if (#psend > 0) then
-    ksk:SendAM("CSYNC", "BULK", psend)
+    ksk:SendAM("CSYNC", "ALERT", psend)
   end
 end
 

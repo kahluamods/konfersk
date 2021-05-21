@@ -6,7 +6,7 @@
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2020 James Kean Johnston. All rights reserved.
+   Copyright 2008-2021 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -31,12 +31,14 @@ local KRP = LibStub:GetLibrary("KKoreParty")
 local KLD = LibStub:GetLibrary("KKoreLoot")
 local KK = LibStub:GetLibrary("KKoreKonfer")
 local DB = LibStub:GetLibrary("AceDB-3.0")
+local ZL = LibStub:GetLibrary("LibDeflate")
+local LS = LibStub:GetLibrary("LibSerialize")
 
 if (not K) then
   error("KSK: could not find KahLua Kore.", 2)
 end
 
-if (tonumber(KM) < 3) then
+if (tonumber(KM) < 5) then
   error("KSK: outdated KahLua Kore. Please update all KahLua addons.")
 end
 
@@ -62,6 +64,14 @@ end
 
 if (not KLD) then
   error("KSK: could not find Kore Loot Distribution library.", 2)
+end
+
+if (not ZL) then
+  error("KSK: could not find deflate library", 2)
+end
+
+if (not LS) then
+  error("KSK: could not find serialise library", 2)
 end
 
 local L = LibStub("AceLocale-3.0"):GetLocale(MAJOR, false)
@@ -97,6 +107,8 @@ ksk.KLD = KLD
 ksk.H   = H
 ksk.DB  = DB
 ksk.KK  = KK
+ksk.ZL  = ZL
+ksk.LS  = LS
 
 ksk.CHAT_MSG_PREFIX = "KSKC"
 ksk.addon_handle = "kskc"
@@ -138,7 +150,7 @@ ksk.version = MINOR
 --   4   - OROLL now has extra param for allowing offspec rolls
 --   5   - resurect guild config and rank priorities
 --   6   - alt tethered now a list option not global
-ksk.protocol = 7
+ksk.protocol = 8
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
@@ -1090,12 +1102,30 @@ local function ksk_refresh(input)
   KRP.UpdateGroup(true, true, false)
 end
 
+local ctl = _G.ChatThrottleLib
+
+local function ksk_cps(input)
+  if (input == "slow") then
+    ctl.MAX_CPS = 400
+  elseif (input == "normal") then
+    ctl.MAX_CPS = 800
+  else
+    n = tonumber(input) or 0
+    if (n >= 100 and n <= 4000) then
+      ctl.MAX_CPS = n
+    end
+  end
+
+  info("throttle speed set to %d", ctl.MAX_CPS)
+end
+
 K.debugging[L["MODNAME"]] = 9   -- @debug-delete@
 
 local kcmdtab = {}
 kcmdtab["debug"] = ksk_debug
 kcmdtab["status"] = ksk_status
 kcmdtab["refresh"] = ksk_refresh
+kcmdtab["cps"] = ksk_cps
 kcmdtab[L["CMD_RESETPOS"]] = ksk_resetpos
 kcmdtab[L["CMD_VERSION"]] = ksk_version
 kcmdtab[L["CMD_VERSIONCHECK"]] = ksk_versioncheck
@@ -1716,7 +1746,7 @@ local function krp_in_group_changed(_, _, pvt, in_party, in_raid, in_bg)
 
   if (in_party) then
     if (ksk.csd.is_admin) then
-      ksk:SendAM("REQRS", "BULK")
+      ksk:SendAM("REQRS", "ALERT")
     end
 
     if (KRP.is_ml and not ksk.csd.is_admin) then
