@@ -1,4 +1,4 @@
-* text eol=crlf
+* text=auto
 *.png binary
 *.blp binary
 *.jpg binary
