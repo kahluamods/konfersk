@@ -34,8 +34,6 @@ local KRP = ksk.KRP
 local KLD = ksk.KLD
 local H = ksk.H
 local KK = ksk.KK
-local ZL = ksk.ZL
-local LS = ksk.LS
 
 local MakeFrame = KUI.MakeFrame
 
@@ -490,23 +488,12 @@ end
 local function prepare_config_from_bcast(zdata)
   local ncf = {}
   local cfgid, cfgname, cfgtype, owner, ts, oranks, crc
-  local unz, und, ok, cfd
+  local ok, cfd
 
   cfgid = nil
 
-  und = ZL:DecodeForWoWAddonChannel(zdata)
-  if (not und) then
-    debug(1, "failed to decode bcast payload")
-    return ncf, cfgid
-  end
-  unz = ZL:DecompressDeflate(und)
-  if (not unz) then
-    debug(1, "failed to deflate bcast payload")
-    return ncf, cfgid
-  end
-  ok, cfd = LS:Deserialize(unz)
+  ok, cfd = ksk:InflatePayload("BCAST", zdata)
   if (not ok or not cfd) then
-    debug(1, "failed to deser bcast payload")
     return ncf, cfgid
   end
 
@@ -1652,7 +1639,7 @@ ihandlers.GSYNC = function(sender, proto, cmd, cfg, ...)
     end
   end
   info(L["[%s] sending sync data to user %s."], white(ksk.configs[cfg].name), aclass(ksk.configs[cfg].users[theiruid]))
-  ksk:CSendWhisperAM(cfg, sender, "MSYNC", "ALERT", ksk.csdata[cfg].myuid, theiruid, mlist)
+  ksk:CSendWhisperAM(cfg, sender, "MSYNC", "ALERT", ksk.csdata[cfg].myuid, theiruid, ksk:CompressPayload("MSYNC", mlist))
 end
 
 --
@@ -1703,7 +1690,7 @@ ihandlers.FSYNC = function(sender, proto, cmd, cfg, ...)
     ksk.MakeAliases()
     ksk.FullRefresh(true)
   end
-  info(L["[%s] sync with user %s complete."], white(ncf.name), aclass(ncf.users[cfgd.d]))
+  info(L["[%s] sync with user %s complete."], white(ncf.name), sender)
 
   --
   -- We will want to clear the list of syncers so that we don't attempt
@@ -1713,7 +1700,7 @@ ihandlers.FSYNC = function(sender, proto, cmd, cfg, ...)
 end
 
 --
--- Command: MSYNC theiruid myuid modlist
+-- Command: MSYNC theiruid myuid zmodlist
 -- Purpose: This is a syncer-only event and is sent in response to a GSYNC
 --          when they want events after a specific number, and it is not a
 --          full sync (which is handled by FSYNC above). THEIRUID is the
@@ -1723,7 +1710,8 @@ end
 --          be split and processed.
 --
 ihandlers.MSYNC = function(sender, proto, cmd, cfg, ...)
-  local theiruid, myuid, mlist = ...
+  local theiruid, myuid, zdata = ...
+  local ok, mlist
 
   if (not ksk.configs[cfg]) then
     return
@@ -1740,6 +1728,11 @@ ihandlers.MSYNC = function(sender, proto, cmd, cfg, ...)
   end
 
   local adm = ksk.csdata[cfg].is_admin
+
+  ok, mlist = ksk:InflatePayload(zdata)
+  if (not ok or not mlist) then
+    return
+  end
 
   for k,v in pairs(mlist) do
     local cmd, eid, cks, cstr = strsplit("\8", v)

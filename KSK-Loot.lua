@@ -57,7 +57,6 @@ local assert = assert
 local printf = K.printf
 local unpack = unpack
 local GetTime = GetTime
-local tsize = K.tsize
 
 local icolor = K.icolor
 local info = ksk.info

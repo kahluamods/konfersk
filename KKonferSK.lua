@@ -31,8 +31,6 @@ local KRP = LibStub:GetLibrary("KKoreParty")
 local KLD = LibStub:GetLibrary("KKoreLoot")
 local KK = LibStub:GetLibrary("KKoreKonfer")
 local DB = LibStub:GetLibrary("AceDB-3.0")
-local ZL = LibStub:GetLibrary("LibDeflate")
-local LS = LibStub:GetLibrary("LibSerialize")
 
 if (not K) then
   error("KSK: could not find KahLua Kore.", 2)
@@ -64,14 +62,6 @@ end
 
 if (not KLD) then
   error("KSK: could not find Kore Loot Distribution library.", 2)
-end
-
-if (not ZL) then
-  error("KSK: could not find deflate library", 2)
-end
-
-if (not LS) then
-  error("KSK: could not find serialise library", 2)
 end
 
 local L = LibStub("AceLocale-3.0"):GetLocale(MAJOR, false)
@@ -107,8 +97,6 @@ ksk.KLD = KLD
 ksk.H   = H
 ksk.DB  = DB
 ksk.KK  = KK
-ksk.ZL  = ZL
-ksk.LS  = LS
 
 ksk.CHAT_MSG_PREFIX = "KSKC"
 ksk.addon_handle = "kskc"
@@ -1961,12 +1949,12 @@ local function kld_looting_ended(_, _, pvt)
   sentoloot = nil
 end
 
-local function ksk_initialised()
-  if (ksk.initialised) then
+local function ksk_initialised(self)
+  if (self.initialised) then
     return
   end
 
-  ksk.initialised = true
+  self.initialised = true
 
   K:RegisterMessage("PLAYER_INFO_UPDATED", player_info_updated)
   K:RegisterMessage("GUILD_INFO_UPDATED", guild_info_updated)
@@ -1975,7 +1963,7 @@ local function ksk_initialised()
   -- We prefer to use callbacks to messages because callbacks are not called
   -- if the mod isn't currently active.
   --
-  local kh = ksk.addon_handle
+  local kh = self.addon_handle
   KLD:AddonCallback(kh, "start_loot_info", kld_start_loot_info)
   KLD:AddonCallback(kh, "loot_item", kld_loot_item)
   KLD:AddonCallback(kh, "end_loot_info", kld_end_loot_info)
@@ -1987,64 +1975,18 @@ local function ksk_initialised()
   KRP:AddonCallback(kh, "leader_changed", krp_leader_changed)
   KRP:AddonCallback(kh, "role_changed", krp_leader_changed)
 
-  ksk_suspended(ksk.frdb.suspended)
+  ksk_suspended(self.frdb.suspended)
 
-  ksk.SetDefaultConfig(ksk.frdb.defconfig, true, true)
-  ksk.FullRefresh(true)
-  ksk.ConfigAdmin(ksk.csd.is_admin ~= nil and true or false)
+  self.SetDefaultConfig(self.frdb.defconfig, true, true)
+  self.FullRefresh(true)
+  self.ConfigAdmin(self.csd.is_admin ~= nil and true or false)
 
   --
   -- Broadcasts a list of all configurations we have, and the latest events
   -- we have for each user. The recipients of the message use this to trim
   -- old events from their lists to save space.
   --
-  ksk.SyncCleanup()
-end
-
---
--- In the past KKore used to have embedded and very slightly modified versions
--- of the Ace3 libraries. These have been removed and we now simply use the
--- originals. However, one of the changes we made was to AceDB-3.0, where we
--- used the string "-" as a seperator between the name and realm, whereas
--- AceDB uses the string " - ". The upshot of this is, if we do not fix the
--- key names in the options variable, using AceDB will mean that any existing
--- saved data will be inaccessible, although present in the savedvariables
--- file. This function attempts to fix the database before AceDB initialises.
--- However this only works per character and realm so if the user have many of
--- those, each one will need to be converted. We will eventually be able to
--- remove this but only after quite a long time.
---
-local function fix_acedb()
-  if (not KKonferSKDB) then
-    return
-  end
-
-  local realm = GetRealmName()
-  local player = UnitName("player")
-  local faction = UnitFactionGroup("player")
-
-  local my_player = player .. "-" .. realm
-  local db_player = player .. " - " .. realm
-  local my_fr = faction .. "-" .. realm
-  local db_fr = faction .. " - " .. realm
-
-  local pk = rawget(KKonferSKDB, "profileKeys")
-  if (pk) then
-    local pkn = rawget(pk, my_player)
-    if (pkn) then
-      rawset(pk, db_player, pkn)
-      rawset(pk, my_player, nil)
-    end
-  end
-
-  pk = rawget(KKonferSKDB, "factionrealm")
-  if (pk) then
-    local pkn = rawget(pk, my_fr)
-    if (pkn) then
-      rawset(pk, db_fr, pkn)
-      rawset(pk, my_fr, nil)
-    end
-  end
+  self.SyncCleanup()
 end
 
 --
@@ -2063,18 +2005,18 @@ ksk.konfer = {
   party      = true,    -- Works in parties
   bg         = false,   -- Does not work in battlegrounds
 
-  is_suspended = function(handle)
-    return ksk.frdb.suspended or false
+  is_suspended = function(this, handle)
+    return this.frdb.suspended or false
   end,
 
-  set_suspended = function(handle, onoff)
+  set_suspended = function(this, handle, onoff)
     local onoff = onoff or false
     ksk_suspended(onoff)
-    ksk.FullRefresh(true)
+    this.FullRefresh(true)
   end,
 
-  open_on_loot = function(handle)
-    if (ksk.cfg and ksk.cfg.settings and ksk.cfg.settings.auto_bid) then
+  open_on_loot = function(this, handle)
+    if (this.cfg and this.cfg.settings and this.cfg.settings.auto_bid) then
       return true
     end
     return false
@@ -2082,42 +2024,40 @@ ksk.konfer = {
 }
 
 function ksk:OnLateInit()
-  if (ksk.initialised) then
+  if (self.initialised) then
     return
   end
 
-  fix_acedb()
+  self.db = DB:New("KKonferSKDB", nil, "Default")
+  self.frdb = self.db.factionrealm
 
-  ksk.db = DB:New("KKonferSKDB", nil, "Default")
-  ksk.frdb = ksk.db.factionrealm
-
-  if (not ksk.frdb.configs) then
-    ksk.frdb.nconfigs = 0
-    ksk.frdb.configs = {}
-    ksk.configs = ksk.frdb.configs
-    ksk.frdb.tempcfg = true -- Must be set true before call to CreateNewConfig
-    ksk.CreateNewConfig(" ", true, true, "1")
-    ksk.frdb.dbversion = ksk.dbversion
+  if (not self.frdb.configs) then
+    self.frdb.nconfigs = 0
+    self.frdb.configs = {}
+    self.configs = self.frdb.configs
+    self.frdb.tempcfg = true -- Must be set true before call to CreateNewConfig
+    self.CreateNewConfig(" ", true, true, "1")
+    self.frdb.dbversion = self.dbversion
   end
 
   -- A lot of utility functions depend on this being set so ensure it is done
   -- early before we call any other functions.
-  ksk.configs = ksk.frdb.configs
+  self.configs = self.frdb.configs
 
   -- ksk.SetDefaultConfig (called next) depends on ksk.csdata being set up
   -- and correct, so "refresh" that now.
-  ksk.RefreshCSData()
+  self.RefreshCSData()
 
   -- Set up all of the various global aliases and the like.
-  ksk.SetDefaultConfig(ksk.frdb.defconfig, true, true)
+  self.SetDefaultConfig(self.frdb.defconfig, true, true)
 
-  ksk.UpdateDatabaseVersion()
+  self.UpdateDatabaseVersion()
 
-  KK.RegisterKonfer(ksk)
+  KK.RegisterKonfer(self)
 
-  ksk.InitialiseUI()
+  self.InitialiseUI()
 
-  K.RegisterComm(ksk, ksk.CHAT_MSG_PREFIX)
+  K.RegisterComm(self, self.CHAT_MSG_PREFIX)
 
-  ksk_initialised()
+  ksk_initialised(self)
 end

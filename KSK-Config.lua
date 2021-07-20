@@ -1171,7 +1171,7 @@ function ksk.InitialiseConfigUI()
   arg = {
     x = 0, y = ypos, name = "KSKBidThresholdDropDown",
     label = { text = L["Bid / Roll Threshold"], pos = "LEFT" },
-    itemheight = 16, mode = "COMPACT", dwidth = 135, items = {
+    itemheight = 16, mode = "SINGLE", dwidth = 135, items = {
       { text = L["None"], value = 0 },
       { text = ITEM_QUALITY2_DESC, value = 2, color = ITEM_QUALITY_COLORS[2] },
       { text = ITEM_QUALITY3_DESC, value = 3, color = ITEM_QUALITY_COLORS[3] },
@@ -2028,6 +2028,7 @@ function ksk.RefreshConfigLootUI(reset)
   cf.boetoml:SetChecked(settings.boe_to_ml)
   cf.tryroll:SetChecked(settings.try_roll)
   cf.dench:SetChecked(settings.disenchant)
+  cf.otherannounce:UpdateItems(cf.otherannounce.items)
 
   if (ksk.cfg.cfgtype == CFGTYPE_PUG) then
     en = false

@@ -30,8 +30,6 @@ end
 local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
-local ZL = ksk.ZL
-local LS = ksk.LS
 local MakeFrame = KUI.MakeFrame
 
 -- Local aliases for global or Lua library functions
@@ -64,29 +62,6 @@ local function clear_syncers_list()
   qf.syncers:UpdateList()
   qf.syncers:SetSelected(nil)
   repliers = nil
-end
-
-local function compress_it(whence, ...)
-  local ser = LS:Serialize(...)
-
-  if (not ser) then
-    debug(1, "compress: serialize failed (%s)", whence)
-    return nil
-  end
-
-  local cz = ZL:CompressDeflate(ser, { level = 5 })
-  if (not cz) then
-    debug(1, "compress: compress failed (%s)", whence)
-    return nil
-  end
-
-  local es = ZL:EncodeForWoWAddonChannel(cz)
-  if (not es) then
-    debug(1, "compress: encode failed (%s)", whence)
-    return nil
-  end
-
-  return es
 end
 
 --
@@ -295,7 +270,7 @@ end
 
 local function broadcast_config(isshifted)
   local ci = prepare_broadcast(nil)
-  local zd = compress_it("BCAST", ci)
+  local zd = ksk:CompressPayload("BCAST", ci)
 
   if (not zd) then
     return
@@ -697,9 +672,9 @@ function ksk.SendFullSync(cfg, dest, isrecover)
   if (not isrecover) then
     ksk.configs[cfg].syncing = true
     qf.reqsyncallbutton:SetEnabled(true)
-    ksk:CSendWhisperAM(cfg, dest, "FSYNC", "ALERT", compress_it("FSYNC", ci))
+    ksk:CSendWhisperAM(cfg, dest, "FSYNC", "ALERT", ksk:CompressPayload("FSYNC", ci))
   else
-    ksk:CSendWhisperAM(cfg, dest, "RCACK", "ALERT", compress_it("RCACK", ci))
+    ksk:CSendWhisperAM(cfg, dest, "RCACK", "ALERT", ksk:CompressPayload("RCACK", ci))
   end
 end
 

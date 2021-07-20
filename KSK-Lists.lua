@@ -1360,7 +1360,7 @@ function ksk.InitialiseListsUI()
   local arg
   local kmt = ksk.mainwin.tabs[ksk.LISTS_TAB]
 
-  kmt.onclick = function(main, sub)
+  kmt.onclick = function(this, main, sub)
     local en
 
     if (main == 1 and sub == 1 and ksk.csd.is_admin) then
@@ -1757,7 +1757,13 @@ function ksk.InitialiseListsUI()
   tr.updatebtn = KUI:CreateButton(arg, tr)
   qf.listupdbtn = tr.updatebtn
   tr.updatebtn:Catch("OnClick", function(this, evt, ...)
-    K.CopyTable(linfo, current_list)
+    local cl = ksk.cfg.lists[current_listid]
+    cl.sortorder = linfo.sortorder
+    cl.def_rank = linfo.def_rank
+    cl.strictcfilter = linfo.strictcfilter
+    cl.strictrfilter = linfo.strictrfilter
+    cl.extralist = linfo.extralist
+    cl.tethered = linfo.tethered
     ksk.RefreshAllLists()
     tr.updatebtn:SetEnabled(false)
     -- If this changes MUST change CHLST is KSK-Config.lua
