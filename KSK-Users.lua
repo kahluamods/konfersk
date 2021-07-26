@@ -6,7 +6,7 @@
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2020 James Kean Johnston. All rights reserved.
+   Copyright 2008-2021 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ local _G = _G
 local tinsert = table.insert
 local tremove = table.remove
 local tsort = table.sort
-local tostring, tonumber = tostring, tonumber
+local tostring = tostring
 local strfmt = string.format
 local strfind = string.find
 local strlower = string.lower
@@ -51,9 +51,11 @@ local green = ksk.green
 local red = ksk.red
 local class = ksk.class
 local aclass = ksk.aclass
+local shortaclass = ksk.shortaclass
+local debug = ksk.debug
 
 local createuserdlg = nil
-local seluser = nil
+local selected_user = nil
 local umemlist = nil
 local uinfo = {}
 local qf = {}
@@ -69,7 +71,7 @@ local HIST_HOW = ksk.HIST_HOW
 --
 local function changed(res)
   local res = res or false
-  if (not seluser) then
+  if (not selected_user) then
     res = true
   end
   qf.userupdbtn:SetEnabled(not res)
@@ -82,24 +84,55 @@ local function hide_popup()
   end
 end
 
-local function setup_uinfo()
-  if (not seluser) then
+local function setup_uinfo(self)
+  if (not selected_user) then
     return
   end
 
   uinfo = {}
-  uinfo.role = ksk.UserRole(seluser) or 0
-  uinfo.enchanter = ksk.UserIsEnchanter(seluser) or false
-  local isalt, altidx, _, _, altname = ksk.UserIsAlt(seluser)
+  uinfo.role = self:UserRole(selected_user) or 0
+  uinfo.enchanter = self:UserIsEnchanter(selected_user) or false
+  local isalt, altidx, _, _, altname = self:UserIsAlt(selected_user)
   uinfo.isalt = isalt or false
   uinfo.main = altname or ""
   uinfo.mainid = altidx
-  uinfo.frozen = ksk.UserIsFrozen(seluser) or false
-  if (ksk.cfg.users[seluser].alts) then
+  uinfo.frozen = self:UserIsFrozen(selected_user) or false
+  if (self.cfg.users[selected_user].alts) then
     uinfo.ismain = true
   else
     uinfo.ismain = false
   end
+end
+
+-- Refresh the list of lists that the currently selected user is on. This updates
+-- umemlist. This changes every time a new user is selected from the user list.
+local function refresh_user_membership(self)
+  if (selected_user) then
+    local uid = selected_user
+    umemlist = {}
+    if (self.sortedlists and #self.sortedlists > 0) then
+      for k,v in ipairs(self.sortedlists) do
+        local list = self.cfg.lists[v.id]
+        local inlist, luid, pos = self:UserOrAltInList(uid, v.id)
+        if (inlist) then
+          local ts = green(list.name)
+
+          if (luid ~= uid) then
+            ts = ts .. " (" .. shortaclass(self.cfg.users[luid]) .. ")"
+          end
+
+          tinsert(umemlist, strfmt("%s [%d]", ts, pos))
+        else
+          tinsert(umemlist, red(list.name))
+        end
+      end
+    end
+    qf.umemlist.itemcount = #umemlist
+  else
+    umemlist = nil
+    qf.umemlist.itemcount = 0
+  end
+  qf.umemlist:UpdateList()
 end
 
 local function enable_selected(en)
@@ -122,14 +155,14 @@ local function users_selectitem(objp, idx, slot, btn, onoff)
   enable_selected(onoff)
 
   if (onoff) then
-    seluser = ksk.sortedusers[idx].id
+    selected_user = ksk.sortedusers[idx].id
     setup_uinfo()
 
-    if (ksk.cfg.owner == seluser) then
+    if (ksk.cfg.owner == selected_user) then
       qf.userbuttons.deletebutton:SetEnabled(false)
     end
 
-    qf.usertopbar.SetCurrentUser(seluser)
+    qf.usertopbar.SetCurrentUser(selected_user)
     qf.useropts.userrole:SetValue(uinfo.role)
     qf.useropts.enchanter:SetChecked(uinfo.enchanter)
     qf.useropts.isalt:SetChecked(uinfo.isalt)
@@ -138,14 +171,14 @@ local function users_selectitem(objp, idx, slot, btn, onoff)
     qf.useropts.isalt:SetEnabled(not uinfo.ismain)
     qf.useropts.mainsel:SetEnabled(uinfo.isalt)
   else
-    seluser = nil
+    selected_user = nil
   end
 
-  ksk.RefreshMembership()
+  refresh_user_membership(keg)
   changed(true)
 end
 
-function ksk.CreateRoleListDropdown(name, x, y, parent, w)
+function ksk:CreateRoleListDropdown(name, x, y, parent, w)
   local kk = ksk.KK
   local arg = {
     name = name, mode = "SINGLE", itemheight = 16,
@@ -208,7 +241,7 @@ local function create_user_button()
       this.cset = newv
     end)
 
-    ret.userrole = ksk.CreateRoleListDropdown("CreateUserRoleDD", 5, -60, ret)
+    ret.userrole = self:CreateRoleListDropdown("CreateUserRoleDD", 5, -60, ret)
     ret.userrole.rset = 0
     ret.userrole:Catch("OnValueChanged", function(this, evt, newv)
       this.rset = newv
@@ -216,7 +249,7 @@ local function create_user_button()
 
     ret.OnCancel = function(this)
       this:Hide()
-      ksk.mainwin:Show()
+      self.mainwin:Show()
     end
 
     ret.OnAccept = function(this)
@@ -229,11 +262,11 @@ local function create_user_button()
         err(L["you must set a user class."])
         return true
       end
-      local uid = ksk.CreateNewUser(this.username:GetText(), this.userclass.cset)
+      local uid = self:CreateNewUser(this.username:GetText(), this.userclass.cset)
       if (uid) then
-        ksk.SetUserRole(uid, this.userrole.rset)
+        self:SetUserRole(uid, this.userrole.rset)
         this:Hide()
-        ksk.mainwin:Show()
+        self.mainwin:Show()
         return false
       end
     end
@@ -241,27 +274,27 @@ local function create_user_button()
     createuserdlg = ret
   end
 
-  ksk.mainwin:Hide()
+  self.mainwin:Hide()
   createuserdlg:Show()
   createuserdlg.userclass.cset = nil
   createuserdlg.userclass:SetValue(nil)
-  createuserdlg.userrole:SetValue(ksk.KK.ROLE_UNSET)
+  createuserdlg.userrole:SetValue(self.KK.ROLE_UNSET)
   createuserdlg.username:SetText("")
   createuserdlg.username:SetFocus()
 end
 
-local function delete_user_button(uid)
-  ksk.DeleteUserCmd(uid)
+local function delete_user_button(self, uid)
+  self:DeleteUserCmd(uid)
 end
 
-local function rename_user_button(uid)
+local function rename_user_button(self, uid)
   local function rename_helper(newname, old)
     local found = nil
     local cname = strlower(newname)
 
-    for k,v in pairs(ksk.cfg.users) do
+    for k,v in pairs(self.cfg.users) do
       if (strlower(v.name) == cname) then
-        found = ksk.cfg.users[k]
+        found = self.cfg.users[k]
         break
       end
     end
@@ -271,7 +304,7 @@ local function rename_user_button(uid)
       return true
     end
 
-    local rv = ksk.RenameUser(old, cname)
+    local rv = self:RenameUser(old, cname)
     if (rv) then
       return true
     end
@@ -279,12 +312,12 @@ local function rename_user_button(uid)
     return false
   end
 
-  K.RenameDialog(ksk, L["Rename User"], L["Old Name"],
-    ksk.cfg.users[uid].name, L["New Name"], 48, rename_helper,
+  K.RenameDialog(self, L["Rename User"], L["Old Name"],
+    self.cfg.users[uid].name, L["New Name"], 48, rename_helper,
     uid, true)
 end
 
-local function guild_import_button(shown)
+local function guild_import_button(self, shown)
   local arg = {
     x = "CENTER", y = "MIDDLE",
     name = "KSKGuildImportDlg",
@@ -330,7 +363,7 @@ local function guild_import_button(shown)
   ret.OnCancel = function(this)
     this:Hide()
     if (this.isshown) then
-      ksk.mainwin:Show()
+      self.mainwin:Show()
     end
   end
 
@@ -340,10 +373,10 @@ local function guild_import_button(shown)
     for i = 1, ngm do
       if (K.guild.roster.id[i].rank == r and K.guild.roster.id[i].level >= minlev) then
         local nm = K.guild.roster.id[i].name
-        local uid = ksk.FindUser(nm)
+        local uid = self:FindUser(nm)
         if (not uid) then
           local kcl = K.guild.roster.id[i].class
-          uid = ksk.CreateNewUser(nm, kcl, nil, true)
+          uid = self:CreateNewUser(nm, kcl, nil, true)
           if (uid) then
             rv = rv + 1
           else
@@ -368,32 +401,31 @@ local function guild_import_button(shown)
     end
 
     if (tadd > 0) then
-      ksk.RefreshUsers()
-      ksk.RefreshRaid()
-      ksk:SendAM("RFUSR", "ALERT", true)
-      ksk.RefreshUsers()
+      self:RefreshUsers()
+      self:RefreshRaid()
+      self:SendAM("RFUSR", "ALERT", true)
     end
 
     this:Hide()
     if (this.isshown) then
-      ksk.mainwin:Show()
+      this.mainwin:Show()
     end
 
     info(L["added %d user(s)."], tadd)
   end
 
-  ksk.mainwin:Hide()
+  self.mainwin:Hide()
   ret:Show()
 end
 
-function ksk.ImportGuildUsers(shown)
-  guild_import_button(shown)
+function ksk:ImportGuildUsers(shown)
+  guild_import_button(self, shown)
 end
 
 local selmain_popup
 
-local function select_main(btn, lbl)
-  if (not seluser) then
+local function select_main(self, btn)
+  if (not selected_user) then
     return
   end
 
@@ -401,29 +433,25 @@ local function select_main(btn, lbl)
 
   local ulist = {}
 
-  for k,v in pairs(ksk.cfg.users) do
-    if (k ~= seluser and not ksk.UserIsAlt(k, v.flags)) then
-      local ti = { text = aclass(v), value = k }
-      tinsert(ulist, ti)
+  for k, v in ipairs(self.sortedusers) do
+    if (not v.main) then
+      tinsert(ulist, { value = v.id, text = aclass(self.cfg.users[v.id]) })
     end
   end
-  tsort(ulist, function(a,b)
-    return ksk.cfg.users[a.value].name < ksk.cfg.users[b.value].name
-  end)
 
   local function pop_func(puid)
     local ulist = selmain_popup.selectionlist
     changed()
-    qf.useraltnamebox:SetText(aclass(ksk.cfg.users[puid]))
+    qf.useraltnamebox:SetText(aclass(self.cfg.users[puid]))
     hide_popup()
     uinfo.isalt = true
-    uinfo.main = ksk.cfg.users[puid].name
+    uinfo.main = self.cfg.users[puid].name
     uinfo.mainid = puid
   end
 
   if (not selmain_popup) then
-    selmain_popup = K.PopupSelectionList(ksk, "KSKMainSelPopup", ulist,
-      nil, 205, 400, ksk.mainwin.tabs[ksk.USERS_TAB].content, 16, pop_func,
+    selmain_popup = K.PopupSelectionList(self, "KSKMainSelPopup", ulist,
+      nil, 205, 400, self.mainwin.tabs[self.USERS_TAB].content, 16, pop_func,
       nil, 20)
     local arg = {
       x = 0, y = 2, len = 48, font = "ChatFontSmall", width = 170,
@@ -444,14 +472,14 @@ local function select_main(btn, lbl)
       this.toplevel:StartTimeoutCounter()
     end)
     selmain_popup.usearch:Catch("OnValueChanged", function(this, evt, newv, user)
-      if (not ksk.cfg.users or not ulist or selmain_popup.slist.itemcount < 1) then
+      if (not self.cfg.users or not ulist or selmain_popup.slist.itemcount < 1) then
         return
       end
       if (user and newv and newv ~= "") then
         local lnv = strlower(newv)
         local tln
         for k,v in pairs(ulist) do
-          tln = strlower(ksk.cfg.users[v.value].name)
+          tln = strlower(self.cfg.users[v.value].name)
           if (strfind(tln, lnv, 1, true)) then
             selmain_popup.slist:SetSelected(k, true)
             return
@@ -465,31 +493,31 @@ local function select_main(btn, lbl)
   selmain_popup:ClearAllPoints()
   selmain_popup:SetPoint("TOPLEFT", btn, "TOPRIGHT", 0, 0)
   selmain_popup:Show()
-  ksk.popupwindow = selmain_popup
+  self.popupwindow = selmain_popup
 end
 
 --
 -- If we are in raid, add all of the current users who are missing to the
 -- users database.
 --
-local function add_missing_button()
-  if (not ksk.users or not ksk.csd.is_admin or not ksk.nmissing or ksk.nmissing == 0) then
+local function add_missing_button(self)
+  if (not self.users or not self.csdata[self.currentid].is_admin or not self.nmissing or self.nmissing == 0) then
     return
   end
 
   local added = 0
 
-  while (ksk.nmissing > 0 and added < 40) do
-    local _, v = next(ksk.missing)
-    ksk.CreateNewUser(v.name, v.class, nil, true, true)
+  while (self.nmissing > 0 and added < 40) do
+    local _, v = next(self.missing)
+    self:CreateNewUser(v.name, v.class, nil, true, true)
     added = added + 1
   end
-  ksk.RefreshUsers()
-  ksk.RefreshRaid()
-  ksk:SendAM("RFUSR", "ALERT", true)
+  self:RefreshUsers()
+  self:RefreshRaid()
+  self:SendAM("RFUSR", "ALERT", true)
 end
 
-function ksk.InitialiseUsersUI()
+function ksk:InitialiseUsersUI()
   local arg
 
   --
@@ -498,8 +526,8 @@ function ksk.InitialiseUsersUI()
   --
   local ypos = 0
 
-  local cf = ksk.mainwin.tabs[ksk.USERS_TAB].content
-  local tbf = ksk.mainwin.tabs[ksk.USERS_TAB].topbar
+  local cf = self.mainwin.tabs[self.USERS_TAB].content
+  local tbf = self.mainwin.tabs[self.USERS_TAB].topbar
   local ls = cf.vsplit.leftframe
   local rs = cf.vsplit.rightframe
 
@@ -512,7 +540,7 @@ function ksk.InitialiseUsersUI()
   qf.usertopbar = tbf
   tbf.SetCurrentUser = function(userid)
     if (userid) then
-      tbf.seluser:SetText(L["Currently Selected: "]..aclass(ksk.cfg.users[userid]))
+      tbf.seluser:SetText(L["Currently Selected: "]..aclass(self.cfg.users[userid]))
     else
       tbf.seluser:SetText("")
     end
@@ -528,7 +556,7 @@ function ksk.InitialiseUsersUI()
   rs.hsplit = KUI:CreateHSplit(arg, rs)
   local tr = rs.hsplit.topframe
   local br = rs.hsplit.bottomframe
-  ksk.qf.userbuttons = br
+  self.qf.userbuttons = br
   qf.userbuttons = br
 
   --
@@ -561,12 +589,11 @@ function ksk.InitialiseUsersUI()
   --
   local function ulist_och(this)
     local idx = this:GetID()
-    assert(ksk.sortedusers[idx])
+    local nid = self.sortedusers[idx].id
     qf.usersearch:SetText("")
     qf.usersearch:ClearFocus()
-    local nid = ksk.sortedusers[idx].id
-    seluser = nid
-    setup_uinfo()
+    selected_user = nid
+    setup_uinfo(self)
     this:GetParent():GetParent():SetSelected(idx, false, true)
     return true
   end
@@ -581,10 +608,9 @@ function ksk.InitialiseUsersUI()
     setitem = function(objp, idx, slot, btn)
         return KUI.SetItemHelper(objp, btn, idx,
           function(op, ix)
-            assert(ksk.sortedusers[ix])
-            local uid = ksk.sortedusers[ix].id
-            local tu = ksk.cfg.users[uid]
-            local alt = ksk.UserIsAlt(uid)
+            local uid = self.sortedusers[ix].id
+            local tu = self.cfg.users[uid]
+            local alt = self:UserIsAlt(uid)
             return(alt and "  - " or "") .. aclass(tu)
           end)
       end,
@@ -593,14 +619,6 @@ function ksk.InitialiseUsersUI()
   }
   tls.slist = KUI:CreateScrollList(arg, tls)
   qf.userlist = tls.slist
-
-  local bdrop = {
-    bgFile = KUI.TEXTURE_PATH .. "TDF-Fill",
-    tile = true,
-    tileSize = 32,
-    insets = { left = 0, right = 0, top = 0, bottom = 0 }
-  }
-  tls.slist:SetBackdrop(bdrop)
 
   arg = {
     x = 0, y = 2, len = 16, font = "ChatFontSmall",
@@ -612,17 +630,17 @@ function ksk.InitialiseUsersUI()
     this:SetText("")
   end)
   bls.searchbox:Catch("OnValueChanged", function(this, evt, newv, user)
-    if (not ksk.cfg.users) then
+    if (not self.cfg.users) then
       return
     end
     if (user and newv and newv ~= "") then
       local lnv = strlower(newv)
       local tln
-      for k,v in pairs(ksk.cfg.users) do
+      for k,v in pairs(self.cfg.users) do
         tln = strlower(v.name)
         if (strfind(tln, lnv, 1, true)) then
-          for kk,vv in ipairs(ksk.sortedusers) do
-            if (ksk.cfg.users[vv.id].name == v.name) then
+          for kk,vv in ipairs(self.sortedusers) do
+            if (self.cfg.users[vv.id].name == v.name) then
               qf.userlist:SetSelected(kk, true)
               break
             end
@@ -636,7 +654,7 @@ function ksk.InitialiseUsersUI()
   --
   -- The actual user options
   --
-  ttr.userrole = ksk.CreateRoleListDropdown("KSKUserRoleDropdown", 5, ypos, ttr)
+  ttr.userrole = self:CreateRoleListDropdown("KSKUserRoleDropdown", 5, ypos, ttr)
   ttr.userrole:Catch("OnValueChanged", function(this, evt, newv, user)
     changed()
     uinfo.role = newv
@@ -668,9 +686,9 @@ function ksk.InitialiseUsersUI()
       uinfo.mainid = ""
       ttr.mainname:SetText("")
     end
-    if (ksk.popupwindow) then
-      ksk.popupwindow:Hide()
-      ksk.popupwindow = nil
+    if (self.popupwindow) then
+      self.popupwindow:Hide()
+      self.popupwindow = nil
     end
   end)
   ypos = ypos - 24
@@ -706,25 +724,24 @@ function ksk.InitialiseUsersUI()
   ypos = ypos - 24
 
   arg = {
-    x = 5, y = ypos, text = L["Update"], enabled = false,
+    x = "CENTER", y = ypos, text = L["Update"], enabled = false,
     tooltip = { title = "$$", text = L["TIP080"] },
   }
   ttr.updatebtn = KUI:CreateButton(arg, ttr)
   qf.userupdbtn = ttr.updatebtn
   ttr.updatebtn:Catch("OnClick", function(this, evt)
-    ksk.SetUserRole(seluser, uinfo.role, nil, true)
-    ksk.SetUserEnchanter(seluser, uinfo.enchanter, nil, true)
-    ksk.SetUserFrozen(seluser, uinfo.frozen, nil, true)
+    self:SetUserRole(selected_user, uinfo.role, nil, true)
+    self:SetUserEnchanter(selected_user, uinfo.enchanter, nil, true)
+    self:SetUserFrozen(selected_user, uinfo.frozen, nil, true)
     -- Must be last! It does refreshes which will erase uinfo.
-    ksk.SetUserIsAlt(seluser, uinfo.isalt, uinfo.mainid, nil, true)
+    self:SetUserIsAlt(selected_user, uinfo.isalt, uinfo.mainid, nil, true)
 
-    ksk.RefreshAllMemberLists()
+    self:RefreshAllMemberLists()
 
-    local es = strfmt("%s:%d:%s:%s:%s:%s:%s", seluser, uinfo.role,
+    local es = strfmt("%s:%d:%s:%s:%s:%s:%s", selected_user, uinfo.role,
       uinfo.enchanter and "Y" or "N", uinfo.frozen and "Y" or "N",
-      "N", uinfo.isalt and "Y" or "N",
-      uinfo.mainid and uinfo.mainid or "")
-    ksk.AddEvent(ksk.currentid, "MDUSR", es, true)
+      "N", uinfo.isalt and "Y" or "N", uinfo.mainid and uinfo.mainid or "")
+    self:AddEvent(self.currentid, "MDUSR", es, true)
     ttr.updatebtn:SetEnabled(false)
   end)
 
@@ -768,7 +785,6 @@ function ksk.InitialiseUsersUI()
   }
   tm.slist = KUI:CreateScrollList(arg, tm)
   qf.umemlist = tm.slist
-  tm.slist:SetBackdrop(bdrop)
 
   --
   -- The command buttons at the bottom of the left hand side to add and
@@ -780,7 +796,7 @@ function ksk.InitialiseUsersUI()
   }
   br.createbutton = KUI:CreateButton(arg, br)
   br.createbutton:Catch("OnClick", function(this, evt)
-    create_user_button()
+    create_user_button(self)
   end)
 
   arg = {
@@ -789,7 +805,7 @@ function ksk.InitialiseUsersUI()
   }
   br.deletebutton = KUI:CreateButton(arg, br)
   br.deletebutton:Catch("OnClick", function(this, evt)
-    delete_user_button(seluser)
+    delete_user_button(self, selected_user)
   end)
 
   arg = {
@@ -798,7 +814,7 @@ function ksk.InitialiseUsersUI()
   }
   br.renamebutton = KUI:CreateButton(arg, br)
   br.renamebutton:Catch("OnClick", function(this, evt)
-    rename_user_button(seluser)
+    rename_user_button(self, selected_user)
   end)
 
   arg = {
@@ -807,9 +823,9 @@ function ksk.InitialiseUsersUI()
   }
   br.guildimp = KUI:CreateButton(arg, br)
   br.guildimp:Catch("OnClick", function(this, evt)
-    guild_import_button(true)
+    guild_import_button(self, true)
   end)
-  ksk.qf.guildimp = br.guildimp
+  self.qf.guildimp = br.guildimp
 
   arg = {
     y = -50, width = 100, height = 24, text = L["Add Missing"],
@@ -817,66 +833,69 @@ function ksk.InitialiseUsersUI()
   }
   br.addmissing = KUI:CreateButton(arg, br)
   br.addmissing:Catch("OnClick", function(this, evt)
-    add_missing_button()
+    add_missing_button(self)
   end)
-  ksk.qf.addmissing = br.addmissing
+  self.qf.addmissing = br.addmissing
 end
 
-function ksk.RefreshUsers()
-  local olduser = seluser or nil
+function ksk:RefreshUsers()
+  local olduser = selected_user or nil
   local oldidx = nil
 
-  ksk.sortedusers = {}
-  seluser = nil
+  self.sortedusers = {}
+  selected_user = nil
 
-  for k,v in pairs(ksk.cfg.users) do
-    if (not ksk.UserIsAlt(k, v.flags)) then
+  for k,v in pairs(self.cfg.users) do
+    if (not self:UserIsAlt(k, v.flags)) then
       local ent = { id = k }
-      tinsert(ksk.sortedusers, ent)
+      tinsert(self.sortedusers, ent)
     end
   end
 
-  tsort(ksk.sortedusers, function(a, b)
-    return ksk.cfg.users[a.id].name < ksk.cfg.users[b.id].name
+  tsort(self.sortedusers, function(a, b)
+    return self.cfg.users[a.id].name < self.cfg.users[b.id].name
   end)
 
-  for i = #ksk.sortedusers, 1, -1 do
-    local usr = ksk.cfg.users[ksk.sortedusers[i].id]
+  for i = #self.sortedusers, 1, -1 do
+    local uid = self.sortedusers[i].id
+    local usr = self.cfg.users[uid]
     if (usr.alts) then
+      self.sortedusers[i].hasalts = true
       for j = 1, #usr.alts do
-        local ent = {id = usr.alts[j]}
-        tinsert(ksk.sortedusers, i+j, ent)
+        local ent = { id = usr.alts[j], main = uid }
+        tinsert(self.sortedusers, i+j, ent)
       end
     end
   end
 
-  for k,v in ipairs(ksk.sortedusers) do
+  for k,v in ipairs(self.sortedusers) do
     if (v.id == olduser) then
       oldidx = k
       break
     end
   end
 
-  qf.userlist.itemcount = ksk.cfg.nusers
+  qf.userlist.itemcount = self.cfg.nusers
   qf.userlist:UpdateList()
 
   qf.userlist:SetSelected(oldidx)
   changed(true)
-  ksk.RefreshCSData()
+  self:RefreshCSData()
+  self:RefreshConfigUsers()
 end
 
-function ksk.FindUser(name, cfgid)
-  if (not ksk.frdb or not ksk.frdb.configs or ksk.frdb.tempcfg) then
+function ksk:FindUser(name, cfgid)
+  if (not self.frdb or not self.frdb.configs or self.frdb.tempcfg) then
     return nil
   end
 
   local name = K.CanonicalName(name)
   assert(name)
 
-  cfgid = cfgid or ksk.currentid
+  cfgid = cfgid or self.currentid
   name = strlower(name)
 
-  for k,v in pairs(ksk.frdb.configs[cfgid].users) do
+  for k,v in pairs(self.frdb.configs[cfgid].users) do
     if (strlower(v.name) == name) then
       return k
     end
@@ -885,25 +904,25 @@ function ksk.FindUser(name, cfgid)
   return nil
 end
 
-function ksk.GetUserFlags(userid, cfgid)
+function ksk:GetUserFlags(userid, cfgid)
   local cfgid = cfgid or ksk.currentid
 
   if (not cfgid or not userid) then
     return nil
   end
 
-  if (not ksk.configs[cfgid]) then
+  if (not self.frdb.configs[cfgid]) then
     return nil
   else
-    if (not ksk.configs[cfgid].users[userid]) then
+    if (not self.frdb.configs[cfgid].users[userid]) then
       return nil
     end
   end
-  return ksk.configs[cfgid].users[userid].flags or ""
+  return self.frdb.configs[cfgid].users[userid].flags or ""
 end
 
-local function find_flag(userid, flags, flag, cfgid)
-  local fs = flags or ksk.GetUserFlags(userid, cfgid)
+local function find_flag(this, userid, flags, flag, cfgid)
+  local fs = flags or this:GetUserFlags(userid, cfgid)
 
   if (not fs) then
     return false
@@ -916,15 +935,15 @@ local function find_flag(userid, flags, flag, cfgid)
   return false
 end
 
-local function set_flag(userid, flag, onoff, cfgid, arg, nocmd)
-  local cfgid = cfgid or ksk.currentid
-  local user = ksk.frdb.configs[cfgid].users[userid]
+local function set_flag(this, userid, flag, onoff, cfgid, arg, nocmd)
+  local cfgid = cfgid or this.currentid
+  local user = this.frdb.configs[cfgid].users[userid]
   local onoff = onoff or false
 
   if (not nocmd) then
     local es = strfmt("%s:%s:%s:%s", userid, flag, onoff and "Y" or "N",
       arg and tostring(arg) or "")
-    ksk.AddEvent(cfgid, "CHUSR", es, true)
+    this:AddEvent(cfgid, "CHUSR", es, true)
   end
 
   if (onoff) then
@@ -950,31 +969,31 @@ local function set_flag(userid, flag, onoff, cfgid, arg, nocmd)
   end
 end
 
-function ksk.UserIsEnchanter(userid, flags, cfg)
-  return find_flag(userid, flags, "E", cfg)
+function ksk:UserIsEnchanter(userid, flags, cfg)
+  return find_flag(self, userid, flags, "E", cfg)
 end
 
-function ksk.UserIsFrozen(userid, flags, cfg)
-  return find_flag(userid, flags, "F", cfg)
+function ksk:UserIsFrozen(userid, flags, cfg)
+  return find_flag(self, userid, flags, "F", cfg)
 end
 
-function ksk.UserIsCoadmin(uid, cfgid)
-  local cfgid = cfgid or ksk.currentid
+function ksk:UserIsCoadmin(uid, cfgid)
+  local cfgid = cfgid or self.currentid
 
-  if (ksk.configs[cfgid].admins[uid] or ksk.configs[cfgid].owner == uid) then
+  if (self.frdb.configs[cfgid].admins[uid] or self.frdb.configs[cfgid].owner == uid) then
     return true
   end
 
   return false
 end
 
-function ksk.UserIsAlt(userid, flags, cfg)
-  local cfg = cfg or ksk.currentid
-  local rv = find_flag(userid, flags, "A", cfg)
+function ksk:UserIsAlt(userid, flags, cfg)
+  local cfg = cfg or self.currentid
+  local rv = find_flag(self, userid, flags, "A", cfg)
 
   if (rv == true) then
-    local mid, ts, ts2, ts3 = nil, nil, nil, nil
-    local ut = ksk.frdb.configs[cfg].users
+    local mid, ts, ts2, ts3
+    local ut = self.frdb.configs[cfg].users
 
     mid = ut[userid].main
     if (ut[mid]) then
@@ -988,19 +1007,19 @@ function ksk.UserIsAlt(userid, flags, cfg)
   return rv, nil, nil, nil, nil
 end
 
-function ksk.UserRole(userid, cfg)
-  local cfg = cfg or ksk.currentid
-  return ksk.configs[cfg].users[userid].role or 0
+function ksk:UserRole(userid, cfg)
+  local cfg = cfg or self.currentid
+  return self.frdb.configs[cfg].users[userid].role or 0
 end
 
-function ksk.SetUserEnchanter(userid, onoff, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:SetUserEnchanter(userid, onoff, cfg, nocmd)
+  local cfg = cfg or self.currentid
   local ret = false
   local onoff = onoff or false
 
-  if (set_flag(userid, "E", onoff, cfg, nil, nocmd)) then
-    if (cfg == ksk.currentid) then
-      ksk.RefreshAllMemberLists()
+  if (set_flag(self, userid, "E", onoff, cfg, nil, nocmd)) then
+    if (cfg == self.currentid) then
+      self:RefreshAllMemberLists()
     end
     ret = true
   end
@@ -1011,26 +1030,26 @@ function ksk.SetUserEnchanter(userid, onoff, cfg, nocmd)
   -- they are we need to remove them.
   --
   if (not onoff) then
-    for i = 1, ksk.MAX_DENCHERS do
-      if (ksk.configs[cfg].settings.denchers[i] == userid) then
-        ksk.configs[cfg].settings.denchers[i] = nil
+    for i = 1, self.MAX_DENCHERS do
+      if (self.frdb.configs[cfg].settings.denchers[i] == userid) then
+        self.frdb.configs[cfg].settings.denchers[i] = nil
       end
     end
-    if (cfg == ksk.currentid) then
-      ksk.RefreshConfigLootUI(false)
+    if (cfg == self.currentid) then
+      self:RefreshConfigLootUI(false)
     end
   end
 
   return ret
 end
 
-function ksk.SetUserFrozen(userid, onoff, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:SetUserFrozen(userid, onoff, cfg, nocmd)
+  local cfg = cfg or self.currentid
   local onoff = onoff or false
 
-  if (set_flag(userid, "F", onoff, cfg, nil, nocmd)) then
-    if (cfg == ksk.currentid) then
-      ksk.RefreshAllMemberLists()
+  if (set_flag(self, userid, "F", onoff, cfg, nil, nocmd)) then
+    if (cfg == self.currentid) then
+      self:RefreshAllMemberLists()
     end
     return true
   end
@@ -1046,20 +1065,20 @@ end
 -- delete this alt from the roll lists as it will now be tethered to their
 -- main.
 --
-function ksk.SetUserIsAlt(userid, onoff, main, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:SetUserIsAlt(userid, onoff, main, cfg, nocmd)
+  local cfg = cfg or self.currentid
   local onoff = onoff or false
-  local cfp = ksk.frdb.configs[cfg]
+  local cfp = self.frdb.configs[cfg]
   local cfu = cfp.users
 
   if (not main or main == "") then
     onoff = false
   end
 
-  set_flag(userid, "A", onoff, cfg, main, nocmd)
+  set_flag(self, userid, "A", onoff, cfg, main, nocmd)
 
-  if (ksk.lootmemberid == userid) then
-    ksk.lootmemberid = nil
+  if (self.lootmemberid == userid) then
+    self.lootmemberid = nil
   end
 
   local usr = cfu[userid]
@@ -1123,71 +1142,65 @@ function ksk.SetUserIsAlt(userid, onoff, main, cfg, nocmd)
     usr.main = nil
   end
 
-  ksk.FixupLists(cfg)
-  if (cfg == ksk.currentid) then
-    ksk.RefreshUsers()
-    ksk.RefreshAllMemberLists()
+  self:FixupLists(cfg)
+  if (cfg == self.currentid) then
+    self:RefreshUsers()
+    self:RefreshAllMemberLists()
   end
 
   return true
 end
 
-function ksk.SetUserRole(userid, value, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:SetUserRole(userid, value, cfg, nocmd)
+  local cfg = cfg or self.currentid
 
   if (not nocmd) then
     local es = strfmt("%s:R:Y:%s", userid, tostring(value))
-    ksk.AddEvent(cfg, "CHUSR", es, true)
+    self:AddEvent(cfg, "CHUSR", es, true)
   end
 
-  ksk.configs[cfg].users[userid].role = value
+  self.frdb.configs[cfg].users[userid].role = value
 end
 
-function ksk.GetNextUID(cfgid)
-  local cfgid = cfgid or ksk.currentid
-  local myuid = ksk.csdata[cfgid].myuid
+local function get_next_uid(self, cfgid)
+  local cfgid = cfgid or self.currentid
+  local myuid = self.csdata[cfgid].myuid
+  local ia, am = self:IsAdmin(myuid, cfgid)
 
-  assert(myuid, "I was not found in the user lists.")
-
-  local ia, am = ksk.IsAdmin(myuid, cfgid)
-  assert(ia ~= nil, "I am not an admin")
-
-  if (ksk.configs[cfgid].nusers == 4094) then
+  if (self.frdb.configs[cfgid].nusers == 4094) then
     error("Terribly sorry but KonferSK has a limit of 4094 users :(", 2)
     return nil
   end
 
   for i = 1, 4094 do
-    local is = strfmt("%s%03x", ksk.configs[cfgid].admins[am].id, i)
-    if (not ksk.configs[cfgid].users[is]) then
+    local is = strfmt("%s%03x", self.frdb.configs[cfgid].admins[am].id, i)
+    if (not self.frdb.configs[cfgid].users[is]) then
       return is
     end
   end
-
-  assert(false, "Logic error!")
 end
 
-function ksk.CreateNewUser(name, cls, cfgid, norefresh, bypass, myid, nocmd)
-  local cfgid = cfgid or ksk.currentid
+function ksk:CreateNewUser(name, cls, cfgid, norefresh, bypass, myid, nocmd)
+  local cfgid = cfgid or self.currentid
   local name = K.CanonicalName(name, nil)
 
-  if (not bypass and ksk.CheckPerm(cfgid)) then
+  if (not bypass and self:CheckPerm(cfgid)) then
     return nil
   end
 
-  local uid = ksk.FindUser(name, cfgid)
+  local uid = self:FindUser(name, cfgid)
   if (uid and not nocmd) then
-    err(L["user %q already exists. Try again."], aclass(ksk.frdb.configs[cfgid].users[uid]))
+    err(L["user %q already exists. Try again."], aclass(self.frdb.configs[cfgid].users[uid]))
     return nil
   end
 
-  uid = myid or ksk.GetNextUID(cfgid)
+  uid = myid or get_next_uid(self, cfgid)
   if (not uid) then
     return
   end
 
-  ksk.configs[cfgid].nusers = ksk.configs[cfgid].nusers + 1
-  ksk.configs[cfgid].users[uid] = {
+  self.frdb.configs[cfgid].nusers = self.frdb.configs[cfgid].nusers + 1
+  self.frdb.configs[cfgid].users[uid] = {
     name = name,
     class = cls,
     role = 0,
@@ -1199,12 +1212,12 @@ function ksk.CreateNewUser(name, cls, cfgid, norefresh, bypass, myid, nocmd)
   end
 
   if (name == K.player.player) then
-    ksk.csdata[cfgid].myuid = uid
-    ksk.csdata[cfgid].is_admin = nil
+    self.csdata[cfgid].myuid = uid
+    self.csdata[cfgid].is_admin = nil
   end
 
-  if (not norefresh and cfgid == ksk.currentid) then
-    ksk.RefreshUsers()
+  if (not norefresh and cfgid == self.currentid) then
+    self:RefreshUsers()
   end
 
   --
@@ -1212,21 +1225,21 @@ function ksk.CreateNewUser(name, cls, cfgid, norefresh, bypass, myid, nocmd)
   -- are in a raid, we need to scan the list of missing members to see if
   -- this user was in that list, and if so, remove them from it.
   --
-  if (ksk.users and cfgid == ksk.currentid) then
+  if (self.users and cfgid == self.currentid) then
     local olduid = "0fff:" .. cls .. ":" .. name
-    if (ksk.missing[olduid]) then
-      ksk.nmissing = ksk.nmissing - 1
-      ksk.missing[olduid] = nil
-      qf.userbuttons.addmissing:SetEnabled(ksk.csd.is_admin and ksk.nmissing > 0)
+    if (self.missing[olduid]) then
+      self.nmissing = self.nmissing - 1
+      self.missing[olduid] = nil
+      qf.userbuttons.addmissing:SetEnabled(self.csdata[self.currentid].is_admin and self.nmissing > 0)
       if (not norefreh) then
-        ksk.RefreshRaid()
+        self:RefreshRaid()
       end
     end
   end
 
   if (not nocmd) then
     local es = strfmt("%s:%s:%s:%s", uid, name, cls, norefresh and "Y" or "N")
-    ksk.AddEvent(cfgid, "MKUSR", es, true)
+    self:AddEvent(cfgid, "MKUSR", es, true)
   end
 
   return uid
@@ -1245,9 +1258,9 @@ end
 -- check for that case and locally delete any alts the user may have had, at
 -- the time that we knew about the user.
 --
-function ksk.DeleteUser(uid, cfgid, alts, nocmd)
-  local cfg = cfgid or ksk.currentid
-  local lcp = ksk.frdb.configs[cfgid]
+function ksk:DeleteUser(uid, cfgid, alts, nocmd)
+  local cfg = cfgid or self.currentid
+  local lcp = self.frdb.configs[cfgid]
   local refreshitems = false
   local refreshhistory = false
 
@@ -1256,10 +1269,10 @@ function ksk.DeleteUser(uid, cfgid, alts, nocmd)
       return
     end
 
-    if (not nocmd and cfg == ksk.currentid) then
+    if (not nocmd and cfg == self.currentid) then
       info(L["user %q deleted."], aclass(lcp.users[userid]))
     end
-    for i = 1, ksk.MAX_DENCHERS do
+    for i = 1, self.MAX_DENCHERS do
       if (lcp.settings.denchers[i] == userid) then
         lcp.settings.denchers[i] = nil
       end
@@ -1282,14 +1295,14 @@ function ksk.DeleteUser(uid, cfgid, alts, nocmd)
     -- Remove the user from all lists
     --
     for lk,lv in pairs(lcp.lists) do
-      ksk.DeleteMember(userid, lk, cfg, true)
+      self:DeleteMember(userid, lk, cfg, true)
     end
 
-    local isalt = ksk.UserIsAlt(userid, nil, cfg)
+    local isalt = self:UserIsAlt(userid, nil, cfg)
     if (isalt) then
       local main = lcp.users[userid].main
       if (main and lcp.users[main]) then
-        ksk.SetUserIsAlt(userid, false, nil, cfg, true)
+        self:SetUserIsAlt(userid, false, nil, cfg, true)
       end
     end
 
@@ -1308,11 +1321,11 @@ function ksk.DeleteUser(uid, cfgid, alts, nocmd)
     end
 
     if (lcp.admins[userid]) then
-      ksk.DeleteAdmin(userid, cfg)
+      self:DeleteAdmin(userid, cfg)
     end
 
-    if (cfg == ksk.currentid and userid == seluser) then
-      seluser = nil
+    if (cfg == self.currentid and userid == selected_user) then
+      selected_user = nil
     end
 
     if (lcp.users[userid]) then
@@ -1327,7 +1340,7 @@ function ksk.DeleteUser(uid, cfgid, alts, nocmd)
       if (alts) then
         each_delete(v, cfg)
       else
-        ksk.SetUserIsAlt(v, false, nil, cfg, true)
+        self:SetUserIsAlt(v, false, nil, cfg, true)
       end
     end
   end
@@ -1336,92 +1349,92 @@ function ksk.DeleteUser(uid, cfgid, alts, nocmd)
 
   if (not nocmd) then
     local es = strfmt("%s:%s", uid, alts and "Y" or "N")
-    ksk.AddEvent(cfg, "RMUSR", es, true)
+    self:AddEvent(cfg, "RMUSR", es, true)
   end
 
-  if (cfg ~= ksk.currentid) then
+  if (cfg ~= self.currentid) then
     return
   end
 
-  ksk.RefreshUsers()
-  ksk.RefreshAllMemberLists()
-  ksk.RefreshConfigAdminUI(false)
+  self:RefreshUsers()
+  self:RefreshAllMemberLists()
+  self:RefreshConfigAdminUI(false)
 
   if (refreshitems) then
-    ksk.RefreshItemList()
+    self:RefreshItemList()
   end
 
   if (refreshhistory) then
-    ksk.RefreshHistory()
+    self:RefreshHistory()
   end
 
-  if (ksk.users) then
-    ksk.RefreshRaid()
+  if (self.users) then
+    self:RefreshRaid()
   end
 end
 
-local function confirm_delete_user(arg, alts)
+local function confirm_delete_user(self, arg, alts)
   local uid = arg.uid
-  local cfg = arg.cfg or ksk.currentid
+  local cfg = arg.cfg or self.currentid
 
-  ksk.DeleteUser(uid, cfg, alts, false)
+  self:DeleteUser(uid, cfg, alts, false)
 end
 
-function ksk.DeleteUserCmd(userid, show, cfg)
-  local cfg = cfg or ksk.currentid
+function ksk:DeleteUserCmd(userid, show, cfg)
+  local cfg = cfg or self.currentid
 
-  if (ksk.configs[cfg].owner == userid) then
+  if (self.frdb.configs[cfg].owner == userid) then
     err(L["cannot delete user %q as they are the owner of the configuration."],
-      aclass(ksk.configs[cfg].users[userid]))
+      aclass(self.frdb.configs[cfg].users[userid]))
     return true
   end
 
-  local isshown = show or ksk.mainwin:IsShown()
-  ksk.mainwin:Hide()
+  local isshown = show or self.mainwin:IsShown()
+  self.mainwin:Hide()
 
   local alts = nil
-  if (ksk.configs[cfg].users[userid].alts) then
+  if (self.frdb.configs[cfg].users[userid].alts) then
     alts = L["Delete All Alts of User"]
   end
-  K.ConfirmationDialog(ksk, L["Delete User"], L["DELUSER"],
-    ksk.configs[cfg].users[userid].name, confirm_delete_user,
+  K.ConfirmationDialog(self, L["Delete User"], L["DELUSER"],
+    self.frdb.configs[cfg].users[userid].name, function() confirm_delete_user(self) end,
     { uid=userid, cfg=cfg }, isshown, 210, alts)
 
   return false
 end
 
-function ksk.RenameUser(userid, newname, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:RenameUser(userid, newname, cfg, nocmd)
+  local cfg = cfg or self.currentid
 
-  local oldname = ksk.configs[cfg].users[userid].name
-  local cl = ksk.configs[cfg].users[userid].class
+  local oldname = self.frdb.configs[cfg].users[userid].name
+  local cl = self.frdb.configs[cfg].users[userid].class
   newname = K.CanonicalName(newname, nil)
   if (not nocmd) then
     info(L["NOTICE: user %q renamed to %q."], aclass(oldname, cl),
       aclass(newname, cl))
   end
-  ksk.configs[cfg].users[userid].name = newname
+  self.frdb.configs[cfg].users[userid].name = newname
 
   --
   -- If this user is an alt, we will need to re-sort the main's alt
   -- list so it remains alphabetical.
   --
-  local isalt, main = ksk.UserIsAlt(userid, nil, cfg)
+  local isalt, main = self:UserIsAlt(userid, nil, cfg)
   if (isalt) then
-    local musr = ksk.configs[cfg].users[main]
+    local musr = self.frdb.configs[cfg].users[main]
     tsort(musr.alts, function(a,b)
-      return ksk.configs[cfg].users[a].name < ksk.configs[cfg].users[b].name
+      return self.frdb.configs[cfg].users[a].name < self.frdb.configs[cfg].users[b].name
     end)
   end
 
   if (not nocmd) then
     local es = strfmt("%s:%s", userid, newname)
-    ksk.AddEvent(cfg, "MVUSR", es, true)
+    self:AddEvent(cfg, "MVUSR", es, true)
   end
 
-  if (cfg == ksk.currentid) then
-    ksk.RefreshUsers()
-    ksk.RefreshAllMemberLists()
+  if (cfg == self.currentid) then
+    self:RefreshUsers()
+    self:RefreshAllMemberLists()
   end
 
   return false
@@ -1433,9 +1446,9 @@ end
 -- when config spaces are switched, only if they are deleted.
 --
 
-function ksk.ReserveUser(uid, onoff, cfgid, nocmd)
-  local cfgid = cfgid or ksk.currentid
-  local rd = ksk.csdata[cfgid]
+function ksk:ReserveUser(uid, onoff, cfgid, nocmd)
+  local cfgid = cfgid or self.currentid
+  local rd = self.csdata[cfgid]
   local onoff = onoff or false
 
   if (not rd.reserved) then
@@ -1452,70 +1465,41 @@ function ksk.ReserveUser(uid, onoff, cfgid, nocmd)
     ksk:SendAM("RSUSR", "ALERT", uid, onoff)
   end
 
-  if (cfgid == ksk.currentid) then
-    ksk.RefreshAllMemberLists()
+  if (cfgid == self.currentid) then
+    ksk:RefreshAllMemberLists()
   end
 end
 
-function ksk.UserIsReserved(uid, cfgid)
-  local cfgid = cfgid or ksk.currentid
+function ksk:UserIsReserved(uid, cfgid)
+  local cfgid = cfgid or self.currentid
 
-  local rd = ksk.csdata[cfgid]
+  local rd = self.csdata[cfgid]
   if (not rd.reserved or not rd.reserved[uid]) then
     return false
   end
   return rd.reserved[uid]
 end
 
-function ksk.RefreshMembership()
-  if (seluser) then
-    umemlist = {}
-    if (ksk.sortedlists and #ksk.sortedlists > 0) then
-      for k,v in ipairs(ksk.sortedlists) do
-        local lootlist = ksk.cfg.lists[v.id]
-        local uid = seluser
-        if (lootlist.tethered) then
-          local up = ksk.cfg.users[seluser]
-          if (up.main) then
-            uid = up.main
-          end
-        end
-        local il, lp = ksk.UserInList(uid, v.id)
-        if (il) then
-          tinsert(umemlist, green(strfmt("%s [%d]", ksk.cfg.lists[v.id].name, lp)))
-        else
-          tinsert(umemlist, red(ksk.cfg.lists[v.id].name))
-        end
-      end
-    end
-    qf.umemlist.itemcount = #umemlist
-  else
-    umemlist = nil
-    qf.umemlist.itemcount = 0
-  end
-  qf.umemlist:UpdateList()
+function ksk:RefreshUsersLists()
+  refresh_user_membership(self)
 end
 
-function ksk.RefreshUsersLists(llist)
-  ksk.RefreshMembership()
-end
-
-function ksk.RefreshUsersUI(reset)
+function ksk:RefreshUsersUI(reset)
   if (reset) then
-    seluser = nil
+    selected_user = nil
   end
-  ksk.RefreshUsers()
-  ksk.RefreshMembership()
+  self:RefreshUsers()
+  self:RefreshUsersLists()
   qf.userbuttons.addmissing:SetEnabled(false)
 
-  if (ksk.users and ksk.csd.is_admin and ksk.nmissing and ksk.nmissing > 0) then
+  if (self.users and self.csdata[self.currentid].is_admin and self.nmissing and self.nmissing > 0) then
     qf.userbuttons.addmissing:SetEnabled(true)
   end
 
   local en = false
-  if (K.player.is_guilded and ksk.csd.is_admin) then
+  if (K.player.is_guilded and self.csdata[self.currentid].is_admin) then
     en = true
   end
-  ksk.qf.guildimp:SetEnabled(en)
+  self.qf.guildimp:SetEnabled(en)
 end
 

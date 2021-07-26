@@ -7,7 +7,7 @@
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2020 James Kean Johnston. All rights reserved.
+   Copyright 2008-2021 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -61,12 +61,10 @@ local aclass = ksk.aclass
 local shortaclass = ksk.shortaclass
 local debug = ksk.debug
 
-local members = nil
+local sortedmembers = nil
 local current_list = nil
 local current_listid = nil
 local current_memberid = nil
-local current_members = nil
-local current_member = nil
 local newlistdlg = nil
 local implistdlg = nil
 local explistdlg = nil
@@ -74,6 +72,12 @@ local addmissingdlg = nil
 
 local linfo = {}
 local qf = {}
+--
+-- Pointer to the enclosing tab structure in the main dialog.
+local thistab = nil
+
+-- Tab content frame for thistab (list manager global content frame)
+local tcontent = nil
 
 --
 -- This file contains all of the UI handling code for the lists panel,
@@ -103,17 +107,14 @@ end
 -- batch up all changes into one event.
 --
 local function setup_linfo()
-  if (not current_list) then
-    return
-  end
-
   linfo = {}
   linfo.sortorder = current_list.sortorder
   linfo.def_rank = current_list.def_rank
   linfo.strictcfilter = current_list.strictcfilter
   linfo.strictrfilter = current_list.strictrfilter
-  linfo.extralist = current_list.extralist
+  linfo.extralist = current_list.extralist or "0"
   linfo.tethered = current_list.tethered
+  linfo.altdisp = current_list.altdisp
 end
 
 --
@@ -126,8 +127,8 @@ end
 -- refreshing the data that THIS code is responsible for. The function below
 -- (RefreshAllMemberLists) refreshes everything (and calls this).
 --
--- This updates current_members, current_member and members.
-local function refresh_member_list(listid)
+-- This updates current_memberid and sortedmembers.
+local function refresh_member_list(this, listid)
   local oldmember = current_memberid or nil
   local oldidx = nil
 
@@ -135,59 +136,59 @@ local function refresh_member_list(listid)
     return
   end
 
-  current_members = nil
   current_memberid = nil
-  current_member = nil
-  members = nil
+  sortedmembers = nil
 
-  if (not ksk.currentid) then
+  if (not this.currentid) then
     current_listid = nil
     current_list = nil
   end
 
-  if (current_listid) then
-    current_members = current_list.users
+  if (current_listid and tonumber(current_list.nusers) > 0) then
+    local clu = current_list.users
+    sortedmembers = {}
 
-    if (current_list.nusers > 0) then
-      members = {}
-      for k,v in ipairs(current_members) do
-        local ti = {id = v, idx = k }
-        tinsert(members, ti)
-      end
+    for k,v in ipairs(clu) do
+      local ti = {id = v, idx = k, pos = k }
+      tinsert(sortedmembers, ti)
+    end
 
-      if (current_list.tethered) then
-        for i = #members, 1, -1 do
-          local usr = ksk.cfg.users[members[i].id]
-          if (usr.alts) then
-            for j = 1, #usr.alts do
-              local ti = { id = usr.alts[j], isalt = true,
-                main = members[i].id, idx = members[i].idx }
-              tinsert(members, i+j, ti)
-            end
+    if (current_list.tethered and current_list.altdisp) then
+      for i = #sortedmembers, 1, -1 do
+        local main = sortedmembers[i].id
+        local usr = this.cfg.users[main]
+        if (usr.alts) then
+          sortedmembers[i].hasalts = true
+          local pos = sortedmembers[i].pos
+          for j = 1, #usr.alts do
+            local ti = { id = usr.alts[j], isalt = true,
+            main = main, idx = sortedmembers[i].idx }
+            tinsert(sortedmembers, i+j, ti)
           end
         end
       end
+    end
 
-      for k,v in ipairs(members) do
-        if (v.id == oldmember) then
-          oldidx = k
-        end
+    for k,v in ipairs(sortedmembers) do
+      if (v.id == oldmember) then
+        oldidx = k
+        break
       end
     end
   end
 
-  if (members) then
-    qf.memberlist.itemcount = #members
+  if (sortedmembers) then
+    qf.memberlist.itemcount = #sortedmembers
   else
     qf.memberlist.itemcount = 0
   end
   qf.memberlist:UpdateList()
 
-  -- This will update current_memberid and current_member.
+  -- This will update current_memberid
   qf.memberlist:SetSelected(oldidx, true, true)
 
   local en = true
-  if (not ksk.csd.is_admin or qf.lists.itemcount < 1) then
+  if (not this.csdata[this.currentid].is_admin) then
     en = false
   end
 
@@ -196,6 +197,143 @@ local function refresh_member_list(listid)
   end
   qf.delete:SetEnabled(en)
   qf.resunres:SetEnabled(en)
+end
+
+local function mlist_newitem(objp, num)
+  local bname = "KSKMListButton" .. tostring(num)
+  local rf = MakeFrame("Button", bname, objp.content)
+  local nfn = "GameFontNormalSmall"
+  local htn = "Interface/QuestFrame/UI-QuestTitleHighlight"
+
+  rf:SetWidth(225)
+  rf:SetHeight(16)
+  rf:SetHighlightTexture(htn, "ADD")
+
+  local pp = rf:CreateFontString(nil, "ARTWORK", nfn)
+  pp:ClearAllPoints()
+  pp:ClearAllPoints()
+  pp:SetPoint("TOPLEFT", rf, "TOPLEFT", 0, 0)
+  pp:SetPoint("BOTTOMRIGHT", rf, "BOTTOMLEFT", 25, 0)
+  pp:SetJustifyH("LEFT")
+  pp:SetJustifyV("MIDDLE")
+  rf.pos = pp
+
+  local nm = rf:CreateFontString(nil, "ARTWORK", nfn)
+  nm:ClearAllPoints()
+  nm:SetPoint("TOPLEFT", pp, "TOPRIGHT", 5, 0)
+  nm:SetPoint("BOTTOMRIGHT", pp, "BOTTOMRIGHT", 120, 0)
+  nm:SetJustifyH("LEFT")
+  nm:SetJustifyV("MIDDLE")
+  rf.name = nm
+
+  local si = rf:CreateFontString(nil, "ARTWORK", nfn)
+  si:ClearAllPoints()
+  si:SetPoint("TOPLEFT", nm, "TOPRIGHT", 5, 0)
+  si:SetPoint("BOTTOMRIGHT", nm, "BOTTOMRIGHT", 40, 0)
+  si:SetJustifyH("RIGHT")
+  si:SetJustifyV("MIDDLE")
+  rf.indicators = si
+
+  rf.SetText = function(self, pos, name, ench, frozen, res, isalt)
+    local st = ""
+    local et = ""
+    local is = ""
+    if (ench) then
+      is = L["USER_ENCHANTER"]
+    end
+    if (frozen) then
+      is = is .. L["USER_FROZEN"]
+    end
+    if (res) then
+      is = is .. L["USER_RESERVED"]
+    end
+    if (is ~= "") then
+      st = "["
+      et = "]"
+    end
+    if (isalt) then
+      self.pos:SetText("")
+      self.name:SetText("  - " .. name)
+      self.isalt = true
+    else
+      self.pos:SetText(tostring(pos))
+      self.name:SetText(name)
+      self.isalt = nil
+    end
+    self.indicators:SetText(st .. is .. et)
+  end
+
+  rf:SetScript("OnClick", function(this)
+    local ia = ksk.csdata[ksk.currentid].is_admin and true or false
+    if (not ia) then
+      return
+    end
+    local idx = this:GetID()
+    this:GetParent():GetParent():SetSelected(idx)
+    qf.findmember:SetText("")
+    qf.findmember:ClearFocus()
+    if (this.isalt) then
+      qf.delete:SetEnabled(false)
+    else
+      qf.delete:SetEnabled(ia)
+    end
+  end)
+
+  return rf
+end
+
+local function mlist_setitem(objp, idx, slot, btn)
+  local uid = sortedmembers[idx].id
+  local nm = shortclass(ksk.cfg.users[uid])
+  local pos = sortedmembers[idx].pos
+  local ench, frozen, res
+  local ench = ksk:UserIsEnchanter(uid)
+  local frozen = ksk:UserIsFrozen(uid)
+  local res = ksk:UserIsReserved(uid)
+  local alt = sortedmembers[idx].isalt or false
+
+  btn:SetID(idx)
+  btn:SetText(pos, nm, ench, frozen, res, alt)
+  btn:Show()
+end
+
+local function mlist_selectitem(objp, idx, slot, btn, onoff)
+  local onoff = onoff or false
+
+  hide_popup()
+
+  if (onoff) then
+    current_memberid = sortedmembers[idx].id
+    local ridx = idx
+    if (current_list.tethered) then
+      ridx = sortedmembers[idx].idx
+      if (sortedmembers[idx].isalt) then
+        current_memberid = sortedmembers[idx].main
+      end
+    end
+
+    local ee = (ridx > 1 and ksk.csdata[ksk.currentid].is_admin)
+    local ef = (ridx < #current_list.users and ksk.csdata[ksk.currentid].is_admin)
+    qf.king:SetEnabled(ee)
+    qf.moveup:SetEnabled(ee)
+    qf.movedown:SetEnabled(ef)
+    qf.suicide:SetEnabled(ef)
+    qf.resunres:SetText(L["Reserve"])
+    if (ksk.csdata[ksk.currentid].is_admin and ksk:UserIsReserved(current_memberid)) then
+      qf.resunres:SetText(L["Unreserve"])
+    end
+    qf.resunres:SetEnabled(ksk.csdata[ksk.currentid].is_admin)
+    qf.delete:SetEnabled(ksk.csdata[ksk.currentid].is_admin)
+  else
+    qf.king:SetEnabled(false)
+    qf.moveup:SetEnabled(false)
+    qf.movedown:SetEnabled(false)
+    qf.suicide:SetEnabled(false)
+    qf.resunres:SetEnabled(false)
+    qf.delete:SetEnabled(false)
+    qf.resunres:SetText(L["Reserve"])
+    current_memberid = nil
+  end
 end
 
 --
@@ -215,41 +353,36 @@ end
 local function rlist_setenabled(onoff)
   local onoff = onoff or false
 
-  if (qf.listconf) then
-    qf.listconf.sortorder:SetEnabled(onoff)
-    qf.listconf.defrank:SetEnabled(onoff)
-    qf.listconf.cfilter:SetEnabled(onoff)
-    qf.listconf.rfilter:SetEnabled(onoff)
-    qf.listconf.slistdd:SetEnabled(onoff)
-    qf.listconf.tethered:SetEnabled(onoff)
-    qf.insert:SetEnabled(onoff)
+  qf.listconf.sortorder:SetEnabled(onoff)
+  qf.listconf.defrank:SetEnabled(onoff)
+  qf.listconf.cfilter:SetEnabled(onoff)
+  qf.listconf.rfilter:SetEnabled(onoff)
+  qf.listconf.slistdd:SetEnabled(onoff)
+  qf.listconf.tethered:SetEnabled(onoff)
+  qf.listconf.altdisp:SetEnabled(onoff)
+  qf.insert:SetEnabled(onoff)
 
-    if (ksk.cfg.cfgtype == KK.CFGTYPE_PUG) then
-      qf.listconf.defrank:SetEnabled(false)
-    end
+  if (ksk.cfg.cfgtype == KK.CFGTYPE_PUG) then
+    qf.listconf.defrank:SetEnabled(false)
   end
 
-  onoff = onoff and ksk.csd.is_admin
-  if (qf.listcfgbuttons) then
-    qf.listcfgbuttons.createbutton:SetEnabled(onoff)
-    qf.listcfgbuttons.deletebutton:SetEnabled(onoff)
-    qf.listcfgbuttons.renamebutton:SetEnabled(onoff)
-    qf.listcfgbuttons.copybutton:SetEnabled(onoff)
-    qf.listcfgbuttons.importbutton:SetEnabled(onoff)
-    qf.listcfgbuttons.exportbutton:SetEnabled(onoff)
-    qf.listcfgbuttons.addmissingbutton:SetEnabled(onoff)
-  end
+  onoff = onoff and ksk.csdata[ksk.currentid].is_admin
+  qf.listcfgbuttons.createbutton:SetEnabled(onoff)
+  qf.listcfgbuttons.deletebutton:SetEnabled(onoff)
+  qf.listcfgbuttons.renamebutton:SetEnabled(onoff)
+  qf.listcfgbuttons.copybutton:SetEnabled(onoff)
+  qf.listcfgbuttons.importbutton:SetEnabled(onoff)
+  qf.listcfgbuttons.exportbutton:SetEnabled(onoff)
+  qf.listcfgbuttons.addmissingbutton:SetEnabled(onoff)
 end
 
 local function rlist_selectitem(objp, idx, slot, btn, onoff)
   local onoff = onoff or false
 
   hide_popup()
-  rlist_setenabled(onoff and ksk.csd.is_admin)
+  rlist_setenabled(onoff)
+  qf.listcfgbuttons.createbutton:SetEnabled(ksk.csdata[ksk.currentid].is_admin ~= nil)
 
-  if (qf.listcfgbuttons) then
-    qf.listcfgbuttons.createbutton:SetEnabled(ksk.csd.is_admin ~= nil)
-  end
   if (onoff) then
     current_listid = ksk.sortedlists[idx].id
     current_list = ksk.cfg.lists[current_listid]
@@ -260,208 +393,76 @@ local function rlist_selectitem(objp, idx, slot, btn, onoff)
     qf.listconf.rfilter:SetChecked(current_list.strictrfilter)
     qf.listconf.slistdd:SetValue(current_list.extralist)
     qf.listconf.tethered:SetChecked(current_list.tethered)
-    qf.listctl.announcebutton:SetEnabled(ksk.csd.is_admin and ksk.users ~= nil)
+    qf.listconf.altdisp:SetChecked(current_list.altdisp)
+    qf.listctl.announcebutton:SetEnabled(ksk.csdata[ksk.currentid].is_admin and ksk.users ~= nil)
   else
     current_listid = nil
     current_list = nil
     qf.listctl.announcebutton:SetEnabled(false)
+    qf.listctl.announceallbutton:SetEnabled(false)
   end
 
-  -- Updates current_members, current_member, current_memberid, members
-  refresh_member_list(current_listid)
+  -- Updates current_memberid, sortedmembers
+  refresh_member_list(ksk, current_listid)
 
   changed(true)
 end
 
-local function mlist_newitem(objp, num)
-  local bname = "KSKMListButton" .. tostring(num)
-  local rf = MakeFrame("Button", bname, objp.content)
-  local nfn = "GameFontNormalSmallLeft"
-  local htn = "Interface/QuestFrame/UI-QuestTitleHighlight"
-
-  rf:SetWidth(225)
-  rf:SetHeight(16)
-  rf:SetHighlightTexture(htn, "ADD")
-
-  local text = rf:CreateFontString(nil, "ARTWORK", nfn)
-  text:ClearAllPoints()
-  text:SetPoint("TOPLEFT", rf, "TOPLEFT", 8, -2)
-  text:SetPoint("BOTTOMRIGHT", rf, "BOTTOMRIGHT", -48, 2)
-  text:SetJustifyH("LEFT")
-  text:SetJustifyV("TOP")
-  rf.text = text
-
-  local si = rf:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  si:ClearAllPoints()
-  si:SetPoint("TOPLEFT", text, "TOPRIGHT", 0, 0)
-  si:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 40, 0)
-  si:SetJustifyH("RIGHT")
-  si:SetJustifyV("TOP")
-  rf.indicators = si
-
-  rf.SetText = function(self, txt, ench, frozen, res)
-    self.text:SetText(txt)
-    local st = ""
-    local et = ""
-    local is = ""
-    if (ench) then
-      is = L["USER_ENCHANTER"]
-    end
-    if (frozen) then
-      is = is .. L["USER_FROZEN"]
-    end
-    if (res) then
-      is = is .. L["USER_RESERVED"]
-    end
-    if (is ~= "") then
-      st = "["
-      et = "]"
-    end
-    self.indicators:SetText(st .. is .. et)
-  end
-
-  rf:SetScript("OnClick", function(this)
-    if (not ksk.csd.is_admin) then
-      return
-    end
-    local idx = this:GetID()
-    this:GetParent():GetParent():SetSelected(idx)
-    qf.findmember:SetText("")
-    qf.findmember:ClearFocus()
-  end)
-
-  return rf
-end
-
-local function mlist_setitem(objp, idx, slot, btn)
-  local uid = members[idx].id
-  local ench, frozen, res
-  local uc = uid
-  local at = strfmt("%d: ", members[idx].idx)
-  local bm = true
-
-  --
-  -- If we are tethered, we only care about the main character being frozen
-  -- or reserved, but we do care about any of the alts being enchanters.
-  -- Also, if we are tethered, then members points to a different array that
-  -- has different info we care about.
-  --
-  if (current_list.tethered) then
-    if (members[idx].isalt) then
-      uc = members[idx].main
-      at = "    - "
-      bm = false
-    else
-      at = strfmt("%d: ", members[idx].idx)
-    end
-  end
-
-  ench = ksk.UserIsEnchanter(uid)
-  frozen = ksk.UserIsFrozen(uc) and bm
-  res = ksk.UserIsReserved(uc) and bm
-
-  btn:SetText(at .. shortclass(ksk.cfg.users[uid]), ench, frozen, res)
-  btn:SetID(idx)
-  btn:Show()
-end
-
-local function mlist_selectitem(objp, idx, slot, btn, onoff)
-  local onoff = onoff or false
-
-  hide_popup()
-
-  if (onoff) then
-    current_memberid = members[idx].id
-    local ridx = idx
-    if (current_list.tethered) then
-      ridx = members[idx].idx
-      if (members[idx].isalt) then
-        current_memberid = members[idx].main
-      end
-    end
-    current_member = current_members[current_memberid]
-
-    local ee = (ridx > 1 and ksk.csd.is_admin)
-    local ef = (ridx < #current_list.users and ksk.csd.is_admin)
-    qf.king:SetEnabled(ee)
-    qf.moveup:SetEnabled(ee)
-    qf.movedown:SetEnabled(ef)
-    qf.suicide:SetEnabled(ef)
-    qf.resunres:SetText(L["Reserve"])
-    if (ksk.csd.is_admin and ksk.UserIsReserved(current_memberid)) then
-      qf.resunres:SetText(L["Unreserve"])
-    end
-    qf.resunres:SetEnabled(ksk.csd.is_admin)
-    qf.delete:SetEnabled(ksk.csd.is_admin)
-  else
-    qf.king:SetEnabled(false)
-    qf.moveup:SetEnabled(false)
-    qf.movedown:SetEnabled(false)
-    qf.suicide:SetEnabled(false)
-    qf.resunres:SetEnabled(false)
-    qf.delete:SetEnabled(false)
-    qf.resunres:SetText(L["Reserve"])
-    current_memberid = nil
-    current_member = nil
-  end
-end
-
-local function create_list_button()
+local function create_list_button(this)
   local box
 
   if (not newlistdlg) then
-    newlistdlg, box = K.SingleStringInputDialog(ksk, "KSKSetupNewList",
-      L["Create Roll List"], L["NEWLIST"], 400, 175)
+    newlistdlg, box = K.SingleStringInputDialog(this, "KSKSetupNewList",
+      L["Create Roll List"], L["NEWLIST"], 400, 185)
 
     local function verify_with_create(objp, val)
-      if (strlen(val) < 1) then
+      if (strlen(val) < 1 or this:CreateNewList(val)) then
         err(L["invalid roll list name. Please try again."])
         objp:Show()
         objp.ebox:SetFocus()
         return true
       end
-      ksk.CreateNewList(val)
       newlistdlg:Hide()
-      ksk.mainwin:Show()
+      this.mainwin:Show()
       return false
     end
 
-    newlistdlg:Catch("OnAccept", function(this, evt)
-      return verify_with_create(this:GetParent(), this.ebox:GetText())
+    newlistdlg:Catch("OnAccept", function(t, evt)
+      return verify_with_create(t:GetParent(), t.ebox:GetText())
     end)
 
-    newlistdlg:Catch("OnCancel", function(this, evt)
+    newlistdlg:Catch("OnCancel", function(t, evt)
       newlistdlg:Hide()
-      ksk.mainwin:Show()
+      this.mainwin:Show()
       return false
     end)
 
-    box:Catch("OnEnterPressed", function(this, evt, val)
-      return verify_with_create(this:GetParent(), val)
+    box:Catch("OnEnterPressed", function(t, evt, val)
+      return verify_with_create(t:GetParent(), val)
     end)
   else
     box = newlistdlg.ebox
   end
 
   box:SetText("")
-  ksk.mainwin:Hide()
+  this.mainwin:Hide()
   newlistdlg:Show()
   box:SetFocus()
 end
 
-local function delete_list_button(lid)
-  ksk.DeleteListCmd(lid)
+local function delete_list_button(this, lid)
+  this:DeleteListCmd(lid)
 end
 
-local function rename_list_button(lid)
+local function rename_list_button(this, lid)
   hide_popup()
 
   local function rename_helper(newname, old)
     local found = false
     local lname = strlower(newname)
 
-    for k,v in pairs(ksk.cfg.lists) do
-      if (strlower(ksk.cfg.lists[k].name) == lname) then
+    for k,v in pairs(this.cfg.lists) do
+      if (strlower(this.cfg.lists[k].name) == lname) then
         found = true
       end
     end
@@ -471,7 +472,7 @@ local function rename_list_button(lid)
       return true
     end
 
-    local rv = ksk.RenameList(old, newname)
+    local rv = this:RenameList(old, newname)
     if (rv) then
       return true
     end
@@ -479,20 +480,20 @@ local function rename_list_button(lid)
     return false
   end
 
-  K.RenameDialog(ksk, L["Rename Roll List"], L["Old Name"],
-    ksk.cfg.lists[lid].name, L["New Name"], 32, rename_helper,
+  K.RenameDialog(this, L["Rename Roll List"], L["Old Name"],
+    this.cfg.lists[lid].name, L["New Name"], 32, rename_helper,
     lid, true)
 end
 
-local function copy_list_button(lid)
+local function copy_list_button(this, lid)
   hide_popup()
 
   local function copy_helper(newname, old)
     local found = false
     local lname = strlower(newname)
 
-    for k,v in pairs(ksk.cfg.lists) do
-      if (strlower(ksk.cfg.lists[k].name) == lname) then
+    for k,v in pairs(this.cfg.lists) do
+      if (strlower(this.cfg.lists[k].name) == lname) then
         found = true
       end
     end
@@ -502,7 +503,7 @@ local function copy_list_button(lid)
       return true
     end
 
-    local rv = ksk.CopyList(old, newname)
+    local rv = this:CopyList(old, newname)
     if (rv) then
       return true
     end
@@ -510,26 +511,26 @@ local function copy_list_button(lid)
     return false
   end
 
-  K.RenameDialog(ksk, L["Copy Roll List"], L["Source List"],
-    ksk.cfg.lists[lid].name, L["Destination List"], 32, copy_helper,
+  K.RenameDialog(this, L["Copy Roll List"], L["Source List"],
+    this.cfg.lists[lid].name, L["Destination List"], 32, copy_helper,
     lid, true)
 end
 
 local insert_popup = nil
 local random_insert = false
 
-local function insert_member(btn)
+local function insert_member(this, btn)
   local ulist = {}
   local pdef = nil
 
   hide_popup()
 
-  for k,v in pairs(ksk.cfg.users) do
-    if (not ksk.UserInList(k)) then
+  for k,v in pairs(this.cfg.users) do
+    if (not this:UserInList(k)) then
       local doit = false
       local ti = nil
       if (current_list.tethered) then
-        if (not ksk.UserIsAlt(k, v.flags)) then
+        if (not this:UserIsAlt(k, v.flags)) then
           doit = true
         end
       else
@@ -546,8 +547,8 @@ local function insert_member(btn)
     -- Sort so that if we are in a raid, that current raid members appear first
     -- and then all of the offline members. Makes it a lot easier to find a
     -- user if you need to add them in the middle of a raid.
-    local anm = ksk.cfg.users[a.value].name
-    local bnm = ksk.cfg.users[b.value].name
+    local anm = this.cfg.users[a.value].name
+    local bnm = this.cfg.users[b.value].name
 
     if (KRP.in_party) then
       local air = KRP.players[anm] and true or false
@@ -564,9 +565,9 @@ local function insert_member(btn)
 
   if (current_list.tethered) then
     for i = #ulist, 1, -1 do
-      if (ksk.cfg.users[ulist[i].value].alts) then
-        for k,v in pairs(ksk.cfg.users[ulist[i].value].alts) do
-          local usr = ksk.cfg.users[v]
+      if (this.cfg.users[ulist[i].value].alts) then
+        for k,v in pairs(this.cfg.users[ulist[i].value].alts) do
+          local usr = this.cfg.users[v]
           local ti = { value = ulist[i].value, text = "  - "..class(usr) }
           tinsert(ulist, i+1, ti)
         end
@@ -576,8 +577,9 @@ local function insert_member(btn)
 
   local function pop_func(puid)
     if (current_list.tethered) then
-      if (ksk.UserIsAlt(puid)) then
-        id = ksk.cfg.users[puid].main
+      local ia, mui = this:UserIsAlt(puid)
+      if (ia) then
+        puid = mui
       end
     end
 
@@ -587,20 +589,21 @@ local function insert_member(btn)
     -- If we've been asked to insert this at a random position, pick the
     -- position now. Otherwise, just insert at the bottom.
     --
-    local rlist = ksk.cfg.lists[current_listid]
+    local rlist = this.cfg.lists[current_listid]
     local pos = rlist.nusers + 1
     if (random_insert) then
       pos = rand(pos)
     end
-    ksk.InsertMember(puid, current_listid, pos)
+    this:InsertMember(puid, current_listid, pos)
     info(L["added %s to list %q at position %s."],
-      shortaclass(ksk.cfg.users[puid]), white(rlist.name), white(tostring(pos)))
+      shortaclass(this.cfg.users[puid]), white(rlist.name), white(tostring(pos)))
   end
 
   if (not insert_popup) then
-    insert_popup = K.PopupSelectionList(ksk, "KSKInsertMemberPopup",
-      ulist, nil, 205, 300, ksk.mainwin.tabs[ksk.LISTS_TAB].content, 16,
+    insert_popup = K.PopupSelectionList(this, "KSKInsertMemberPopup",
+      ulist, nil, 205, 300, this.mainwin.tabs[this.LISTS_TAB].content, 16,
       pop_func, 20, 20)
+
     local arg = {
       x = 0, y = 2, width = 150, parent = insert_popup.header,
       initialvalue = false, label = { text = L["Insert Randomly"] },
@@ -626,26 +629,26 @@ local function insert_member(btn)
     insert_popup.usearch = KUI:CreateEditBox(arg, insert_popup.footer)
     insert_popup.usearch.toplevel = insert_popup
     qf.inssearch = insert_popup.usearch
-    insert_popup.usearch:Catch("OnEnterPressed", function(this)
-      this:SetText("")
+    insert_popup.usearch:Catch("OnEnterPressed", function(t)
+      t:SetText("")
     end)
-    insert_popup.usearch:HookScript("OnEnter", function(this)
-      this.toplevel:StopTimeoutCounter()
+    insert_popup.usearch:HookScript("OnEnter", function(t)
+      t.toplevel:StopTimeoutCounter()
     end)
-    insert_popup.usearch:HookScript("OnLeave", function(this)
-      this.toplevel:StartTimeoutCounter()
+    insert_popup.usearch:HookScript("OnLeave", function(t)
+      t.toplevel:StartTimeoutCounter()
     end)
-    insert_popup.usearch:Catch("OnValueChanged", function(this, evt, newv, user)
-      if (not ksk.cfg.users or not this.toplevel.selectionlist or this.toplevel.slist.itemcount < 1) then
+    insert_popup.usearch:Catch("OnValueChanged", function(t, evt, newv, user)
+      if (not this.cfg.users or not t.toplevel.selectionlist or t.toplevel.slist.itemcount < 1) then
         return
       end
       if (user and newv and newv ~= "") then
         local lnv = strlower(newv)
         local tln
-        for k,v in pairs(this.toplevel.selectionlist) do
-          tln = strlower(ksk.cfg.users[v.value].name)
+        for k,v in pairs(t.toplevel.selectionlist) do
+          tln = strlower(this.cfg.users[v.value].name)
           if (strfind(tln, lnv, 1, true)) then
-            this.toplevel.slist:SetSelected(k, true)
+            t.toplevel.slist:SetSelected(k, true)
             return
           end
         end
@@ -658,10 +661,10 @@ local function insert_member(btn)
   insert_popup:ClearAllPoints()
   insert_popup:SetPoint("TOPLEFT", btn, "TOPRIGHT", 0, 0)
   insert_popup:Show()
-  ksk.popupwindow = insert_popup
+  this.popupwindow = insert_popup
 end
 
-local function move_member(btn, dir)
+local function move_member(this, dir)
   hide_popup()
 
   local c = qf.memberlist:GetSelected()
@@ -669,9 +672,9 @@ local function move_member(btn, dir)
     return
   end
 
-  local uid = members[c].id
-  if (current_list.tethered and members[c].isalt) then
-    uid = members[c].main
+  local uid = sortedmembers[c].id
+  if (current_list.tethered and sortedmembers[c].isalt) then
+    uid = sortedmembers[c].main
   end
 
   --
@@ -684,36 +687,36 @@ local function move_member(btn, dir)
   -- wants to send the user to the extreme bottom of the list, and we use
   -- the MoveMember function.
   --
-  if (dir == 0 and ksk.users) then
-    local sulist = ksk.CreateRaidList(current_listid)
-    ksk.SuicideUser(current_listid, sulist, uid, ksk.currentid)
+  if (dir == 0 and this.users) then
+    local sulist = this:CreateRaidList(current_listid)
+    this:SuicideUser(current_listid, sulist, uid, this.currentid)
   else
     local es = strfmt("%s:%s:%d", uid, current_listid, dir)
-    ksk.AddEvent(ksk.currentid, "MMLST", es, true)
-    ksk.MoveMember(uid, current_listid, dir, ksk.currentid)
+    this:AddEvent(this.currentid, "MMLST", es, true)
+    this:MoveMember(uid, current_listid, dir, this.currentid)
   end
 end
 
-local function resunres_member(btn)
+local function resunres_member(this, btn)
   hide_popup()
 
-  local ir = ksk.UserIsReserved(current_memberid) or false
-  ksk.ReserveUser(current_memberid, not ir)
+  local ir = this:UserIsReserved(current_memberid) or false
+  this:ReserveUser(current_memberid, not ir)
 end
 
-local function insert_list_member(uid, listid, pos, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+local function insert_list_member(this, uid, listid, pos, cfg, nocmd)
+  local cfg = cfg or this.currentid
   local listid = listid or current_listid
 
-  if (not ksk.configs[cfg] or not ksk.configs[cfg].lists[listid]) then
+  if (not this.configs[cfg] or not this.configs[cfg].lists[listid]) then
     return true
   end
 
-  if (ksk.UserInList(uid, listid, cfg)) then
+  if (this:UserInList(uid, listid, cfg)) then
     return true
   end
 
-  local rl = ksk.configs[cfg].lists[listid]
+  local rl = this.configs[cfg].lists[listid]
 
   rl.nusers = rl.nusers + 1
   pos = pos or rl.nusers
@@ -724,13 +727,13 @@ local function insert_list_member(uid, listid, pos, cfg, nocmd)
 
   if (not nocmd) then
     local es = strfmt("%s:%s:%d", uid, listid, pos)
-    ksk.AddEvent(cfg, "IMLST", es, true)
+    this:AddEvent(cfg, "IMLST", es, true)
   end
 
   return false
 end
 
-local function delete_member(btn)
+local function delete_member(this)
   hide_popup()
 
   local c = qf.memberlist:GetSelected()
@@ -738,15 +741,15 @@ local function delete_member(btn)
     return
   end
 
-  local uid = members[c].id
-  if (current_list.tethered and members[c].isalt) then
-    uid = members[c].main
+  local uid = sortedmembers[c].id
+  if (current_list.tethered and sortedmembers[c].isalt) then
+    uid = sortedmembers[c].main
   end
 
-  ksk.DeleteMember(uid, current_listid, ksk.currentid)
+  this:DeleteMember(uid, current_listid, this.currentid, false)
 end
 
-local function import_list_button()
+local function import_list_button(this)
   local osklist = ""
   local insrand = true
   local imprank = 0
@@ -770,7 +773,6 @@ local function import_list_button()
       cancelbutton = { text = K.CANCELSTR },
     }
     local ret = KUI:CreateDialogFrame(arg)
-    arg = {}
 
     arg = {
       x = "CENTER", y = ypos, width = 200, border = true, autosize = false,
@@ -780,43 +782,40 @@ local function import_list_button()
     ypos = ypos - 32
 
     arg = {
-      x = 0, y = ypos, dwidth = 175, mode = "SINGLE", itemheight = 16,
+      x = 4, y = ypos, dwidth = 175, mode = "SINGLE", itemheight = 16,
       items = KUI.emptydropdown, name = "KSKListImpRanks",
       label = { text = L["Guild Rank to Import"], pos = "LEFT" },
     }
     ret.grank = KUI:CreateDropDown(arg, ret)
-    ret.grank:Catch("OnValueChanged", function(this, evt, newv)
+    ret.grank:Catch("OnValueChanged", function(t, evt, newv)
       implistdlg.insrand:SetEnabled(newv ~= 0)
       implistdlg.csvimp:SetEnabled(newv == 0)
       imprank = tonumber(newv)
     end)
-    ypos = ypos - 24
-    arg = {}
+    ypos = ypos - 28
 
     arg = {
       x = 20, y = ypos, checked = true,
       label = { text = L["Insert Randomly"] },
     }
     ret.insrand = KUI:CreateCheckBox(arg, ret)
-    ret.insrand:Catch("OnValueChanged", function(this, evt, val)
+    ret.insrand:Catch("OnValueChanged", function(t, evt, val)
       insrand = val
     end)
-    arg = {}
     ypos = ypos - 24
 
     arg = {
-      x = 0, y = ypos, len = 9999,
+      x = 4, y = ypos, len = 9999,
       label = { text = L["CSV Import"], pos = "LEFT" },
     }
     ret.csvimp = KUI:CreateEditBox(arg, ret)
-    ret.csvimp:Catch("OnValueChanged", function(this, evt, newv)
+    ret.csvimp:Catch("OnValueChanged", function(t, evt, newv)
       implistdlg.grank:SetEnabled(newv == "" and K.player.is_guilded)
       implistdlg.insrand:SetEnabled(newv == "" and imprank ~= 0 and K.player.is_guilded)
       implistdlg.csvopts:SetEnabled(newv ~= "" and imprank == 0)
       csvstr = newv
     end)
     ypos = ypos - 30
-    arg = {}
 
     arg = {
       x = 16, y = ypos, dwidth = 250, mode = "SINGLE", items = {
@@ -827,11 +826,11 @@ local function import_list_button()
       itemheight = 16,
     }
     ret.csvopts = KUI:CreateDropDown(arg, ret)
-    ret.csvopts:Catch("OnValueChanged", function(this, evt, newv)
+    ret.csvopts:Catch("OnValueChanged", function(t, evt, newv)
       csvopt = newv
     end)
 
-    ret.OnAccept = function(this)
+    ret.OnAccept = function(t)
       if (imprank ~= 0) then
         -- Import a guild rank (possibly randomly)
         local rusers = {}
@@ -841,19 +840,19 @@ local function import_list_button()
           local ri = K.guild.roster.id[i].rank
           local cl = K.guild.roster.id[i].class
           if (ri == imprank) then
-            local uid = ksk.FindUser(nm)
+            local uid = this:FindUser(nm)
             if (not uid) then
-              uid = ksk.CreateNewUser(nm, cl, nil, false, true)
+              uid = this:CreateNewUser(nm, cl, nil, false, true)
             end
             tinsert(rusers, uid)
           end
         end
 
-        ksk.RefreshUsers()
+        this:RefreshUsers()
 
         for k,v in pairs(rusers) do
           local pos = nil
-          if (not ksk.UserInList(v)) then
+          if (not this:UserInList(v)) then
             if (insrand) then
               pos = rand(current_list.nusers + 1)
             end
@@ -873,7 +872,7 @@ local function import_list_button()
         local ilist = {}
         for k,v in pairs(utbl) do
           v = K.CapitaliseName(v)
-          local uid = ksk.FindUser(v)
+          local uid = this:FindUser(v)
           if (not uid) then
             tinsert(musr, v)
           else
@@ -886,11 +885,11 @@ local function import_list_button()
           return
         end
         if (csvopt == 1) then
-          ksk.SetMemberList(tconcat(ilist, ""))
+          this:SetMemberList(tconcat(ilist, ""))
         else
           for k,v in pairs(ilist) do
             local pos = nil
-            if (not ksk.UserInList(v)) then
+            if (not this:UserInList(v)) then
               if (csvopt == 3) then
                 pos = rand(current_list.nusers + 1)
               end
@@ -900,13 +899,13 @@ local function import_list_button()
         end
       end
       implistdlg:Hide()
-      ksk.RefreshAllMemberLists(current_listid)
-      ksk.mainwin:Show()
+      this:RefreshAllMemberLists(current_listid)
+      this.mainwin:Show()
     end
 
-    ret.OnCancel = function(this)
+    ret.OnCancel = function(t)
       implistdlg:Hide()
-      ksk.mainwin:Show()
+      this.mainwin:Show()
     end
 
     implistdlg = ret
@@ -927,10 +926,10 @@ local function import_list_button()
   implistdlg.grank:UpdateItems(gitems)
   implistdlg.grank:SetValue(0)
 
-  ksk.mainwin:Hide()
+  this.mainwin:Hide()
   implistdlg.csvimp:SetText("")
   implistdlg.csvopts:SetValue(csvopt)
-  implistdlg.curlist:SetText(ksk.cfg.lists[current_listid].name)
+  implistdlg.curlist:SetText(current_list.name)
   implistdlg:Show()
 end
 
@@ -945,17 +944,17 @@ local EXP_ALL_BBCODE = 7
 local thestring, lststring
 local uu, uv
 
-local function do_json_list(listid)
+local function do_json_list(this, listid)
   if (lststring ~= "") then
     lststring = lststring .. ",\n"
   end
 
-  lststring = lststring .. strfmt('{ "id": %q, "n": %q,\n   "users": [', listid, ksk.cfg.lists[listid].name)
+  lststring = lststring .. strfmt('{ "id": %q, "n": %q,\n   "users": [', listid, this.cfg.lists[listid].name)
 
-  local ll = ksk.cfg.lists[listid]
+  local ll = this.cfg.lists[listid]
   local lul = {}
   for k,v in ipairs(ll.users) do
-    local up=ksk.cfg.users[v]
+    local up = this.cfg.users[v]
     if (not uu[v]) then
       uu[v] = true
       tinsert(uv, strfmt('{ "id": %q, "n":%q, "c":%q}', v, up.name, up.class))
@@ -965,12 +964,12 @@ local function do_json_list(listid)
   lststring = lststring .. tconcat(lul, ",") .. "]}"
 end
 
-local function do_xml_list(listid)
-  lststring = lststring .. strfmt("<list id=%q n=%q>", listid, ksk.cfg.lists[listid].name)
-  local ll = ksk.cfg.lists[listid]
+local function do_xml_list(this, listid)
+  lststring = lststring .. strfmt("<list id=%q n=%q>", listid, this.cfg.lists[listid].name)
+  local ll = this.cfg.lists[listid]
   local lul = {}
   for k,v in ipairs(ll.users) do
-    local up=ksk.cfg.users[v]
+    local up = this.cfg.users[v]
     if (not uu[v]) then
       uu[v] = true
       tinsert(uv, strfmt("<u id=%q n=%q c=%q/>", v, up.name, up.class))
@@ -980,18 +979,18 @@ local function do_xml_list(listid)
   lststring = lststring .. tconcat(lul, "") .. "</list>"
 end
 
-local function do_bbcode_list(listid)
-  lststring = lststring .. strfmt("[center][b]List: %q[/b][/center]\n[list]", ksk.cfg.lists[listid].name)
-  local ll = ksk.cfg.lists[listid]
+local function do_bbcode_list(this, listid)
+  lststring = lststring .. strfmt("[center][b]List: %q[/b][/center]\n[list]", this.cfg.lists[listid].name)
+  local ll = this.cfg.lists[listid]
   local lul = {}
   for k,v in ipairs(ll.users) do
-    local up=ksk.cfg.users[v]
+    local up = this.cfg.users[v]
     tinsert(lul, strfmt("[*][color=#%s]%s[/color]\n", K.ClassColorsHex[up.class], up.name))
   end
   lststring = lststring .. tconcat(lul, "") .. "[/list]\n"
 end
 
-local function final_json_string()
+local function final_json_string(this)
   local dstr = K.YMDStamp()
   local tstr = K.HMStamp()
   local cs = ""
@@ -1006,13 +1005,13 @@ local function final_json_string()
   thestring = strfmt('{"ksk": { "date": %q, "time": %q, "classes": [%s], "users": [ %s ], "lists": [%s] }}', dstr, tstr, cs, tconcat(uv, ","), lststring)
 end
 
-local function final_bbcode_string()
+local function final_bbcode_string(this)
   local dstr = K.YMDStamp()
   local tstr = K.HMStamp()
   thestring = strfmt("[center][b]KSK Lists as of %s %s[/b][/center]\n", dstr, tstr) .. lststring
 end
 
-local function final_xml_string()
+local function final_xml_string(this)
   local dstr = K.YMDStamp()
   local tstr = K.HMStamp()
   local cs = ""
@@ -1024,13 +1023,13 @@ local function final_xml_string()
   thestring = strfmt("<ksk date=%q time=%q><classes>%s</classes><users>%s</users><lists>%s</lists></ksk>", dstr, tstr, cs, tconcat(uv, ""), lststring)
 end
 
-local function final_bbcode_string()
+local function final_bbcode_string(this)
   local dstr = K.YMDStamp()
   local tstr = K.HMStamp()
   thestring = strfmt("[center][b]KSK Lists as of %s %s[/b][/center]\n", dstr, tstr) .. lststring
 end
 
-local function export_list_button()
+local function export_list_button(this)
   local selwhat = nil
 
   thestring = ""
@@ -1079,59 +1078,59 @@ local function export_list_button()
       }, initialvalue = 0, itemheight = 16,
     }
     ret.what = KUI:CreateDropDown(arg, ret)
-    ret.what:Catch("OnValueChanged", function(this, evt, newv)
+    ret.what:Catch("OnValueChanged", function(t, evt, newv)
       selwhat = newv
       if (selwhat == EXP_CUR_CSV and current_listid) then
         local tt = {}
         for k,v in ipairs(current_list.users) do
-          tinsert(tt, ksk.cfg.users[v].name)
+          tinsert(tt, this.cfg.users[v].name)
         end
         thestring = tconcat(tt, ",")
       elseif (selwhat == EXP_CUR_JSON and current_listid) then
         uu = {}
         uv = {}
         lststring = ""
-        do_json_list(current_listid)
-        final_json_string()
+        do_json_list(this, current_listid)
+        final_json_string(this)
         lststring = ""
       elseif (selwhat == EXP_CUR_XML and current_listid) then
         uu = {}
         uv = {}
         lststring = ""
-        do_xml_list(current_listid)
-        final_xml_string()
+        do_xml_list(this, current_listid)
+        final_xml_string(this)
         lststring = ""
       elseif (selwhat == EXP_CUR_BBCODE and current_listid) then
         uu = {}
         uv = {}
         lststring = ""
-        do_bbcode_list(current_listid)
-        final_bbcode_string()
+        do_bbcode_list(this, current_listid)
+        final_bbcode_string(this)
         lststring = ""
       elseif (selwhat == EXP_ALL_JSON) then
         uu = {}
         uv = {}
         lststring = ""
-        for k,v in ipairs(ksk.sortedlists) do
-          do_json_list(v.id)
+        for k,v in ipairs(this.sortedlists) do
+          do_json_list(this, v.id)
         end
-        final_json_string()
+        final_json_string(this)
       elseif (selwhat == EXP_ALL_XML) then
         uu = {}
         uv = {}
         lststring = ""
-        for k,v in ipairs(ksk.sortedlists) do
-          do_xml_list(v.id)
+        for k,v in ipairs(this.sortedlists) do
+          do_xml_list(this, v.id)
         end
-        final_xml_string()
+        final_xml_string(this)
       elseif (selwhat == EXP_ALL_BBCODE) then
         uu = {}
         uv = {}
         lststring = ""
-        for k,v in ipairs(ksk.sortedlists) do
-          do_bbcode_list(v.id)
+        for k,v in ipairs(this.sortedlists) do
+          do_bbcode_list(this, v.id)
         end
-        final_bbcode_string()
+        final_bbcode_string(this)
       else
         thestring = ""
       end
@@ -1144,14 +1143,14 @@ local function export_list_button()
       label = { text = L["Export string"], pos = "LEFT" },
     }
     ret.expstr = KUI:CreateEditBox(arg, ret)
-    ret.expstr:Catch("OnValueChanged", function(this, evt, newv, user)
-      this:HighlightText()
-      this:SetCursorPosition(0)
+    ret.expstr:Catch("OnValueChanged", function(t, evt, newv, user)
+      t:HighlightText()
+      t:SetCursorPosition(0)
       if (newv ~= "") then
-        this:SetFocus()
+        t:SetFocus()
         explistdlg.copymsg:Show()
       else
-        this:ClearFocus()
+        t:ClearFocus()
         explistdlg.copymsg:Hide()
       end
     end)
@@ -1164,14 +1163,14 @@ local function export_list_button()
     ret.copymsg = KUI:CreateStringLabel(arg, ret)
     ypos = ypos - 24
 
-    ret.OnAccept = function(this)
+    ret.OnAccept = function(t)
       explistdlg:Hide()
-      ksk.mainwin:Show()
+      this.mainwin:Show()
     end
 
-    ret.OnCancel = function(this)
+    ret.OnCancel = function(t)
       explistdlg:Hide()
-      ksk.mainwin:Show()
+      this.mainwin:Show()
     end
 
     explistdlg = ret
@@ -1181,14 +1180,14 @@ local function export_list_button()
   explistdlg.expstr:SetText("")
   explistdlg.clistmsg:SetText(strfmt(L["Current list: %s"], white(current_list.name)))
 
-  ksk.mainwin:Hide()
+  this.mainwin:Hide()
   explistdlg:Show()
 end
 
-local function add_missing_button()
-  local insrandom
-  local whatv
+local insrandom
+local whatv
 
+local function add_missing_button(this)
   if (not addmissingdlg) then
     local ypos = 0
     local arg = {
@@ -1206,14 +1205,12 @@ local function add_missing_button()
       cancelbutton = { text = K.CANCELSTR },
     }
     local ret = KUI:CreateDialogFrame(arg)
-    arg = {}
 
     arg = {
       x = 0, y = ypos, width = 300, font = "GameFontNormal",
       text = "",
     }
     ret.clistmsg = KUI:CreateStringLabel(arg, ret)
-    arg = {}
     ypos = ypos - 24
 
     arg = {
@@ -1225,11 +1222,10 @@ local function add_missing_button()
       }, initialvalue = 1, itemheight = 16,
     }
     ret.what = KUI:CreateDropDown(arg, ret)
-    ret.what:Catch("OnValueChanged", function(this, evt, newv)
+    ret.what:Catch("OnValueChanged", function(t, evt, newv)
       whatv = tonumber(newv)
     end)
     ypos = ypos - 32
-    arg = {}
 
     arg = {
       x = 0, y = ypos, label = { text = L["Insert Randomly"] },
@@ -1238,62 +1234,61 @@ local function add_missing_button()
     ret.insrandom:Catch("OnValueChanged", function(this, evt, val)
       insrandom = val
     end)
-    arg = {}
     ypos = ypos - 24
 
-    ret.OnAccept = function(this)
-      if (whatv == 1 and ksk.users) then
-        for k,v in pairs(ksk.users) do
+    ret.OnAccept = function(t)
+      if (whatv == 1 and this.users) then
+        for k,v in pairs(this.users) do
           local uid = k
           if (current_list.tethered) then
-            if (ksk.UserIsAlt(uid)) then
-              uid = ksk.cfg.users[uid].main
+            local ia, muid = this:UserIsAlt(uid)
+            if (ia) then
+              uid = muid
             end
           end
 
-          if (not ksk.UserInList(uid)) then
-            local pos = ksk.cfg.lists[current_listid].nusers + 1
+          if (not this:UserInList(uid)) then
+            local pos = this.cfg.lists[current_listid].nusers + 1
             if (insrandom) then
               pos = rand(pos)
             end
-            insert_list_member(uid, current_listid, pos)
+            insert_list_member(this, uid, current_listid, pos)
             info(L["added %s to list %q at position %s."],
-              shortaclass(ksk.cfg.users[uid]),
-              white(ksk.cfg.lists[current_listid].name),
+              shortaclass(this.cfg.users[uid]),
+              white(this.cfg.lists[current_listid].name),
               white(tostring(pos)))
           end
         end
       elseif (whatv == 2) then
-        for k,v in pairs(ksk.cfg.users) do
+        for k,v in pairs(this.cfg.users) do
           local doit = false
           if (current_list.tethered) then
-            if (not ksk.UserIsAlt(k, v.flags)) then
+            if (not this:UserIsAlt(k, v.flags)) then
               doit = true
             end
           else
             doit = true
           end
           if (doit) then
-            if (not ksk.UserInList(k)) then
-              local pos = ksk.cfg.lists[current_listid].nusers + 1
+            if (not this:UserInList(k)) then
+              local pos = this.cfg.lists[current_listid].nusers + 1
               if (insrandom) then
                 pos = rand(pos)
               end
-              insert_list_member(k, current_listid, pos)
-              info(L["added %s to list %q at position %s."], shortaclass(v),
-                white(ksk.cfg.lists[current_listid].name), white(tostring(pos)))
+              insert_list_member(this, k, current_listid, pos)
+              info(L["added %s to list %q at position %s."], shortaclass(v), white(current_list.name), white(tostring(pos)))
             end
           end
         end
       end
       addmissingdlg:Hide()
-      ksk.RefreshAllMemberLists(current_listid)
-      ksk.mainwin:Show()
+      this:RefreshAllMemberLists(current_listid)
+      this.mainwin:Show()
     end
 
-    ret.OnCancel = function(this)
+    ret.OnCancel = function(t)
       addmissingdlg:Hide()
-      ksk.mainwin:Show()
+      this.mainwin:Show()
     end
 
     addmissingdlg = ret
@@ -1305,12 +1300,12 @@ local function add_missing_button()
   addmissingdlg.insrandom:SetChecked(insrandom)
   addmissingdlg.clistmsg:SetText(strfmt(L["Current list: %s"], white(current_list.name)))
 
-  ksk.mainwin:Hide()
+  this.mainwin:Hide()
   addmissingdlg:Show()
 end
 
-local function announce_list_button(isall, shifted)
-  if (not current_list or not members or(not shifted and not ksk.users)) then
+local function announce_list_button(this, isall, shifted)
+  if (not current_list or not sortedmembers or(not shifted and not this.users)) then
     return
   end
 
@@ -1320,30 +1315,30 @@ local function announce_list_button(isall, shifted)
     ts = strfmt(L["%s: members of the %q list (ordered highest to lowest): "], L["MODTITLE"], current_list.name)
   end
 
-  local sendfn = ksk.SendText
+  local sendfn = this.SendText
 
   if (shifted and K.player.is_guilded) then
-    sendfn = ksk.SendGuildText
+    sendfn = this.SendGuildText
   end
 
   local uid, as, al
   local np = 0
   local len = strlen(ts)
 
-  for i = 1, #members do
-    uid = members[i].id
+  for i = 1, #sortedmembers do
+    uid = sortedmembers[i].id
     as = nil
-    if (not isall and ksk.users[uid]) then
+    if (not isall and this.users[uid]) then
       np = np + 1
-      as = strfmt("%s(%d) ", K.ShortName(ksk.cfg.users[uid].name), members[i].idx)
+      as = strfmt("%s(%d) ", K.ShortName(this.cfg.users[uid].name), sortedmembers[i].idx)
     elseif (isall) then
       np = np + 1
-      as = K.ShortName(ksk.cfg.users[uid].name) .. " "
+      as = K.ShortName(this.cfg.users[uid].name) .. " "
     end
     if (as) then
       al = strlen(as)
       if (len + al > 240) then
-        sendfn(ksk, ts)
+        sendfn(this, ts)
         ts = strfmt("%s: ", L["MODTITLE"])
         len = strlen(ts)
       end
@@ -1352,18 +1347,18 @@ local function announce_list_button(isall, shifted)
     end
   end
   if (np > 0) then
-    sendfn(ksk, ts)
+    sendfn(this, ts)
   end
 end
 
-function ksk.InitialiseListsUI()
+function ksk:InitialiseListsUI()
   local arg
-  local kmt = ksk.mainwin.tabs[ksk.LISTS_TAB]
+  local kmt = self.mainwin.tabs[self.LISTS_TAB]
 
   kmt.onclick = function(this, main, sub)
     local en
 
-    if (main == 1 and sub == 1 and ksk.csd.is_admin) then
+    if (main == 1 and sub == 1 and self.csdata[self.currentid].is_admin) then
       en = true
     else
       en = false
@@ -1374,8 +1369,8 @@ function ksk.InitialiseListsUI()
   end
 
   -- First set up the quick access frames we will be using.
-  qf.members = kmt.tabs[ksk.LISTS_MEMBERS_PAGE].content
-  qf.cfgopts = kmt.tabs[ksk.LISTS_CONFIG_PAGE].content
+  qf.members = kmt.tabs[self.LISTS_MEMBERS_PAGE].content
+  qf.cfgopts = kmt.tabs[self.LISTS_CONFIG_PAGE].content
 
   local cf = kmt.content
   local ls = cf.vsplit.leftframe
@@ -1457,7 +1452,7 @@ function ksk.InitialiseListsUI()
   }
   mcf.insertbutton = KUI:CreateButton(arg, mcf)
   mcf.insertbutton:Catch("OnClick", function(this, evt)
-    insert_member(this)
+    insert_member(self, this)
   end)
   qf.insert = mcf.insertbutton
   ypos = ypos - 24
@@ -1477,7 +1472,7 @@ function ksk.InitialiseListsUI()
   arg.tooltip = { title = "$$", text = L["TIP036"], }
   mcf.reservebutton = KUI:CreateButton(arg, mcf)
   mcf.reservebutton:Catch("OnClick", function(this, evt)
-    resunres_member(this)
+    resunres_member(self, this)
   end)
   qf.resunres = mcf.reservebutton
 
@@ -1488,7 +1483,7 @@ function ksk.InitialiseListsUI()
   arg.tooltip = { title = "$$", text = L["TIP032"], }
   mcf.kingbutton = KUI:CreateButton(arg, mcf)
   mcf.kingbutton:Catch("OnClick", function(this, evt)
-    move_member(this, 3)
+    move_member(self, 3)
   end)
   qf.king = mcf.kingbutton
   ypos = ypos - 24
@@ -1498,7 +1493,7 @@ function ksk.InitialiseListsUI()
   arg.tooltip = { title = "$$", text = L["TIP033"], }
   mcf.upbutton = KUI:CreateButton(arg, mcf)
   mcf.upbutton:Catch("OnClick", function(this, evt)
-    move_member(this, 2)
+    move_member(self, 2)
   end)
   qf.moveup = mcf.upbutton
   ypos = ypos - 24
@@ -1508,7 +1503,7 @@ function ksk.InitialiseListsUI()
   arg.tooltip = { title = "$$", text = L["TIP034"], }
   mcf.downbutton = KUI:CreateButton(arg, mcf)
   mcf.downbutton:Catch("OnClick", function(this, evt)
-    move_member(this, 1)
+    move_member(self, 1)
   end)
   qf.movedown = mcf.downbutton
   ypos = ypos - 24
@@ -1519,7 +1514,7 @@ function ksk.InitialiseListsUI()
   arg.tooltip = { title = "$$", text = L["TIP035"], }
   mcf.suicidebutton = KUI:CreateButton(arg, mcf)
   mcf.suicidebutton:Catch("OnClick", function(this, evt)
-    move_member(this, 0)
+    move_member(self, 0)
   end)
   qf.suicide = mcf.suicidebutton
   ypos = ypos - 24
@@ -1547,7 +1542,7 @@ function ksk.InitialiseListsUI()
     setitem = function(objp, idx, slot, btn)
       return KUI.SetItemHelper(objp, btn, idx,
         function(op, ix)
-          return ksk.cfg.lists[ksk.sortedlists[ix].id].name
+          return self.cfg.lists[self.sortedlists[ix].id].name
         end)
       end,
     selectitem = rlist_selectitem,
@@ -1558,14 +1553,6 @@ function ksk.InitialiseListsUI()
   tlt.slist = KUI:CreateScrollList(arg, tlt)
   arg = {}
   qf.lists = tlt.slist
-
-  local bdrop = {
-    bgFile = KUI.TEXTURE_PATH .. "TDF-Fill",
-    tile = true,
-    tileSize = 32,
-    insets = { left = 0, right = 0, top = 0, bottom = 0 }
-  }
-  tlt.slist:SetBackdrop(bdrop)
 
   --
   -- Lists panel, Members tab
@@ -1598,19 +1585,19 @@ function ksk.InitialiseListsUI()
     this:SetText("")
   end)
   cf.searchbox:Catch("OnValueChanged", function(this, evt, newv, user)
-    if (not members) then
+    if (not sortedmembers) then
       return
     end
     if (user and newv and newv ~= "") then
       local lnv = strlower(newv)
-      for k,v in pairs(members) do
-        local tln = strlower(ksk.cfg.users[v.id].name)
+      for k,v in pairs(sortedmembers) do
+        local tln = strlower(self.cfg.users[v.id].name)
         if (strfind(tln, lnv, 1, true)) then
           local its = v.id
           if (v.isalt) then
             its = v.main
           end
-          for kk,vv in ipairs(members) do
+          for kk,vv in ipairs(sortedmembers) do
             if (vv.id == its) then
               qf.memberlist:SetSelected(kk, true)
               break
@@ -1635,7 +1622,6 @@ function ksk.InitialiseListsUI()
   cf.slist = KUI:CreateScrollList(arg, cf.sframe)
   arg = {}
   qf.memberlist = cf.slist
-  cf.slist:SetBackdrop(bdrop)
 
   --
   -- Lists panel, Config tab
@@ -1680,8 +1666,8 @@ function ksk.InitialiseListsUI()
     tooltip = { title = "$$", text = L["TIP038"] },
   }
   tr.defrank = KUI:CreateDropDown(arg, tr)
-  -- Must remain visible in ksk.qf so it can be changed from main.
-  ksk.qf.defrankdd = tr.defrank
+  -- Must remain visible in self.qf so it can be changed from main.
+  self.qf.defrankdd = tr.defrank
   tr.defrank:Catch ("OnValueChanged", function(this, evt, nv, user)
     if (user) then
       changed()
@@ -1751,29 +1737,44 @@ function ksk.InitialiseListsUI()
   ypos = ypos - 24
 
   arg = {
+    x = 0, y = ypos, label = { text = L["Display Alts in Roll List"] },
+    tooltip = { title = "$$", text = L["TIP101"] },
+  }
+  tr.altdisp = KUI:CreateCheckBox(arg, tr)
+  qf.altdisp = tr.altdisp
+  tr.altdisp:Catch("OnValueChanged", function(this, evt, val, user)
+    if (user) then
+      changed()
+    end
+    linfo.altdisp = val
+  end)
+  ypos = ypos - 24
+
+  arg = {
     x = 0, y = ypos, text = L["Update"], enabled = false,
     tooltip = { title = "$$", text = L["TIP042"] },
   }
   tr.updatebtn = KUI:CreateButton(arg, tr)
   qf.listupdbtn = tr.updatebtn
   tr.updatebtn:Catch("OnClick", function(this, evt, ...)
-    local cl = ksk.cfg.lists[current_listid]
+    local cl = self.cfg.lists[current_listid]
     cl.sortorder = linfo.sortorder
     cl.def_rank = linfo.def_rank
     cl.strictcfilter = linfo.strictcfilter
     cl.strictrfilter = linfo.strictrfilter
     cl.extralist = linfo.extralist
     cl.tethered = linfo.tethered
-    ksk.RefreshAllLists()
+    cl.altdisp = linfo.altdisp
+    self:RefreshAllLists(false)
     tr.updatebtn:SetEnabled(false)
     -- If this changes MUST change CHLST is KSK-Config.lua
-    local es = strfmt("%s:%d:%d:%s:%s:%s:%s", current_listid,
+    local es = strfmt("%s:%d:%d:%s:%s:%s:%s:%s", current_listid,
       linfo.sortorder, linfo.def_rank, linfo.strictcfilter and "Y" or "N",
-      linfo.strictrfilter and "Y" or "N", linfo.extralist,
-      linfo.tethered and "Y" or "N")
-    ksk.AddEvent(ksk.currentid, "CHLST", es)
-    ksk.FixupLists(ksk.currentid)
-    ksk.RefreshListsUI(false)
+      linfo.strictrfilter and "Y" or "N", linfo.extralist, linfo.tethered and "Y" or "N",
+      linfo.altdisp and "Y" or "N")
+    self:AddEvent(self.currentid, "CHLST", es)
+    self:FixupLists(self.currentid)
+    self:RefreshListsUI(false)
   end)
 
   --
@@ -1786,9 +1787,8 @@ function ksk.InitialiseListsUI()
   }
   br.createbutton = KUI:CreateButton(arg, br)
   br.createbutton:Catch("OnClick", function(this, evt)
-    create_list_button()
+    create_list_button(self)
   end)
-  arg = {}
 
   arg = {
     x = 90, y = ypos, width = 90, height = 24, text = L["Delete"],
@@ -1796,9 +1796,8 @@ function ksk.InitialiseListsUI()
   }
   br.deletebutton = KUI:CreateButton(arg, br)
   br.deletebutton:Catch("OnClick", function(this, evt)
-    delete_list_button(current_listid)
+    delete_list_button(self, current_listid)
   end)
-  arg = {}
 
   arg = {
     x = 180, y = ypos, width = 90, height = 24, text = L["Rename"],
@@ -1806,9 +1805,8 @@ function ksk.InitialiseListsUI()
   }
   br.renamebutton = KUI:CreateButton(arg, br)
   br.renamebutton:Catch("OnClick", function(this, evt)
-    rename_list_button(current_listid)
+    rename_list_button(self, current_listid)
   end)
-  arg = {}
   ypos = ypos - 24
 
   arg = {
@@ -1817,9 +1815,8 @@ function ksk.InitialiseListsUI()
   }
   br.copybutton = KUI:CreateButton(arg, br)
   br.copybutton:Catch("OnClick", function(this, evt)
-    copy_list_button(current_listid)
+    copy_list_button(self, current_listid)
   end)
-  arg = {}
 
   arg = {
     x = 90, y = ypos, width = 90, height = 24, text = L["Import"],
@@ -1827,9 +1824,8 @@ function ksk.InitialiseListsUI()
   }
   br.importbutton = KUI:CreateButton(arg, br)
   br.importbutton:Catch("OnClick", function(this, evt)
-    import_list_button()
+    import_list_button(self)
   end)
-  arg = {}
 
   arg = {
     x = 180, y = ypos, width = 90, height = 24, text = L["Export"],
@@ -1837,9 +1833,8 @@ function ksk.InitialiseListsUI()
   }
   br.exportbutton = KUI:CreateButton(arg, br)
   br.exportbutton:Catch("OnClick", function(this, evt)
-    export_list_button()
+    export_list_button(self)
   end)
-  arg = {}
   ypos = ypos - 24
 
   arg = {
@@ -1848,64 +1843,48 @@ function ksk.InitialiseListsUI()
   }
   br.addmissingbutton = KUI:CreateButton(arg, br)
   br.addmissingbutton:Catch("OnClick", function(this, evt)
-    add_missing_button()
+    add_missing_button(self)
   end)
-  arg = {}
 end
 
 --
 -- Update the various dropdown lists that need to contain the list of list
 -- names. There are several user interface elements that may need to be
--- changed. The list configuration panel has a "Next List" drop down and a
--- "suicide on additional lists" option. The main configuration also has a
--- "Default List" option and a "Try Final List" option that all need to be
--- updated to the new list of lists. Some of these lists (such as the list
--- config panel's Next List setting) have additional options over and above the
--- list of lists. However, all of them share the actual basic lists of lists,
--- which we will calculate first before inserting additional members for other
--- UI elements.
+-- changed.
 --
-function ksk.RefreshAllLists()
+function ksk:RefreshAllLists(reset)
   local llist = {}
   local ti
   local dlfound = false
   local oldlist = current_listid or nil
   local oldidx = nil
 
-  ksk.sortedlists = {}
+  self.sortedlists = {}
   current_listid = nil
 
-  for k,v in pairs(ksk.cfg.lists) do
-    --
-    -- Since we're going through the list anyway, check to make sure that our
-    -- next and additional suicide lists are still valid. Set them to 0 if
-    -- not.
-    --
-    if (v.extralist ~= "0" and not ksk.cfg.lists[v.extralist]) then
-      ksk.cfg.lists[k].extralist = "0"
-    end
+  for k,v in pairs(self.cfg.lists) do
     local ent = { id = k }
-    tinsert(ksk.sortedlists, ent)
+    tinsert(self.sortedlists, ent)
   end
 
-  tsort(ksk.sortedlists, function(a,b)
-    if (ksk.cfg.lists[a.id].sortorder < ksk.cfg.lists[b.id].sortorder) then
+  tsort(self.sortedlists, function(a,b)
+    if (self.cfg.lists[a.id].sortorder < self.cfg.lists[b.id].sortorder) then
       return true
     end
-    if (ksk.cfg.lists[a.id].sortorder == ksk.cfg.lists[b.id].sortorder) then
-      return strlower(ksk.cfg.lists[a.id].name) < strlower(ksk.cfg.lists[b.id].name)
+    if (self.cfg.lists[a.id].sortorder == self.cfg.lists[b.id].sortorder) then
+      return strlower(self.cfg.lists[a.id].name) < strlower(self.cfg.lists[b.id].name)
     end
     return false
   end)
 
-  for k,v in ipairs(ksk.sortedlists) do
+  for k,v in ipairs(self.sortedlists) do
     if (v.id ==  oldlist) then
       oldidx = k
       break
     end
   end
 
-  qf.lists.itemcount = #ksk.sortedlists
+  qf.lists.itemcount = #self.sortedlists
   qf.lists:UpdateList()
 
   --
@@ -1918,16 +1897,16 @@ function ksk.RefreshAllLists()
 
   ti = { text = L["None"], value = "0", }
   tinsert(llist, ti)
-  for k,v in pairs(ksk.sortedlists) do
-    ti = { text = ksk.cfg.lists[v.id].name, value = v.id, }
-    if (ksk.cfg.settings.def_list == v.id) then
+  for k,v in ipairs(self.sortedlists) do
+    ti = { text = self.cfg.lists[v.id].name, value = v.id, }
+    if (self.cfg.settings.def_list == v.id) then
       dlfound = true
     end
     tinsert(llist, ti)
   end
 
   if (not dlfound) then
-    ksk.cfg.settings.def_list = "0"
+    self.cfg.settings.def_list = "0"
   end
 
   qf.extralist:UpdateItems(llist)
@@ -1937,42 +1916,39 @@ function ksk.RefreshAllLists()
     qf.extralist:SetValue("0")
   end
 
-  --
   -- Update any lists in the config UI.
-  --
-  ksk.RefreshConfigLists(llist)
+  self:RefreshConfigLists(llist, reset)
 
-  --
   -- Update any lists in the loot / items UI.
-  --
-  ksk.RefreshLootLists(llist)
+  self:RefreshLootLists(llist)
 
-  --
   -- Update any lists in the users UI.
-  --
-  ksk.RefreshUsersLists(llist)
+  self:RefreshUsersLists(llist)
 end
 
-function ksk.RefreshListsUIForRaid(inraid)
+function ksk:RefreshListsUIForRaid(inraid)
   local en = true
 
-  if (not current_listid or not ksk.csd.is_admin or not inraid) then
+  if (not current_listid or not self.csdata[self.currentid].is_admin or not inraid) then
     en = false
   end
   qf.listctl.announcebutton:SetEnabled(en)
 
   en = true
-  if (qf.lists.itemcount < 1 or not ksk.csd.is_admin or not inraid) then
+  if (qf.lists.itemcount < 1 or not self.csdata[self.currentid].is_admin or not inraid) then
     en = false
   end
   qf.listctl.announceallbutton:SetEnabled(en)
 end
 
-function ksk.RefreshListsUI(reset)
-  if (not ksk.currentid) then
-    ksk.sortedlists = nil
+function ksk:RefreshListsUI(reset)
+  if (not self.currentid) then
+    self.sortedlists = nil
     current_listid = nil
+    current_list = nil
+    sortedmembers = nil
     current_memberid = nil
+    current_members = nil
     qf.lists.itemcount = 0
     qf.lists.UpdateList()
     qf.lists.SetSelected(nil, false, true)
@@ -1986,16 +1962,16 @@ function ksk.RefreshListsUI(reset)
     current_listid = nil
   end
 
-  ksk.RefreshAllLists()
-  ksk.RefreshListsUIForRaid(ksk.users ~= nil)
-  ksk.RefreshAllMemberLists(current_listid, true)
+  self:RefreshAllLists(reset)
+  self:RefreshListsUIForRaid(self.users ~= nil)
+  self:RefreshAllMemberLists(current_listid)
 end
 
-function ksk.FindList(name, cfg)
-  local cfg = cfg or ksk.currentid
+function ksk:FindList(name, cfg)
+  local cfg = cfg or self.currentid
   local lowname = strlower(name)
 
-  for k,v in pairs(ksk.configs[cfg].lists) do
+  for k,v in pairs(self.configs[cfg].lists) do
     if (strlower(v.name) == lowname) then
       return k
     end
@@ -2003,15 +1979,16 @@ function ksk.FindList(name, cfg)
   return nil
 end
 
-function ksk.CreateNewList(name, cfg, myid, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:CreateNewList(name, cfg, myid, nocmd)
+  local cfg = cfg or self.currentid
+  assert(cfg and self.configs[cfg])
 
   if (strfind(name, ":")) then
     err(L["invalid list name. Please try again."])
     return true
   end
 
-  local cid = ksk.FindList(name, cfg)
+  local cid = self:FindList(name, cfg)
   if (cid) then
     if (not nocmd) then
       err(L["roll list %q already exists. Try again."], white(name))
@@ -2020,8 +1997,8 @@ function ksk.CreateNewList(name, cfg, myid, nocmd)
   end
 
   local newkey = myid or KK.CreateNewID(name)
-  ksk.configs[cfg].lists[newkey] = {}
-  local rl = ksk.configs[cfg].lists[newkey]
+  self.configs[cfg].lists[newkey] = {}
+  local rl = self.configs[cfg].lists[newkey]
 
   rl.name = name
   rl.sortorder = 1
@@ -2030,10 +2007,11 @@ function ksk.CreateNewList(name, cfg, myid, nocmd)
   rl.strictrfilter = false
   rl.extralist = "0"
   rl.tethered = false
+  rl.altdisp = false
   rl.users = {}
   rl.nusers = 0
 
-  ksk.configs[cfg].nlists = ksk.configs[cfg].nlists + 1
+  self.configs[cfg].nlists = self.configs[cfg].nlists + 1
 
   if (not myid and not nocmd) then
     info(L["roll list %q created."], white(name))
@@ -2041,52 +2019,53 @@ function ksk.CreateNewList(name, cfg, myid, nocmd)
 
   if (not nocmd) then
     local es = strfmt("%s:%s", newkey, name)
-    ksk.AddEvent(cfg, "MKLST", es, true)
+    self:AddEvent(cfg, "MKLST", es, true)
   end
 
-  if (cfg == ksk.currentid) then
-    ksk.cfg.lists = ksk.configs[cfg].lists
-    ksk.RefreshAllLists()
+  if (cfg == self.currentid) then
+    self.cfg.lists = self.configs[cfg].lists
+    self:RefreshAllLists()
   end
 
   return false, newkey
 end
 
-function ksk.DeleteList(listid, cfgid, nocmd)
-  local cfg = cfgid or ksk.currentid
+function ksk:DeleteList(listid, cfg, nocmd)
+  local cfg = cfg or self.currentid
+  assert(cfg and self.configs[cfg])
 
-  if (ksk.configs[cfg].lists[listid]) then
-    local name = ksk.configs[cfg].lists[listid].name
-    ksk.configs[cfg].lists[listid] = nil
-    ksk.configs[cfg].nlists = ksk.configs[cfg].nlists - 1
+  if (self.configs[cfg].lists[listid]) then
+    local name = self.configs[cfg].lists[listid].name
+    self.configs[cfg].lists[listid] = nil
+    self.configs[cfg].nlists = self.configs[cfg].nlists - 1
     if (not nocmd) then
       info(L["roll list %q deleted."], white(name))
     end
   end
 
-  if (ksk.configs[cfg].settings.def_list == listid) then
-    ksk.configs[cfg].settings.def_list = "0"
+  if (self.configs[cfg].settings.def_list == listid) then
+    self.configs[cfg].settings.def_list = "0"
   end
 
-  if (ksk.configs[cfg].settings.final_list == listid) then
-    ksk.configs[cfg].settings.final_list = "0"
+  if (self.configs[cfg].settings.final_list == listid) then
+    self.configs[cfg].settings.final_list = "0"
   end
 
-  for k,v in pairs(ksk.configs[cfg].lists) do
+  for k,v in pairs(self.configs[cfg].lists) do
     if (v.extralist == listid) then
-      ksk.configs[cfg].lists[k].extralist = "0"
+      self.configs[cfg].lists[k].extralist = "0"
     end
   end
 
-  for k,v in pairs(ksk.configs[cfg].items) do
+  for k,v in pairs(self.configs[cfg].items) do
     if (v.nextdrop and v.nextdrop.suicide == listid) then
-      ksk.configs[cfg].items[k].nextdrop.suicide = nil
+      self.configs[cfg].items[k].nextdrop.suicide = nil
     end
     if (v.list and v.list == listid) then
-      ksk.configs[cfg].items[k].list = nil
+      self.configs[cfg].items[k].list = nil
     end
     if (v.suicide and v.suicide == listid) then
-      ksk.configs[cfg].items[k].suicide = nil
+      self.configs[cfg].items[k].suicide = nil
     end
   end
 
@@ -2095,38 +2074,38 @@ function ksk.DeleteList(listid, cfgid, nocmd)
   end
 
   if (not nocmd) then
-    ksk.AddEvent(cfg, "RMLST", listid, true)
+    self:AddEvent(cfg, "RMLST", listid, true)
   end
 
-  if (cfg == ksk.currentid) then
-    ksk.RefreshAllLists()
+  if (cfg == self.currentid) then
+    self:RefreshAllLists()
   end
 end
 
-local function real_delete_list(arg)
-  local cfg = arg.cfg or ksk.currentid
+local function real_delete_list(mod, arg)
+  local cfg = arg.cfg or mod.currentid
   local listid = arg.listid
 
-  ksk.DeleteList(listid, cfg, false)
+  mod:DeleteList(listid, cfg, false)
 end
 
-function ksk.DeleteListCmd(listid, show, cfg)
-  local cfg = cfg or ksk.currentid
+function ksk:DeleteListCmd(listid, show, cfg)
+  local cfg = cfg or self.currentid
 
-  local isshown = show or ksk.mainwin:IsShown()
-  ksk.mainwin:Hide()
+  local isshown = show or self.mainwin:IsShown()
+  self.mainwin:Hide()
 
-  K.ConfirmationDialog(ksk, L["Delete Roll List"], L["DELLIST"],
-    ksk.configs[cfg].lists[listid].name, real_delete_list,
-    { cfg=cfg, listid=listid}, isshown, 190)
+  K.ConfirmationDialog(self, L["Delete Roll List"], L["DELLIST"],
+    self.configs[cfg].lists[listid].name, real_delete_list,
+    { cfg=cfg, listid=listid }, isshown, 190)
 
   return false
 end
 
-function ksk.RenameList(listid, newname, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:RenameList(listid, newname, cfg, nocmd)
+  local cfg = cfg or self.currentid
 
-  local cid = ksk.FindList(newname, cfg)
+  local cid = self:FindList(newname, cfg)
   if (cid) then
     if (not nocmd) then
       err(L["roll list %q already exists. Try again."], white(name))
@@ -2134,28 +2113,28 @@ function ksk.RenameList(listid, newname, cfg, nocmd)
     return true
   end
 
-  local oldname = ksk.configs[cfg].lists[listid].name
+  local oldname = self.configs[cfg].lists[listid].name
   if (not nocmd) then
     info(L["NOTICE: roll list %q renamed to %q."], white(oldname), white(newname))
   end
-  ksk.configs[cfg].lists[listid].name = newname
+  self.configs[cfg].lists[listid].name = newname
 
   if (not nocmd) then
     local es = strfmt("%s:%s", listid, newname)
-    ksk.AddEvent(cfg, "MVLST", es, true)
+    self:AddEvent(cfg, "MVLST", es, true)
   end
 
-  if (cfg == ksk.currentid) then
-    ksk.RefreshAllLists()
+  if (cfg == self.currentid) then
+    self:RefreshAllLists()
   end
 
   return false
 end
 
-function ksk.CopyList(listid, newname, cfg, myid, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:CopyList(listid, newname, cfg, myid, nocmd)
+  local cfg = cfg or self.currentid
 
-  local cid = ksk.FindList(newname, cfg)
+  local cid = self:FindList(newname, cfg)
   if (cid) then
     if (not nocmd) then
       err(L["roll list %q already exists. Try again."], white(name))
@@ -2164,13 +2143,13 @@ function ksk.CopyList(listid, newname, cfg, myid, nocmd)
   end
 
   local rv
-  rv, cid = ksk.CreateNewList(newname, cfg, myid, nocmd)
+  rv, cid = self:CreateNewList(newname, cfg, myid, nocmd)
   if (rv) then
     return true
   end
 
-  local src = ksk.configs[cfg].lists[listid]
-  local dst = ksk.configs[cfg].lists[cid]
+  local src = self.configs[cfg].lists[listid]
+  local dst = self.configs[cfg].lists[cid]
 
   dst.sortorder = src.sortorder
   dst.def_rank = src.def_rank
@@ -2178,23 +2157,24 @@ function ksk.CopyList(listid, newname, cfg, myid, nocmd)
   dst.strictrfilter = src.strictrfilter
   dst.extralist = src.extralist
   dst.tethered = src.tethered
+  dst.altdisp = src.altdisp
   dst.nusers = src.nusers
   K.CopyTable(src.users, dst.users)
 
   if (not nocmd) then
     local es = strfmt("%s:%s:%s", listid, cid, newname)
-    ksk.AddEvent(cfg, "CPLST", es, true)
+    self:AddEvent(cfg, "CPLST", es, true)
   end
 
-  if (cfg == ksk.currentid) then
-    ksk.RefreshAllLists()
+  if (cfg == self.currentid) then
+    self:RefreshAllLists()
   end
 
   return false
 end
 
-function ksk.SelectList(listid)
-  for k,v in ipairs(ksk.sortedlists) do
+function ksk:SelectList(listid)
+  for k,v in ipairs(self.sortedlists) do
     if (v.id == listid) then
       qf.lists:SetSelected(k, true, true)
       return false
@@ -2203,24 +2183,15 @@ function ksk.SelectList(listid)
   return true
 end
 
-function ksk.SelectListByIdx(idx)
-  qf.lists:SetSelected(idx, true, true)
-end
-
---
--- JKJ FIXME - should we take alts into account here? If we're using tethered
--- alts, they may be checking an alt's uid, but that won't appear directly in
--- the user lists, only the main ID will.
---
-function ksk.UserInList(uid, listid, cfg)
-  local cfg = cfg or ksk.currentid
+function ksk:UserInList(uid, listid, cfg)
+  local cfg = cfg or self.currentid
   local listid = listid or current_listid
 
-  if (not ksk.configs[cfg] or not ksk.configs[cfg].lists[listid]) then
+  if (not self.configs[cfg] or not self.configs[cfg].lists[listid]) then
     return nil
   end
 
-  local rlist = ksk.configs[cfg].lists[listid]
+  local rlist = self.configs[cfg].lists[listid]
   if (rlist.nusers < 1) then
     return false
   end
@@ -2232,13 +2203,13 @@ function ksk.UserInList(uid, listid, cfg)
   return false
 end
 
-function ksk.InsertMember(uid, listid, pos, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:InsertMember(uid, listid, pos, cfg, nocmd)
+  local cfg = cfg or self.currentid
   local listid = listid or current_listid
   local rv = insert_list_member(uid, listid, pos, cfg, nocmd)
 
-  if (not rv and cfg == ksk.currentid) then
-    ksk.RefreshAllMemberLists(listid)
+  if (not rv and cfg == self.currentid) then
+    self:RefreshAllMemberLists(listid)
   end
 
   return rv
@@ -2249,24 +2220,24 @@ end
 -- list of user IDs, all of which are assumed to already exist. This is
 -- only actually used by the CSV import functionality.
 --
-function ksk.SetMemberList(ulist, listid, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:SetMemberList(ulist, listid, cfg, nocmd)
+  local cfg = cfg or self.currentid
   local listid = listid or current_listid
 
-  if (not ksk.configs[cfg] or not ksk.configs[cfg].lists[listid]) then
+  if (not self.configs[cfg] or not self.configs[cfg].lists[listid]) then
     return true
   end
 
-  local ll = ksk.configs[cfg].lists[listid]
-  ll.users = ksk.SplitRaidList(ulist)
+  local ll = self.configs[cfg].lists[listid]
+  ll.users = self:SplitRaidList(ulist)
   ll.nusers = #ll.users
 
   if (not nocmd) then
-    ksk.AddEvent(cfg, "SMLST", strfmt("%s:%s", listid, ulist), true)
+    self:AddEvent(cfg, "SMLST", strfmt("%s:%s", listid, ulist), true)
   end
 
-  if (cfg == ksk.currentid) then
-    ksk.RefreshAllMemberLists(listid)
+  if (cfg == self.currentid) then
+    self:RefreshAllMemberLists(listid)
   end
 
   return false
@@ -2285,15 +2256,15 @@ end
 -- slot, 0 to suicide them to the extreme bottom of the list or 3 to king
 -- them and move them to the extreme top of the list.
 --
-function ksk.MoveMember(uid, listid, dir, cfg)
-  local cfg = cfg or ksk.currentid
+function ksk:MoveMember(uid, listid, dir, cfg)
+  local cfg = cfg or self.currentid
   local listid = listid or current_listid
 
-  if (not ksk.configs[cfg] or not ksk.configs[cfg].lists[listid]) then
+  if (not self.configs[cfg] or not self.configs[cfg].lists[listid]) then
     return true
   end
 
-  local rl = ksk.configs[cfg].lists[listid]
+  local rl = self.configs[cfg].lists[listid]
   local ul = rl.users
   local up = nil
 
@@ -2327,22 +2298,22 @@ function ksk.MoveMember(uid, listid, dir, cfg)
     end
   end
 
-  if (cfg == ksk.currentid) then
-    ksk.RefreshAllMemberLists(listid)
+  if (cfg == self.currentid) then
+    self:RefreshAllMemberLists(listid)
   end
 
   return false
 end
 
-function ksk.DeleteMember(uid, listid, cfg, nocmd)
-  local cfg = cfg or ksk.currentid
+function ksk:DeleteMember(uid, listid, cfg, nocmd)
+  local cfg = cfg or self.currentid
   local listid = listid or current_listid
 
-  if (not ksk.configs[cfg] or not ksk.configs[cfg].lists[listid]) then
+  if (not self.configs[cfg] or not self.configs[cfg].lists[listid]) then
     return true
   end
 
-  local rl = ksk.configs[cfg].lists[listid]
+  local rl = self.configs[cfg].lists[listid]
   local ul = rl.users
   local up = nil
 
@@ -2361,18 +2332,18 @@ function ksk.DeleteMember(uid, listid, cfg, nocmd)
   rl.nusers = rl.nusers - 1
   if (not nocmd) then
     local es = strfmt("%s:%s", uid, listid)
-    ksk.AddEvent(cfg, "DMLST", es, true)
+    self:AddEvent(cfg, "DMLST", es, true)
   end
 
-  if (cfg == ksk.currentid) then
-    ksk.RefreshAllMemberLists(listid)
+  if (cfg == self.currentid) then
+    self:RefreshAllMemberLists(listid)
   end
 
   return false
 end
 
 --
--- Whenever we change a user's Alt status, or whenever a config space has
+-- Whenever we change a user's Alt status, or whenever a member list has
 -- its "tethered alts" setting changed, we may need to fix up entries in all
 -- of the lists. Say for example UserB is an alt of UserA. They are both
 -- members in List1. Now the owner decides she wants to enable tethered alts.
@@ -2385,26 +2356,22 @@ end
 -- any alts. However, if only the alt is in the list, we need to replace that
 -- slot position with the main, as it will now be replaced by the main.
 --
-function ksk.FixupLists(cfg, rec)
-  local cfg = cfg or ksk.currentid
-
-  if (not ksk.configs[cfg] or not ksk.configs[cfg].tethered) then
-    return false
-  end
+function ksk:FixupLists(cfg, rec)
+  local cfg = cfg or self.currentid
 
   local changed = false
 
-  for k,v in pairs(ksk.configs[cfg].lists) do
+  for k,v in pairs(self.configs[cfg].lists) do
     if (v.tethered) then
       local il = 1
       while (il <= #v.users) do
         local inc = 1
         local vv = v.users[il]
-        local ia, mid = ksk.UserIsAlt(vv, nil, cfg)
+        local ia, mid = self:UserIsAlt(vv, nil, cfg)
 
         if (ia) then
           assert(mid)
-          if (not ksk.UserInList(mid, k, cfg)) then
+          if (not self:UserInList(mid, k, cfg)) then
             --
             -- The user is marked as an alt but their main isn't in the list.
             -- This means we have to replace this alt (in the same position)
@@ -2429,23 +2396,24 @@ function ksk.FixupLists(cfg, rec)
   end
 
   if (changed) then
-    ksk.FixupLists(cfg, true)
+    self:FixupLists(cfg, true)
   end
 
-  if (not rec and cfg == ksk.currentid) then
-    ksk.RefreshAllLists()
-    ksk.RefreshAllMemberLists(nil)
+  if (not rec and cfg == self.currentid) then
+    self:RefreshAllLists()
+    self:RefreshAllMemberLists()
   end
 
   return false
 end
 
-function ksk.RefreshAllMemberLists(listid, notus)
-  if (not notus) then
-    -- Refresh the list panel's member list (that's us).
-    refresh_member_list(listid)
-  end
+function ksk:RefreshAllMemberLists(listid)
+  -- Refresh the list panel's member list (that's us).
+  refresh_member_list(self, listid)
 
   -- Refresh the loot distribution's member list.
-  ksk.RefreshLootMembers()
+  self:RefreshLootMembers()
+
+  -- Refresh potential user membership display
+  self:RefreshUsersLists()
 end

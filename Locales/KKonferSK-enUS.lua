@@ -473,6 +473,8 @@ L["Edit Officer Ranks"] = true
 L["Set Guild Officer Ranks"] = true
 L["Main Spec Roll"] = true
 L["Off Spec Roll"] = true
+L["Display Alts in Roll List"] = true
+L["Ignore Item Quality"] = true
 
 --
 -- Tooltip text.
@@ -592,6 +594,8 @@ L["TIP094"] = "Send the ordered list of members for the given roll list to the r
 L["TIP095"] = "Set the minimum item level that will be available for bids / rolls. If you set this to a value higher than the master loot threshold, you may want to have all items below this level automatically disenchanted. If so check the option next to this one."
 L["TIP096"] = "If you have the bid item level threshold set and it is set to a level higher than the master loot threshold, enable this option to have all items below the bid threshold automatically sent to the raid disenchanter. If no enchanters are online, items below the bid threshold will be looted to the master looter."
 L["TIP097"] = "Enable this option to have the item automatically sent to a raid enchanter and completely bypass bidding or rolling. If an enchanter is not online, it will be given to the master looter."
+L["TIP097.1"] = "Enable this option to bypass the global item quality filter. Useful if you want to bid on certain special items that may be Uncommon or Rare."
 L["TIP098"] = "Enable this option to have the item automatically sent to the master looter, and completely bypass bidding and rolling."
 L["TIP099"] = "Start typing the name of a user you wish to search for. This can be any part of the user's name. The first user that matches is highlighted and selected."
 L["TIP100"] = "Mark which guild ranks are officer ranks. Only officers will be permitted to broadcast configs to the entire guild."
+L["TIP101"] = "If enabled, show all of a user's alternate characters (alts) indented under the main toon name in the member list. This has the potential to make the member list look a little messy but some people prefer seeing all of a user's characters grouped together. This only affects display, it does not actually change any user records."

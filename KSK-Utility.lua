@@ -7,7 +7,7 @@
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
-   Copyright 2008-2020 James Kean Johnston. All rights reserved.
+   Copyright 2008-2021 James Kean Johnston. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ local HIST_POS = ksk.HIST_POS
 -- Returns true if the user is thought to be a guild master, false
 -- if we cant tell or can tell if they are not.
 --
-function ksk.UserIsRanked (cfg, name)
+function ksk:UserIsRanked(cfg, name)
   if (K.UserIsRanked(name)) then
     return true
   end
@@ -71,7 +71,7 @@ function ksk.UserIsRanked (cfg, name)
     return true
   end
 
-  if (not ksk.frdb.configs[cfg]) then
+  if (not self.frdb.configs[cfg]) then
     return false
   end
 
@@ -82,7 +82,7 @@ function ksk.UserIsRanked (cfg, name)
   local gi = K.guild.roster.name[name]
   local gu = K.guild.roster.id[gi]
   local ri = gu.rank
-  if (strsub(ksk.frdb.configs[cfg].oranks, ri, ri) == "1") then
+  if (strsub(self.frdb.configs[cfg].oranks, ri, ri) == "1") then
     return true
   end
 
@@ -93,17 +93,17 @@ end
 -- If we have tethered alts, and the alt is in the raid, we need to store
 -- the UID of the alt's main, else they will not be suicided.
 --
-function ksk.CreateRaidList(listid)
+function ksk:CreateRaidList(listid)
   local raiders = {}
-  local ll = ksk.cfg.lists[listid]
+  local ll = self.cfg.lists[listid]
   for k,v in ipairs(ll.users) do
-    if (ksk.UserIsReserved(v)) then
+    if (self:UserIsReserved(v)) then
       tinsert(raiders, v)
-    elseif (ksk.users[v]) then
+    elseif (self.users[v]) then
       tinsert(raiders, v)
-    elseif (ll.tethered and ksk.cfg.users[v].alts) then
-      for ak,av in pairs(ksk.cfg.users[v].alts) do
-        if (ksk.users[av]) then
+    elseif (ll.tethered and self.cfg.users[v].alts) then
+      for ak,av in pairs(self.cfg.users[v].alts) do
+        if (self.users[av]) then
           tinsert(raiders, v)
           break
         end
@@ -113,7 +113,7 @@ function ksk.CreateRaidList(listid)
   return raiders
 end
 
-function ksk.SplitRaidList(raidlist)
+function ksk:SplitRaidList(raidlist)
   local raiders = {}
   for w in gmatch(raidlist, "....") do
     tinsert(raiders, w)
@@ -145,18 +145,18 @@ end
 -- suicided is themselves frozen, we simply pretend that they are not, and
 -- move them to the bottom of the list.
 --
-function ksk.SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
-  cfgid = cfgid or ksk.currentid
+function ksk:SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
+  cfgid = cfgid or self.currentid
 
-  if (not ksk.configs[cfgid]) then
+  if (not self.configs[cfgid]) then
     return
   end
 
-  if (not ksk.configs[cfgid].lists[listid]) then
+  if (not self.configs[cfgid].lists[listid]) then
     return
   end
 
-  local wl = ksk.configs[cfgid].lists[listid]
+  local wl = self.configs[cfgid].lists[listid]
   local lu = wl.users
   local found = false
   local movers = {}
@@ -192,7 +192,7 @@ function ksk.SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
         foundfirst = true
       end
       if (foundfirst) then
-        if (lu[i] == uid or not ksk.UserIsFrozen(lu[i], nil, cfgid)) then
+        if (lu[i] == uid or not ksk:UserIsFrozen(lu[i], nil, cfgid)) then
           tinsert(movers, i)
         end
       end
@@ -226,7 +226,7 @@ function ksk.SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
       return
     end
     for i = p+1, #lu do
-      if (not ksk.UserIsFrozen(lu[i], nil, cfgid)) then
+      if (not ksk:UserIsFrozen(lu[i], nil, cfgid)) then
         tinsert(movers, i)
       end
     end
@@ -242,23 +242,41 @@ function ksk.SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
   for i = 1, undo.n do
     undo.movers[i] = lu[movers[i]]
   end
-  if (not ksk.csdata[cfgid].undo) then
-    ksk.csdata[cfgid].undo = {}
+  if (not self.csdata[cfgid].undo) then
+    self.csdata[cfgid].undo = {}
   end
-  tinsert(ksk.csdata[cfgid].undo, 1, undo)
-  if (ksk.AmIML() and cfgid == ksk.currentid) then
-    ksk.qf.undobutton:SetEnabled(true)
+  tinsert(self.csdata[cfgid].undo, 1, undo)
+  if (self:AmIML() and cfgid == self.currentid) then
+    self.qf.undobutton:SetEnabled(true)
   end
   local nmove = undo.n - 1
   for i = 1, nmove do
     lu[movers[i]] = lu[movers[i+1]]
   end
   lu[movers[nmove+1]] = uid
-  ksk.RefreshAllMemberLists()
+  self:RefreshAllMemberLists()
 end
 
-function ksk.AddEvent(cfgid, event, estr, ufn)
-  local cfgid = cfgid or ksk.currentid
+local function get_event_id(this, cfg)
+  local cfg = cfg or this.currentid
+
+  if (not ts_datebase or ts_evtcount >= 9999) then
+    local now = K.time()
+    ts_datebase = tonumber(date("%y%m%d%H%M", now) .. "0000")
+    ts_evtcount = 0
+    while ((ts_datebase + ts_evtcount) < (this.configs[cfg].lastevent or 0)) do
+      ts_evtcount = ts_evtcount + 100
+    end
+  end
+
+  ts_evtcount = ts_evtcount + 1
+  this.configs[cfg].lastevent = ts_datebase + ts_evtcount
+
+  return this.configs[cfg].lastevent
+end
+
+function ksk:AddEvent(cfgid, event, estr, ufn)
+  local cfgid = cfgid or self.currentid
 
   --
   -- If I am an admin, but not the owner, and I am not syncing yet, do
@@ -266,14 +284,14 @@ function ksk.AddEvent(cfgid, event, estr, ufn)
   -- and other users cant sync with us until we have established a sync
   -- relationship.
   --
-  local myuid = ksk.csdata[cfgid].myuid
-  local ov = ksk.csdata[cfgid].is_admin
+  local myuid = self.csdata[cfgid].myuid
+  local ov = self.csdata[cfgid].is_admin
 
-  if (ov == 1 and not ksk.configs[cfgid].syncing) then
+  if (ov == 1 and not self.configs[cfgid].syncing) then
     return
   end
 
-  local cfg = ksk.configs[cfgid]
+  local cfg = self.configs[cfgid]
 
   --
   -- This event will change our config checksum. We need to get the CRC for
@@ -288,12 +306,12 @@ function ksk.AddEvent(cfgid, event, estr, ufn)
   local oldsum = cfg.cksum
   local newsum = bxor(oldsum, crc)
   local oldeid = cfg.lastevent
-  local eid = ksk.GetEventID(cfgid)
+  local eid = get_event_id(self, cfgid)
   local scrc = strfmt("0x%s", K.hexstr(crc))
 
   cfg.cksum = newsum
-  if (ksk.qf.synctopbar) then
-    ksk.qf.synctopbar:SetCurrentCRC()
+  if (self.qf.synctopbar) then
+    self.qf.synctopbar:SetCurrentCRC()
   end
 
   if (cfg.syncing) then
@@ -310,7 +328,7 @@ function ksk.AddEvent(cfgid, event, estr, ufn)
   ksk:CSendAM(cfgid, event, "ALERT", estr, scrc, eid, oldeid, ufn or false)
 end
 
-function ksk.RepairDatabases(users, lists)
+function ksk:RepairDatabases(users, lists)
   if (users == nil) then
     users = true
   end
@@ -321,9 +339,9 @@ function ksk.RepairDatabases(users, lists)
   -- Repair config list count. Also remove sync data added for the admin by
   -- themselves. This means they have co-admins badly configured and they
   -- have an alt on the same account that has written sync data.
-  ksk.frdb.nconfigs = 0
-  for k,v in pairs(ksk.frdb.configs) do
-    ksk.frdb.nconfigs = ksk.frdb.nconfigs + 1
+  self.frdb.nconfigs = 0
+  for k,v in pairs(self.frdb.configs) do
+    self.frdb.nconfigs = self.frdb.nconfigs + 1
     local to = v.owner
     if (v.admins[to]) then
       if (v.admins[to].sync) then
@@ -333,11 +351,11 @@ function ksk.RepairDatabases(users, lists)
   end
 
   if (users) then
-    for k,v in pairs(ksk.frdb.configs) do
+    for k,v in pairs(self.frdb.configs) do
       -- First remove any alts whose main was removed
       for uk, uv in pairs(v.users) do
         if (uv.main and not v.users[uv.main]) then
-          ksk.DeleteUser(uk, k, false, true)
+          self:DeleteUser(uk, k, false, true)
         end
       end
       -- Now calculate the correct number of users
@@ -349,7 +367,7 @@ function ksk.RepairDatabases(users, lists)
   end
 
   if (lists) then
-    for k,v in pairs(ksk.frdb.configs) do
+    for k,v in pairs(self.frdb.configs) do
       v.nlists = 0
       for lk,lv in pairs(v.lists) do
         v.nlists = v.nlists + 1
@@ -390,21 +408,21 @@ function ksk.RepairDatabases(users, lists)
   end
 end
 
-function ksk.UpdateDatabaseVersion()
+function ksk:UpdateDatabaseVersion()
   local ret = false
 
-  if (not ksk.frdb.dbversion) then
-    ksk.frdb.dbversion = ksk.dbversion
+  if (not self.frdb.dbversion) then
+    self.frdb.dbversion = self.dbversion
     return ret
   end
 
-  if (ksk.frdb.dbversion == 1) then
+  if (self.frdb.dbversion == 1) then
     --
     -- Version 2 removed the "guild" config type. Find all such configs
     -- and remove the cfgtype from the config. We also changed the storage
     -- format of the history items.
     --
-    for k,v in pairs(ksk.frdb.configs) do
+    for k,v in pairs(self.frdb.configs) do
       local newhist = {}
       for kk,vv in pairs(v.history) do
         local when,what,who,how = strsplit("\7", vv)
@@ -431,16 +449,16 @@ function ksk.UpdateDatabaseVersion()
     end
 
     ret = true
-    ksk.frdb.dbversion = 2
+    self.frdb.dbversion = 2
   end
 
-  if (ksk.frdb.dbversion == 2) then
+  if (self.frdb.dbversion == 2) then
     --
     -- Version 3 added back the config type. We sneakily changed the version 1
     -- mod code above to not remove it. So if we have a value we leave it alone
     -- otherwise we have to add it back and we default to a PUG config.
     --
-    for k,v in pairs(ksk.frdb.configs) do
+    for k,v in pairs(self.frdb.configs) do
       if (v.cfgtype == nil) then
         v.cfgtype = KK.CFGTYPE_PUG
       end
@@ -459,17 +477,17 @@ function ksk.UpdateDatabaseVersion()
     end
 
     ret = true
-    ksk.frdb.dbversion = 3
+    self.frdb.dbversion = 3
   end
 
-  if (ksk.frdb.dbversion == 3) then
+  if (self.frdb.dbversion == 3) then
     --
     -- Version 4 made alts being tethered to mains a list option not a global
     -- one. So pick up the current setting and change all of the lists. If
     -- we are the owner of a config also send out CHLST events with the new
     -- setting so that all admins have the same value.
     --
-    for k,v in pairs(ksk.frdb.configs) do
+    for k,v in pairs(self.frdb.configs) do
       for kk,vv in pairs(v.lists) do
         vv.tethered = v.tethered
       end
@@ -477,25 +495,35 @@ function ksk.UpdateDatabaseVersion()
     end
 
     ret = true
-    ksk.frdb.dbversion = 4
+    self.frdb.dbversion = 4
   end
 
-  if (ksk.frdb.dbversion == 4) then
+  if (self.frdb.dbversion == 4) then
     --
     -- Version 5 added the list position to the loot history if the user
     -- suicided on a list.
     --
-    for k,v in pairs(ksk.frdb.configs) do
+    for k,v in pairs(self.frdb.configs) do
       for kk,vv in pairs(v.history) do
         vv[HIST_POS] = 0
       end
     end
   end
 
+  if (self.frdb.dbversion == 5) then
+    --
+    -- Version 6 added the alt display option to lists.
+    --
+    for k,v in pairs(self.frdb.configs) do
+      for kk,vv in pairs(v.lists) do
+        vv.altdisp = true
+      end
+    end
+  end
   --
   -- Fix a potential error with co-admins
   --
-  for k,v in pairs(ksk.frdb.configs) do
+  for k,v in pairs(self.frdb.configs) do
     for kk,vv in pairs(v.admins) do
       if (vv.active == true) then
         if (vv.lastevent == nil) then
@@ -506,10 +534,10 @@ function ksk.UpdateDatabaseVersion()
   end
 
   -- Somehow, tempcfg survives an initial broadcast.
-  if (ksk.frdb.defconfig ~= "1") then
-    ksk.frdb.tempcfg = nil
+  if (self.frdb.defconfig ~= "1") then
+    self.frdb.tempcfg = nil
   end
 
-  ksk.frdb.dbversion = ksk.dbversion
+  self.frdb.dbversion = self.dbversion
   return ret
 end

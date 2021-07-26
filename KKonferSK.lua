@@ -142,10 +142,10 @@ ksk.protocol = 8
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
--- KSK-Utility.lua (ksk.UpdateDatabaseVersion()) will update older databases
+-- KSK-Utility.lua (ksk:UpdateDatabaseVersion()) will update older databases
 -- dating all the way back to version 1. Once a database version has been
 -- upgraded it cannot be reverted.
-ksk.dbversion = 5
+ksk.dbversion = 6
 
 -- Whether or not KSK has been fully initialised. This can take a while as
 -- certain bits of information are not immediately available on login.
@@ -232,14 +232,10 @@ ksk.missing = {}
 -- indexed by config id.
 ksk.csdata = {}
 
--- Convenience alias for ksk.csdata[ksk.currentid]. Can never be nil once
--- initialisation has completed.
-ksk.csd = nil
-
 -- The sorted list of lists. This is almost never nil, even if the config has
 -- no defined lists (it will just be an empty table). When not empty it
 -- contains the sorted list of lists for the current config. It is refreshed
--- when the lists UI is refreshed by ksk.RefreshListsUI().
+-- when the lists UI is refreshed by ksk:RefreshListsUI().
 ksk.sortedlists = nil
 
 -- Set to true if the main KSK window was automatically opened.
@@ -338,13 +334,13 @@ local white = K.white
 local class = KRP.ClassString 
 
 -- cfg is known to be valid before this is called
-local function get_my_ids(cfg)
-  local uid = ksk.FindUser(K.player.name, cfg)
+local function get_my_ids(this, cfg)
+  local uid = this:FindUser(K.player.name, cfg)
   if (not uid) then
     return nil, nil
   end
 
-  local ia, main = ksk.UserIsAlt(uid, nil, cfg)
+  local ia, main = this:UserIsAlt(uid, nil, cfg)
   if (ia) then
     return uid, main
   else
@@ -352,70 +348,203 @@ local function get_my_ids(cfg)
   end
 end
 
-function ksk.UpdateUserSecurity(conf)
-  local conf = conf or ksk.currentid
+local function extract_cmd(msg)
+  local lm = strlower(msg)
+  lm = lm:gsub("^%s*", "")
+  lm = lm:gsub("%s*$", "")
 
-  if (not conf or not ksk.frdb or not ksk.frdb.configs
-      or not ksk.frdb.configs[conf] or not ksk.csdata
-      or not ksk.csdata[conf]) then
+  if ((lm == L["WHISPERCMD_BID"]) or
+      (lm == L["WHISPERCMD_RETRACT"]) or
+      (lm == L["WHISPERCMD_SUICIDE"]) or
+      (lm == L["WHISPERCMD_SUICIDE_ALTERNATE"]) or
+      (lm == L["WHISPERCMD_STANDBY"]) or
+      (lm == L["WHISPERCMD_HELP"]) or
+      (lm == "bid") or (lm == "retract") or (lm == "suicide") or
+      (lm == "position") or (lm == "standby") or (lm == "help")) then
+    return lm
+  end
+end
+
+local function whisper_filter(self, evt, msg, ...)
+  if (extract_cmd(msg)) then
+    return true
+  end
+end
+
+local titlematch = "^" .. L["MODTITLE"] .. ": "
+local abbrevmatch = "^" .. L["MODABBREV"] .. ": "
+
+local function reply_filter(self, evt, msg, snd, ...)
+  local sender = K.CanonicalName(snd, nil)
+  if (strmatch(msg, titlematch)) then
+    if (evt == "CHAT_MSG_WHISPER_INFORM") then
+      return true
+    elseif (sender == K.player.name) then
+      return true
+    end
+  end
+  if (strmatch(msg, abbrevmatch)) then
+    if (evt == "CHAT_MSG_WHISPER_INFORM") then
+      return true
+    elseif (sender == K.player.name) then
+      return true
+    end
+  end
+end
+
+local function chat_msg_whisper(evt, msg, snd, ...)
+  local sender = K.CanonicalName(snd, nil)
+  local cmd = extract_cmd(msg)
+  if (cmd) then
+    if (cmd == "bid" or cmd == L["WHISPERCMD_BID"]) then
+      return ksk:NewBidder(sender)
+    elseif (cmd == "retract" or cmd == L["WHISPERCMD_RETRACT"]) then
+      return ksk:RetractBidder(sender)
+    elseif (cmd == "suicide" or cmd == L["WHISPERCMD_SUICIDE"] or cmd == L["WHISPERCMD_SUICIDE_ALTERNATE"]) then
+      local uid = ksk:FindUser(sender)
+      if (not uid) then
+        ksk:SendWhisper(strfmt(L["%s: you are not on any roll lists (yet)."], L["MODABBREV"]), sender)
+        return
+      end
+      local sentheader = false
+      local ndone = 0
+      for k,v in pairs(ksk.sortedlists) do
+        local lp = ksk.cfg.lists[v.id]
+        local apos, rpos = get_user_pos(uid, lp)
+        if (apos) then
+          ndone = ndone + 1
+          if (not sentheader) then
+            ksk:SendWhisper(strfmt(L["LISTPOSMSG"], L["MODABBREV"], ksk.cfg.name, L["MODTITLE"]), sender)
+            sentheader = true
+          end
+          if (ksk.users) then
+            ksk:SendWhisper(strfmt(L["%s: %s - #%d (#%d in raid)"], L["MODABBREV"], lp.name, apos, rpos), sender)
+          else
+            ksk:SendWhisper(strfmt("%s: %s - #%d", L["MODABBREV"], lp.name, apos), sender)
+          end
+        end
+      end
+      if (ndone > 0) then
+        ksk:SendWhisper(strfmt(L["%s: (End of list)"], L["MODABBREV"]), sender)
+      else
+        ksk:SendWhisper(strfmt(L["%s: you are not on any roll lists (yet)."], L["MODABBREV"]), sender)
+      end
+    elseif (cmd == "help" or cmd == L["WHISPERCMD_HELP"]) then
+      ksk:SendWhisper(strfmt(L["HELPMSG1"], L["MODABBREV"], L["MODTITLE"], L["MODABBREV"]), sender)
+      ksk:SendWhisper(strfmt(L["HELPMSG2"], L["MODABBREV"], L["WHISPERCMD_BID"]), sender)
+      ksk:SendWhisper(strfmt(L["HELPMSG3"], L["MODABBREV"], L["WHISPERCMD_RETRACT"]), sender)
+      ksk:SendWhisper(strfmt(L["HELPMSG4"], L["MODABBREV"], L["WHISPERCMD_SUICIDE"]), sender)
+      ksk:SendWhisper(strfmt(L["HELPMSG5"], L["MODABBREV"], L["WHISPERCMD_STANDBY"]), sender)
+    end
+  end
+end
+
+--
+-- Fired whenever our admin status for the currently selected config changes,
+-- or when we refresh due to a config change or other events. This registers
+-- messages that only an admin cares about.
+--
+local function config_admin(self)
+  local onoff = self.csdata[self.currentid].is_admin ~= nil and true or false
+  if (onoff and admin_hooks_registered ~= true) then
+    admin_hooks_registered = true
+    self:RegisterEvent("CHAT_MSG_WHISPER", chat_msg_whisper)
+  elseif (not onoff and admin_hooks_registered == true) then
+    admin_hooks_registered = false
+    self:UnregisterEvent("CHAT_MSG_WHISPER")
+  end
+
+  local ef = nil
+
+  if (onoff) then
+    if (chat_filters_installed ~= true) then
+      if (self.cfg.settings.chat_filter) then
+        chat_filters_installed = true
+        ef = ChatFrame_AddMessageEventFilter
+      end
+    end
+  end
+
+  if (not onoff or not self.cfg.settings.chat_filter) then
+    if (chat_filters_installed) then
+      chat_filters_installed = nil
+      ef = ChatFrame_RemoveMessageEventFilter
+    end
+  end
+
+  if (ef) then
+    ef("CHAT_MSG_WHISPER", whisper_filter)
+    ef("CHAT_MSG_WHISPER_INFORM", reply_filter)
+    ef("CHAT_MSG_RAID", reply_filter)
+    ef("CHAT_MSG_GUILD", reply_filter)
+    ef("CHAT_MSG_RAID_LEADER", reply_filter)
+  end
+end
+
+function ksk:UpdateUserSecurity(conf)
+  local conf = conf or self.currentid
+
+  if (not conf or not self.frdb or not self.frdb.configs
+      or not self.frdb.configs[conf] or not self.csdata
+      or not self.csdata[conf]) then
     return false
   end
 
-  local csd = ksk.csdata[conf]
-  local cfg = ksk.frdb.configs[conf]
+  local csd = self.csdata[conf]
+  local cfg = self.frdb.configs[conf]
 
-  csd.myuid, csd.mymainid = get_my_ids(conf)
+  csd.myuid, csd.mymainid = get_my_ids(self, conf)
   csd.is_admin = nil
   if (csd.myuid) then
     if (cfg.owner == csd.myuid or cfg.owner == csd.mymainid) then
       csd.is_admin = 2
-    elseif (ksk.UserIsCoadmin(csd.myuid, conf)) then
+    elseif (self:UserIsCoadmin(csd.myuid, conf)) then
       csd.is_admin = 1
-    elseif (ksk.UserIsCoadmin(csd.mymainid, conf)) then
+    elseif (self:UserIsCoadmin(csd.mymainid, conf)) then
       csd.is_admin = 1
     end
   end
 
-  if (ksk.initialised and conf == ksk.currentid) then
-    ksk.ConfigAdmin(csd.is_admin ~= nil and true or false)
+  if (self.initialised and conf == self.currentid) then
+    config_admin(self)
   end
 
   return true
 end
 
-function ksk.AmIML()
-  if (KRP.is_ml and ksk.csd.is_admin) then
+function ksk:AmIML()
+  if (KRP.is_ml and self.csdata[self.currentid].is_admin) then
     return true
   end
   return false
 end
 
-function ksk.IsAdmin(uid, cfg)
-  local cfg = cfg or ksk.currentid
+function ksk:IsAdmin(uid, cfg)
+  local cfg = cfg or self.currentid
 
-  if (not cfg or not ksk.configs or not ksk.configs[cfg]) then
+  if (not cfg or not self.frdb.configs or not self.frdb.configs[cfg]) then
     return nil, nil
   end
 
-  local uid = uid or ksk.FindUser(K.player.name, cfg)
+  local uid = uid or self:FindUser(K.player.name, cfg)
 
   if (not uid) then
     return nil, nil
   end
 
-  if (ksk.configs[cfg].owner == uid) then
+  if (self.frdb.configs[cfg].owner == uid) then
     return 2, uid
   end
-  if (ksk.UserIsCoadmin(uid, cfg)) then
+  if (self:UserIsCoadmin(uid, cfg)) then
     return 1, uid
   end
 
-  local isalt, main = ksk.UserIsAlt(uid, nil, cfg)
+  local isalt, main = self:UserIsAlt(uid, nil, cfg)
   if (isalt) then
-    if (ksk.configs[cfg].owner == main) then
+    if (self.configs[cfg].owner == main) then
       return 2, main
     end
-    if (ksk.UserIsCoadmin(main, cfg)) then
+    if (self:UserIsCoadmin(main, cfg)) then
       return 1, main
     end
   end
@@ -424,24 +553,6 @@ end
 
 local ts_datebase = nil
 local ts_evtcount = 0
-
-function ksk.GetEventID(cfg)
-  local cfg = cfg or ksk.currentid
-
-  if (not ts_datebase or ts_evtcount >= 9999) then
-    local now = K.time()
-    ts_datebase = tonumber(date("%y%m%d%H%M", now) .. "0000")
-    ts_evtcount = 0
-    while ((ts_datebase + ts_evtcount) < (ksk.configs[cfg].lastevent or 0)) do
-      ts_evtcount = ts_evtcount + 100
-    end
-  end
-
-  ts_evtcount = ts_evtcount + 1
-  ksk.configs[cfg].lastevent = ts_datebase + ts_evtcount
-
-  return ksk.configs[cfg].lastevent
-end
 
 local function check_config()
   if (ksk.frdb.tempcfg) then
@@ -510,7 +621,7 @@ local function ksk_usage()
 end
 
 local function common_verify_input(input, cmd, exist, bypass, tbl, nexmsg, exmsg)
-  if (not bypass and ksk.CheckPerm()) then
+  if (not bypass and ksk:CheckPerm()) then
     return true
   end
 
@@ -565,7 +676,7 @@ local function common_verify_input(input, cmd, exist, bypass, tbl, nexmsg, exmsg
 end
 
 local function common_verify_input2(input, cmd, exist, bypass, tbl, nexmsg, exmsg)
-  if (not bypass and ksk.CheckPerm()) then
+  if (not bypass and ksk:CheckPerm()) then
     return true
   end
 
@@ -646,7 +757,7 @@ local function ksk_createconfig(input)
     return true
   end
 
-  return ksk.CreateNewConfig(nname, false)
+  return ksk:CreateNewConfig(nname, false)
 end
 
 local function ksk_selectconfig(input)
@@ -659,7 +770,7 @@ local function ksk_selectconfig(input)
     return true
   end
 
-  ksk.SetDefaultConfig(cfgid)
+  ksk:SetDefaultConfig(cfgid)
   return false
 end
 
@@ -673,7 +784,7 @@ local function ksk_deleteconfig(input)
     return true
   end
 
-  ksk.DeleteConfig(cfgid)
+  ksk:DeleteConfig(cfgid)
   return false
 end
 
@@ -688,7 +799,7 @@ local function ksk_renameconfig(input)
     return true
   end
 
-  return ksk.RenameConfig(cfgid, newname)
+  return ksk:RenameConfig(cfgid, newname)
 end
 
 local function ksk_copyconfig(input)
@@ -702,11 +813,11 @@ local function ksk_copyconfig(input)
     return true
   end
 
-  return ksk.CopyConfigSpace(cfgid, newname, newid)
+  return ksk:CopyConfigSpace(cfgid, newname, newid)
 end
 
 local function ksk_createuser(input)
-  if (ksk.CheckPerm()) then
+  if (ksk:CheckPerm()) then
     return true
   end
 
@@ -753,7 +864,7 @@ local function ksk_createuser(input)
     return true
   end
 
-  if (not ksk.CreateNewUser(nname, classid)) then
+  if (not ksk:CreateNewUser(nname, classid)) then
     return true
   end
   return false
@@ -768,7 +879,7 @@ local function ksk_deleteuser(input)
     return true
   end
 
-  if (not ksk.DeleteUserCmd(userid)) then
+  if (not ksk:DeleteUserCmd(userid)) then
     return true
   end
   return false
@@ -789,11 +900,11 @@ local function ksk_renameuser(input)
     return true
   end
 
-  return ksk.RenameUser(userid, newname)
+  return ksk:RenameUser(userid, newname)
 end
 
 local function ksk_config(input)
-  if (ksk.CheckPerm()) then
+  if (ksk:CheckPerm()) then
     return true
   end
   local tab = ksk.CONFIG_TAB
@@ -832,7 +943,7 @@ local function ksk_main()
 end
 
 local function ksk_users()
-  if (ksk.CheckPerm()) then
+  if (ksk:CheckPerm()) then
     return true
   end
 
@@ -841,11 +952,11 @@ local function ksk_users()
 end
 
 local function ksk_importgusers()
-  if (ksk.CheckPerm()) then
+  if (ksk:CheckPerm()) then
     return true
   end
 
-  ksk.ImportGuildUsers(ksk.mainwin:IsShown())
+  ksk:ImportGuildUsers(ksk.mainwin:IsShown())
 end
 
 local function ksk_show()
@@ -862,7 +973,7 @@ local function ksk_createlist(input)
     return true
   end
 
-  return ksk.CreateNewList(nname)
+  return ksk:CreateNewList(nname, ksk.currentid)
 end
 
 local function ksk_selectlist(input)
@@ -875,7 +986,7 @@ local function ksk_selectlist(input)
     return true
   end
 
-  ksk.SelectList(listid)
+  ksk:SelectList(listid)
   return false
 end
 
@@ -889,7 +1000,7 @@ local function ksk_deletelist(input)
     return true
   end
 
-  ksk.DeleteListCmd(listid)
+  ksk:DeleteListCmd(listid)
   return false
 end
 
@@ -904,7 +1015,7 @@ local function ksk_renamelist(input)
     return true
   end
 
-  return ksk.RenameList(listid, newname)
+  return ksk:RenameList(listid, newname)
 end
 
 local function ksk_copylist(input)
@@ -918,7 +1029,7 @@ local function ksk_copylist(input)
     return true
   end
 
-  return ksk.CopyList(listid, newname, ksk.currentid)
+  return ksk:CopyList(listid, newname, ksk.currentid)
 end
 
 local function ksk_loot(input)
@@ -927,12 +1038,12 @@ local function ksk_loot(input)
   if (input == L["SUBCMD_ASSIGN"] or input == "" or not input) then
     subpanel = ksk.LOOT_ASSIGN_PAGE
   elseif (input == L["SUBCMD_ITEMS"]) then
-    if (ksk.CheckPerm()) then
+    if (ksk:CheckPerm()) then
       return true
     end
     subpanel = ksk.LOOT_ITEMS_PAGE
   elseif (input == L["SUBCMD_HISTORY"]) then
-    if (ksk.CheckPerm()) then
+    if (ksk:CheckPerm()) then
       return true
     end
     subpanel = ksk.LOOT_HISTORY_PAGE
@@ -954,7 +1065,7 @@ local function ksk_lists(input)
 end
 
 local function ksk_sync(input)
-  if (ksk.CheckPerm()) then
+  if (ksk:CheckPerm()) then
     return true
   end
 
@@ -963,7 +1074,7 @@ local function ksk_sync(input)
 end
 
 local function ksk_items(input)
-  if (ksk.CheckPerm()) then
+  if (ksk:CheckPerm()) then
     return true
   end
 
@@ -972,7 +1083,7 @@ local function ksk_items(input)
 end
 
 local function ksk_history(input)
-  if (ksk.CheckPerm()) then
+  if (ksk:CheckPerm()) then
     return true
   end
 
@@ -981,7 +1092,7 @@ local function ksk_history(input)
 end
 
 local function ksk_additem(input)
-  if (ksk.CheckPerm()) then
+  if (ksk:CheckPerm()) then
     return true
   end
 
@@ -1014,15 +1125,15 @@ local function ksk_additem(input)
     return true
   end
 
-  ksk.AddItem(itemid, ilink)
+  ksk:AddItem(itemid, ilink)
 end
 
 local function ksk_addloot(input)
-  if (ksk.CheckPerm()) then
+  if (ksk:CheckPerm()) then
     return true
   end
 
-  if (not ksk.AmIML()) then
+  if (not ksk:AmIML()) then
     err(L["can only add items when in a raid and you are the master looter."])
     return true
   end
@@ -1051,7 +1162,7 @@ local function ksk_addloot(input)
     return true
   end
 
-  ksk.AddLoot(ilink)
+  ksk:AddLoot(ilink)
 end
 
 local function ksk_test(input)
@@ -1199,45 +1310,44 @@ function ksk:OnSlashCommand(input)
 end
 
 --
--- Function: ksk.RefreshCSData()
+-- Function: ksk:RefreshCSData()
 -- Purpose : Re-calculate session temporary config values based on the
 --           current stored values in each config.
 -- Returns : Nothing.
 --
-function ksk.RefreshCSData()
-  if (not ksk.configs) then
+function ksk:RefreshCSData()
+  if (not self.configs) then
     return
   end
 
-  for k,v in pairs(ksk.configs) do
-    if (not ksk.csdata[k]) then
-      ksk.csdata[k] = {}
-      ksk.csdata[k].reserved = {}
+  for k,v in pairs(self.configs) do
+    if (not self.csdata[k]) then
+      self.csdata[k] = {}
+      self.csdata[k].reserved = {}
     end
-    ksk.UpdateUserSecurity(k)
+    self:UpdateUserSecurity(k)
   end
 
-  for k,v in pairs(ksk.csdata) do
-    if (not ksk.configs[k]) then
-      ksk.csdata[k] = nil
+  for k,v in pairs(self.csdata) do
+    if (not self.configs[k]) then
+      self.csdata[k] = nil
     end
   end
 
-  if (ksk.currentid) then
-    ksk.csd = ksk.csdata[ksk.currentid]
-    ksk.ConfigAdmin(ksk.csd.is_admin ~= nil and true or false)
+  if (self.currentid) then
+    config_admin(self)
   end
 end
 
-function ksk.CheckPerm(cfg)
-  local cfg = cfg or ksk.currentid
+function ksk:CheckPerm(cfg)
+  local cfg = cfg or self.currentid
 
-  if (not cfg or not ksk.configs or not ksk.configs[cfg]
-      or not ksk.csdata[cfg]) then
+  if (not cfg or not self.configs or not self.configs[cfg]
+      or not self.csdata[cfg]) then
     return true
   end
 
-  if (not ksk.csdata[cfg].is_admin) then
+  if (not self.csdata[cfg].is_admin) then
     err(L["you do not have permission to do that in this configuration."])
     return true
   end
@@ -1245,7 +1355,7 @@ function ksk.CheckPerm(cfg)
   return false
 end
 
-function ksk.CanChangeConfigType()
+function ksk:CanChangeConfigType()
   if (K.player.is_guilded == false) then
     return false
   else
@@ -1260,13 +1370,13 @@ function ksk.CanChangeConfigType()
 end
 
 local function update_bcast_button()
-  ksk.UpdateUserSecurity()
-  if (ksk.csd.is_admin) then
+  ksk:UpdateUserSecurity()
+  if (ksk.csdata[ksk.currentid].is_admin) then
     if (ksk.cfg.cfgtype == KK.CFGTYPE_GUILD) then
       ksk.qf.bcastbutton:SetEnabled(true)
       return
-    elseif (ksk.AmIML() or KRP.is_aorl or KRP.is_pl or
-      ksk.UserIsRanked(ksk.currentid, K.player.name)) then
+    elseif (ksk:AmIML() or KRP.is_aorl or KRP.is_pl or
+      ksk:UserIsRanked(ksk.currentid, K.player.name)) then
       ksk.qf.bcastbutton:SetEnabled(true)
       return
     end
@@ -1274,83 +1384,79 @@ local function update_bcast_button()
   ksk.qf.bcastbutton:SetEnabled(false)
 end
 
-function ksk.MakeAliases()
-  ksk.frdb = ksk.db.factionrealm
-  ksk.configs = ksk.db.factionrealm.configs
+function ksk:MakeAliases()
+  self.frdb = self.db.factionrealm
+  self.configs = self.db.factionrealm.configs
 
-  if (ksk.currentid) then
-    ksk.cfg = ksk.db.factionrealm.configs[ksk.currentid]
+  if (self.currentid) then
+    self.cfg = self.db.factionrealm.configs[self.currentid]
   else
-    ksk.cfg = nil
+    self.cfg = nil
   end
 end
 
-function ksk.FullRefreshUI(reset)
-  ksk.RefreshConfigUI(reset)
-  ksk.RefreshListsUI(reset)
-  ksk.RefreshLootUI(reset)
-  ksk.RefreshUsersUI(reset)
-  ksk.RefreshSyncUI(reset)
+function ksk:FullRefreshUI(reset)
+  self:RefreshConfigUI(reset)
+  self:RefreshListsUI(reset)
+  self:RefreshLootUI(reset)
+  self:RefreshUsersUI(reset)
+  self:RefreshSyncUI(reset)
 end
 
-function ksk.FullRefresh(reset)
+function ksk:FullRefresh(reset)
   K.UpdatePlayerAndGuild(true)
-  ksk.UpdateUserSecurity()
-  ksk.RefreshCSData()
-  ksk.FullRefreshUI(reset)
+  self:UpdateUserSecurity()
+  self:RefreshCSData()
+  self:FullRefreshUI(reset)
   KRP.UpdateGroup(true, true, false)
 
   -- JKJ FIXME: this logic should move into the refresh functions above.
   local en = true
-  local kct = ksk.mainwin.currenttab
-  local kmt = ksk.mainwin.tabs
+  local kct = self.mainwin.currenttab
+  local kmt = self.mainwin.tabs
 
-  if (not ksk.csd.is_admin) then
+  if (not self.csdata[self.currentid].is_admin) then
     en = false
-    if ((kct >= ksk.NON_ADMIN_THRESHOLD) or
-        (kct == ksk.LISTS_TAB and kmt[ksk.LISTS_TAB].currenttab > ksk.LISTS_MEMBERS_PAGE) or
-        (kct == ksk.LOOT_TAB and kmt[ksk.LOOT_TAB].currenttab > ksk.LOOT_ASSIGN_PAGE))
+    if ((kct >= self.NON_ADMIN_THRESHOLD) or
+        (kct == self.LISTS_TAB and kmt[self.LISTS_TAB].currenttab > self.LISTS_MEMBERS_PAGE) or
+        (kct == self.LOOT_TAB and kmt[self.LOOT_TAB].currenttab > self.LOOT_ASSIGN_PAGE))
     then
-      ksk.mainwin:SetTab(ksk.LOOT_TAB, ksk.LOOT_ASSIGN_PAGE)
-      ksk.mainwin:SetTab(ksk.LISTS_TAB, ksk.LISTS_MEMBERS_PAGE)
+      self.mainwin:SetTab(self.LOOT_TAB, self.LOOT_ASSIGN_PAGE)
+      self.mainwin:SetTab(self.LISTS_TAB, self.LISTS_MEMBERS_PAGE)
     end
   end
 
-  ksk.qf.userstab:SetShown(en)
-  ksk.qf.synctab:SetShown(en)
-  ksk.qf.configtab:SetShown(en)
-  ksk.qf.iedittab:SetShown(en)
-  ksk.qf.historytab:SetShown(en)
-  ksk.qf.listcfgtab:SetShown(en)
+  self.qf.userstab:SetShown(en)
+  self.qf.synctab:SetShown(en)
+  self.qf.configtab:SetShown(en)
+  self.qf.iedittab:SetShown(en)
+  self.qf.historytab:SetShown(en)
+  self.qf.listcfgtab:SetShown(en)
 
-  if (ksk.cfg.cfgtype == KK.CFGTYPE_PUG) then
-    en = (KRP.is_aorl or KRP.is_pl) and ksk.csd.is_admin
+  if (self.cfg.cfgtype == KK.CFGTYPE_PUG) then
+    en = (KRP.is_aorl or KRP.is_pl) and self.csdata[self.currentid].is_admin
   end
-  ksk.qf.bcastbutton:SetEnabled(en)
+  self.qf.bcastbutton:SetEnabled(en)
 
   -- Only the config owner can see most of the config tab
   en = false
-  if (ksk.csd.is_admin ~= 2) then
-    if (kct == ksk.CONFIG_TAB and kmt[ksk.CONFIG_TAB].currenttab > ksk.NON_ADMIN_CONFIG_THRESHOLD) then
-      ksk.mainwin:SetTab(ksk.CONFIG_TAB, ksk.CONFIG_LOOT_PAGE)
+  if (self.csdata[self.currentid].is_admin ~= 2) then
+    if (kct == self.CONFIG_TAB and kmt[self.CONFIG_TAB].currenttab > self.NON_ADMIN_CONFIG_THRESHOLD) then
+      self.mainwin:SetTab(self.CONFIG_TAB, self.CONFIG_LOOT_PAGE)
     end
   else
     en = true
   end
-  ksk.qf.cfgadmintab:SetShown(en)
-
-  if (reset) then
-    ksk.SelectListByIdx(1)
-  end
+  self.qf.cfgadmintab:SetShown(en)
 end
 
 local function player_info_updated(evt, ...)
   if (ksk.initialised) then
-    ksk.UpdateUserSecurity()
+    ksk:UpdateUserSecurity()
   end
 
   RequestRaidInfo()
-  ksk.FullRefreshUI(false)
+  ksk:FullRefreshUI(false)
 end
 
 local function guild_info_updated(evt, ...)
@@ -1381,15 +1487,15 @@ local function guild_info_updated(evt, ...)
   ksk.qf.itemrankdd:UpdateItems (rvals)
   ksk.qf.itemrankdd:SetValue (oldr)
 
-  ksk.qf.cfgtype:SetEnabled(ksk.UserIsRanked(ksk.currentid, K.player.name))
+  ksk.qf.cfgtype:SetEnabled(ksk:UserIsRanked(ksk.currentid, K.player.name))
 end
 
-function ksk.RefreshRaid()
+function ksk:RefreshRaid()
   KRP.UpdateGroup(true, true, false)
 end
 
-function ksk.AddItemToBossLoot(ilink, quant, lootslot)
-  ksk.bossloot = ksk.bossloot or {}
+function ksk:AddItemToBossLoot(ilink, quant, lootslot)
+  self.bossloot = self.bossloot or {}
 
   local lootslot = lootslot or 0
   local itemid = match(ilink, "item:(%d+)")
@@ -1426,51 +1532,7 @@ function ksk.AddItemToBossLoot(ilink, quant, lootslot)
     ti.strict = filt
     ti.relaxed = filt
   end
-  tinsert(ksk.bossloot, ti)
-end
-
-local function extract_cmd(msg)
-  local lm = strlower(msg)
-  lm = lm:gsub("^%s*", "")
-  lm = lm:gsub("%s*$", "")
-
-  if ((lm == L["WHISPERCMD_BID"]) or
-      (lm == L["WHISPERCMD_RETRACT"]) or
-      (lm == L["WHISPERCMD_SUICIDE"]) or
-      (lm == L["WHISPERCMD_SUICIDE_ALTERNATE"]) or
-      (lm == L["WHISPERCMD_STANDBY"]) or
-      (lm == L["WHISPERCMD_HELP"]) or
-      (lm == "bid") or (lm == "retract") or (lm == "suicide") or
-      (lm == "position") or (lm == "standby") or (lm == "help")) then
-    return lm
-  end
-end
-
-local function whisper_filter(self, evt, msg, ...)
-  if (extract_cmd(msg)) then
-    return true
-  end
-end
-
-local titlematch = "^" .. L["MODTITLE"] .. ": "
-local abbrevmatch = "^" .. L["MODABBREV"] .. ": "
-
-local function reply_filter(self, evt, msg, snd, ...)
-  local sender = K.CanonicalName(snd, nil)
-  if (strmatch(msg, titlematch)) then
-    if (evt == "CHAT_MSG_WHISPER_INFORM") then
-      return true
-    elseif (sender == K.player.name) then
-      return true
-    end
-  end
-  if (strmatch(msg, abbrevmatch)) then
-    if (evt == "CHAT_MSG_WHISPER_INFORM") then
-      return true
-    elseif (sender == K.player.name) then
-      return true
-    end
-  end
+  tinsert(self.bossloot, ti)
 end
 
 local function get_user_pos(uid, lp)
@@ -1508,94 +1570,6 @@ local function get_user_pos(uid, lp)
   end
 
   return 0, 0
-end
-
-local function chat_msg_whisper(evt, msg, snd, ...)
-  local sender = K.CanonicalName(snd, nil)
-  local cmd = extract_cmd(msg)
-  if (cmd) then
-    if (cmd == "bid" or cmd == L["WHISPERCMD_BID"]) then
-      return ksk.NewBidder(sender)
-    elseif (cmd == "retract" or cmd == L["WHISPERCMD_RETRACT"]) then
-      return ksk.RetractBidder(sender)
-    elseif (cmd == "suicide" or cmd == L["WHISPERCMD_SUICIDE"] or cmd == L["WHISPERCMD_SUICIDE_ALTERNATE"]) then
-      local uid = ksk.FindUser(sender)
-      if (not uid) then
-        ksk:SendWhisper(strfmt(L["%s: you are not on any roll lists (yet)."], L["MODABBREV"]), sender)
-        return
-      end
-      local sentheader = false
-      local ndone = 0
-      for k,v in pairs(ksk.sortedlists) do
-        local lp = ksk.cfg.lists[v.id]
-        local apos, rpos = get_user_pos(uid, lp)
-        if (apos) then
-          ndone = ndone + 1
-          if (not sentheader) then
-            ksk:SendWhisper(strfmt(L["LISTPOSMSG"], L["MODABBREV"], ksk.cfg.name, L["MODTITLE"]), sender)
-            sentheader = true
-          end
-          if (ksk.users) then
-            ksk:SendWhisper(strfmt(L["%s: %s - #%d (#%d in raid)"], L["MODABBREV"], lp.name, apos, rpos), sender)
-          else
-            ksk:SendWhisper(strfmt("%s: %s - #%d", L["MODABBREV"], lp.name, apos), sender)
-          end
-        end
-      end
-      if (ndone > 0) then
-        ksk:SendWhisper(strfmt(L["%s: (End of list)"], L["MODABBREV"]), sender)
-      else
-        ksk:SendWhisper(strfmt(L["%s: you are not on any roll lists (yet)."], L["MODABBREV"]), sender)
-      end
-    elseif (cmd == "help" or cmd == L["WHISPERCMD_HELP"]) then
-      ksk:SendWhisper(strfmt(L["HELPMSG1"], L["MODABBREV"], L["MODTITLE"], L["MODABBREV"]), sender)
-      ksk:SendWhisper(strfmt(L["HELPMSG2"], L["MODABBREV"], L["WHISPERCMD_BID"]), sender)
-      ksk:SendWhisper(strfmt(L["HELPMSG3"], L["MODABBREV"], L["WHISPERCMD_RETRACT"]), sender)
-      ksk:SendWhisper(strfmt(L["HELPMSG4"], L["MODABBREV"], L["WHISPERCMD_SUICIDE"]), sender)
-      ksk:SendWhisper(strfmt(L["HELPMSG5"], L["MODABBREV"], L["WHISPERCMD_STANDBY"]), sender)
-    end
-  end
-end
-
---
--- Fired whenever our admin status for the currently selected config changes,
--- or when we refresh due to a config change or other events. This registers
--- messages that only an admin cares about.
---
-function ksk.ConfigAdmin(onoff)
-  if (onoff and admin_hooks_registered ~= true) then
-    admin_hooks_registered = true
-    ksk:RegisterEvent("CHAT_MSG_WHISPER", chat_msg_whisper)
-  elseif (not onoff and admin_hooks_registered == true) then
-    admin_hooks_registered = false
-    ksk:UnregisterEvent("CHAT_MSG_WHISPER")
-  end
-
-  local ef = nil
-
-  if (onoff) then
-    if (chat_filters_installed ~= true) then
-      if (ksk.cfg.settings.chat_filter) then
-        chat_filters_installed = true
-        ef = ChatFrame_AddMessageEventFilter
-      end
-    end
-  end
-
-  if (not onoff or not ksk.cfg.settings.chat_filter) then
-    if (chat_filters_installed) then
-      chat_filters_installed = nil
-      ef = ChatFrame_RemoveMessageEventFilter
-    end
-  end
-
-  if (ef) then
-    ef("CHAT_MSG_WHISPER", whisper_filter)
-    ef("CHAT_MSG_WHISPER_INFORM", reply_filter)
-    ef("CHAT_MSG_RAID", reply_filter)
-    ef("CHAT_MSG_GUILD", reply_filter)
-    ef("CHAT_MSG_RAID_LEADER", reply_filter)
-  end
 end
 
 local function ksk_suspended(onoff)
@@ -1652,7 +1626,7 @@ local function krp_new_player(_, _, pvt, player)
   player["ksk_dencher"] = nil
   player["ksk_missing"] = nil
 
-  local uid = ksk.FindUser(nm) or "0fff"
+  local uid = ksk:FindUser(nm) or "0fff"
 
   if (uid == "0fff") then
     local classid = player.class
@@ -1662,11 +1636,11 @@ local function krp_new_player(_, _, pvt, player)
     if (not ksk.missing[uid]) then
       ksk.nmissing = ksk.nmissing + 1
       ksk.missing[uid] = unkuser
-      if (KRP.in_party and KRP.is_ml and ksk.csd.is_admin) then
+      if (KRP.in_party and KRP.is_ml and ksk.csdata[ksk.currentid].is_admin) then
         info(L["NOTICE: user %q is in the raid but not in the user list."], class(nm, classid))
       end
     end
-    ksk.qf.addmissing:SetEnabled(ksk.csd.is_admin ~= nil)
+    ksk.qf.addmissing:SetEnabled(ksk.csdata[ksk.currentid].is_admin ~= nil)
     player["ksk_missing"] = true
     player["ksk_uid"] = nil
   else
@@ -1682,14 +1656,14 @@ local function krp_new_player(_, _, pvt, player)
   end
 end
 
-function ksk.UpdateDenchers()
-  assert(ksk.users)
+function ksk:UpdateDenchers()
+  assert(self.users)
 
-  ksk.denchers = {}
+  self.denchers = {}
 
   for k, v in pairs(KRP.players) do
     if (v["ksk_dencher"]) then
-      tinsert(ksk.denchers, k)
+      tinsert(self.denchers, k)
     end
   end
 end
@@ -1703,17 +1677,17 @@ local function krp_update_group_end(_, _, pvt, in_p, in_r, in_bg)
   end
 
   if (in_p) then
-    ksk.UpdateDenchers()
+    ksk:UpdateDenchers()
   else
     ksk.users = nil
     ksk.nmissing = 0
     ksk.missing = {}
-    ksk.ResetBossLoot()
+    ksk:ResetBossLoot()
   end
 
-  ksk.RefreshListsUIForRaid(in_p)
+  ksk:RefreshListsUIForRaid(in_p)
   ksk.qf.addmissing:SetEnabled((in_p and ksk.nmissing > 0) and true or false)
-  ksk.RefreshAllMemberLists()
+  ksk:RefreshAllMemberLists()
   update_bcast_button()
 end
 
@@ -1733,13 +1707,13 @@ local function krp_in_group_changed(_, _, pvt, in_party, in_raid, in_bg)
   end
 
   if (in_party) then
-    if (ksk.csd.is_admin) then
+    if (ksk.csdata[ksk.currentid].is_admin) then
       ksk:SendAM("REQRS", "ALERT")
     end
 
-    if (KRP.is_ml and not ksk.csd.is_admin) then
-      if (not ksk.csd.admin_warned) then
-        ksk.csd.admin_warned = true
+    if (KRP.is_ml and not ksk.csdata[ksk.currentid].is_admin) then
+      if (not ksk.csdata[ksk.currentid].admin_warned) then
+        ksk.csdata[ksk.currentid].admin_warned = true
         info(L["you are the master looter but not an administrator of this configuration. You will be unable to loot effectively. Either change master looter or have the owner of the configuration assign you as an administrator."])
       end
     end
@@ -1747,11 +1721,11 @@ local function krp_in_group_changed(_, _, pvt, in_party, in_raid, in_bg)
 end
 
 local function kld_start_loot_info(_, _, pvt)
-  if (not ksk.AmIML()) then
+  if (not ksk:AmIML()) then
     return
   end
 
-  ksk.ResetBossLoot()
+  ksk:ResetBossLoot()
 end
 
 --
@@ -1761,7 +1735,7 @@ end
 -- to be ignored or auto-disenchanted.
 --
 local function kld_loot_item(_, _, pvt, item)
-  if (not ksk.AmIML()) then
+  if (not ksk:AmIML()) then
     return
   end
 
@@ -1846,7 +1820,7 @@ local function kld_loot_item(_, _, pvt, item)
   end
 
   if (not skipit) then
-    ksk.AddItemToBossLoot(item.ilink, item.quantity, item.lootslot)
+    ksk:AddItemToBossLoot(item.ilink, item.quantity, item.lootslot)
   end
 end
 
@@ -1857,7 +1831,7 @@ end
 -- the new data.
 --
 local function kld_end_loot_info()
-  if (not ksk.AmIML()) then
+  if (not ksk:AmIML()) then
     return
   end
 
@@ -1876,10 +1850,10 @@ local function kld_end_loot_info()
   end
 
   if (nbossloot == 0) then
-    ksk.ResetBossLoot()
+    ksk:ResetBossLoot()
   end
 
-  ksk.RefreshBossLoot(nil)
+  ksk:RefreshBossLoot(nil)
 
   if (nbossloot > 0) then
     local uname = KLD.unit_name
@@ -1931,12 +1905,12 @@ local function kld_end_loot_info()
 end
 
 local function kld_looting_ended(_, _, pvt)
-  if (not ksk.AmIML()) then
+  if (not ksk:AmIML()) then
     return
   end
 
-  ksk.CloseLoot()
-  ksk.ResetBossLoot()
+  ksk:CloseLoot()
+  ksk:ResetBossLoot()
 
   if (ksk.autoshown) then
     ksk.autoshown = nil
@@ -1977,16 +1951,16 @@ local function ksk_initialised(self)
 
   ksk_suspended(self.frdb.suspended)
 
-  self.SetDefaultConfig(self.frdb.defconfig, true, true)
-  self.FullRefresh(true)
-  self.ConfigAdmin(self.csd.is_admin ~= nil and true or false)
+  self:SetDefaultConfig(self.frdb.defconfig, true, true)
+  self:FullRefresh(true)
+  config_admin(self)
 
   --
   -- Broadcasts a list of all configurations we have, and the latest events
   -- we have for each user. The recipients of the message use this to trim
   -- old events from their lists to save space.
   --
-  self.SyncCleanup()
+  self:SyncCleanup()
 end
 
 --
@@ -2005,18 +1979,18 @@ ksk.konfer = {
   party      = true,    -- Works in parties
   bg         = false,   -- Does not work in battlegrounds
 
-  is_suspended = function(this, handle)
-    return this.frdb.suspended or false
+  is_suspended = function(handle)
+    return ksk.frdb.suspended or false
   end,
 
-  set_suspended = function(this, handle, onoff)
+  set_suspended = function(handle, onoff)
     local onoff = onoff or false
     ksk_suspended(onoff)
-    this.FullRefresh(true)
+    ksk:FullRefresh(true)
   end,
 
-  open_on_loot = function(this, handle)
-    if (this.cfg and this.cfg.settings and this.cfg.settings.auto_bid) then
+  open_on_loot = function(handle)
+    if (ksk.cfg and ksk.cfg.settings and ksk.cfg.settings.auto_bid) then
       return true
     end
     return false
@@ -2036,7 +2010,7 @@ function ksk:OnLateInit()
     self.frdb.configs = {}
     self.configs = self.frdb.configs
     self.frdb.tempcfg = true -- Must be set true before call to CreateNewConfig
-    self.CreateNewConfig(" ", true, true, "1")
+    self:CreateNewConfig(" ", true, true, "1")
     self.frdb.dbversion = self.dbversion
   end
 
@@ -2046,16 +2020,16 @@ function ksk:OnLateInit()
 
   -- ksk.SetDefaultConfig (called next) depends on ksk.csdata being set up
   -- and correct, so "refresh" that now.
-  self.RefreshCSData()
+  self:RefreshCSData()
 
   -- Set up all of the various global aliases and the like.
-  self.SetDefaultConfig(self.frdb.defconfig, true, true)
+  self:SetDefaultConfig(self.frdb.defconfig, true, true)
 
-  self.UpdateDatabaseVersion()
+  self:UpdateDatabaseVersion()
 
   KK.RegisterKonfer(self)
 
-  self.InitialiseUI()
+  self:InitialiseUI()
 
   K.RegisterComm(self, self.CHAT_MSG_PREFIX)
 

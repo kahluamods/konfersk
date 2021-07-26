@@ -227,9 +227,9 @@ action generates an event. By and large, only admin users can generate events.
 Each time an event is generated, is is broadcast to either the current raid
 group (in the case of a PUG group) or to the raid group and the guild (in the
 case of a guild config). Each event is tagged with the configuration to which
-that event is tied. Since only one configugation can be active at a time, the
+that event is tied. Since only one configuration can be active at a time, the
 person generating the event will only ever generate events for their active
-configuration. When they change active configs, they will be gnerating events
+configuration. When they change active configs, they will be generating events
 for that other configuration.
 
 Only admins can create events but everyone can receive them, even normal

@@ -122,8 +122,8 @@ local mainwin = {
 
 ksk.mainwin = KUI:CreateTabbedDialog(mainwin)
 
-function ksk.InitialiseUI()
-  if (ksk.initialised) then
+function ksk:InitialiseUI()
+  if (self.initialised) then
     return
   end
 
@@ -133,7 +133,7 @@ function ksk.InitialiseUI()
   -- this is in the outer frame's topbar. It is the responsibility of the
   -- panels and subtabs to not overwrite this.
   --
-  local tbf = ksk.mainwin.topbar
+  local tbf = self.mainwin.topbar
   local arg = { 
     x = 250, y = 0,
     name = "ConfigSpacesDropdown",
@@ -142,33 +142,33 @@ function ksk.InitialiseUI()
     level = 12,
     tooltip = { title = L["TIP028.0"], text = L["TIP028.1"] },
   }
-  ksk.mainwin.cfgselector = KUI:CreateDropDown(arg, tbf)
-  ksk.mainwin.cfgselector:ClearAllPoints()
-  ksk.mainwin.cfgselector:SetPoint("TOPRIGHT", tbf, "TOPRIGHT", 4, -4)
-  ksk.mainwin.cfgselector:Catch("OnValueChanged", function(this, evt, nv)
-    if (ksk.frdb and not ksk.frdb.tempcfg) then
+  self.mainwin.cfgselector = KUI:CreateDropDown(arg, tbf)
+  self.mainwin.cfgselector:ClearAllPoints()
+  self.mainwin.cfgselector:SetPoint("TOPRIGHT", tbf, "TOPRIGHT", 4, -4)
+  self.mainwin.cfgselector:Catch("OnValueChanged", function(this, evt, nv)
+    if (self.frdb and not self.frdb.tempcfg) then
       if (last_cfg_selected ~= nv) then
         last_cfg_selected = nv
-        ksk.SetDefaultConfig(nv)
-        if (ksk.qf.synctopbar) then
-          ksk.qf.synctopbar:SetCurrentCRC()
+        self:SetDefaultConfig(nv)
+        if (self.qf.synctopbar) then
+          self.qf.synctopbar:SetCurrentCRC()
         end
       end
     end
   end)
   arg = {}
 
-  ksk.qf.configtab = ksk.mainwin.tabs[ksk.CONFIG_TAB].tbutton
-  ksk.qf.userstab = ksk.mainwin.tabs[ksk.USERS_TAB].tbutton
-  ksk.qf.synctab = ksk.mainwin.tabs[ksk.SYNC_TAB].tbutton
-  ksk.qf.iedittab = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_ITEMS_PAGE].tbutton
-  ksk.qf.historytab = ksk.mainwin.tabs[ksk.LOOT_TAB].tabs[ksk.LOOT_HISTORY_PAGE].tbutton
-  ksk.qf.listcfgtab = ksk.mainwin.tabs[ksk.LISTS_TAB].tabs[ksk.LISTS_CONFIG_PAGE].tbutton
-  ksk.qf.cfgadmintab = ksk.mainwin.tabs[ksk.CONFIG_TAB].tabs[ksk.CONFIG_ADMIN_PAGE].tbutton
+  self.qf.configtab = self.mainwin.tabs[self.CONFIG_TAB].tbutton
+  self.qf.userstab = self.mainwin.tabs[self.USERS_TAB].tbutton
+  self.qf.synctab = self.mainwin.tabs[self.SYNC_TAB].tbutton
+  self.qf.iedittab = self.mainwin.tabs[self.LOOT_TAB].tabs[self.LOOT_ITEMS_PAGE].tbutton
+  self.qf.historytab = self.mainwin.tabs[self.LOOT_TAB].tabs[self.LOOT_HISTORY_PAGE].tbutton
+  self.qf.listcfgtab = self.mainwin.tabs[self.LISTS_TAB].tabs[self.LISTS_CONFIG_PAGE].tbutton
+  self.qf.cfgadmintab = self.mainwin.tabs[self.CONFIG_TAB].tabs[self.CONFIG_ADMIN_PAGE].tbutton
 
-  ksk.InitialiseListsUI()
-  ksk.InitialiseLootUI()
-  ksk.InitialiseUsersUI()
-  ksk.InitialiseSyncUI()
-  ksk.InitialiseConfigUI()
+  self:InitialiseListsUI()
+  self:InitialiseLootUI()
+  self:InitialiseUsersUI()
+  self:InitialiseSyncUI()
+  self:InitialiseConfigUI()
 end

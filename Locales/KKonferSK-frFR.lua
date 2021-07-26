@@ -470,6 +470,8 @@ L["Edit Officer Ranks"] = "Edit Officer Ranks"
 L["Set Guild Officer Ranks"] = "Set Guild Officer Ranks"
 L["Main Spec Roll"] = true
 L["Off Spec Roll"] = true
+L["Display Alts in Roll List"] = true
+L["Ignore Item Quality"] = true
 
 --
 -- Tooltip text.
@@ -589,6 +591,8 @@ L["TIP094"] = "Affiche le classement des membres pour la liste actuelle au raid.
 L["TIP095"] = "D\195\169finit le niveau minimum d'objet pour lancer les ench\195\168res ou les rands. Si vous d\195\169finissez ce param\195\168tre \195\160 une valeur sup\195\169rieure au seuil du ma\195\174tre du butin, vous pourrez faire d\195\169senchanter automatiquement les objets compris entre les deux paliers ; pour activer cette option, cochez la case suivante."
 L["TIP096"] = "Si vous avez d\195\169fini le seuil d'ench\195\168re et qu'il est plus \195\169lev\195\169 que le seuil de ma\195\174tre du butin, activer cette option pour que tous les objets en-dessous du seul d'ench\195\168re soit automatiquement envoy\195\169 \195\160 un d\195\169senchanteur du raid. Si aucun enchanteur n'est connect\195\169, les objets concern\195\169s seront attribu\195\169s au ma\195\174tre du butin."
 L["TIP097"] = "Activer cette option pour que l'objet soit automatiquement attribu\195\169 \195\160 un enchanteur du raid et qu'il saute l'\195\169tape des ench\195\168res ou des rands. Si aucun enchanteur n'est connect\195\169, il sera donn\195\169 au ma\195\174tre du butin."
+L["TIP097.1"] = "Enable this option to bypass the global item quality filter. Useful if you want to bid on certain special items that may be Uncommon or Rare."
 L["TIP098"] = "Activer cette option pour que l'objet soit automatiquement attribu\195\169 au ma\195\174tre du butin, et qu'il saute l'\195\169tape des ench\195\168res ou des rands."
 L["TIP099"] = "Commencez \195\160 saisir le nom du joueur que vous recherchez. Cela peut-\195\170tre n'importe quelle partie du nom du joueur. Le premier joueur trouv\195\169 est surlign\195\169 est s\195\169lectionn\195\169."
 L["TIP100"] = "Mark which guild ranks are officer ranks. Only officers will be permitted to broadcast configs to the entire guild."
+L["TIP101"] = "If enabled, show all of a user's alternate characters (alts) indented under the main toon name in the member list. This has the potential to make the member list look a little messy but some people prefer seeing all of a user's characters grouped together. This only affects display, it does not actually change any user records."

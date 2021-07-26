@@ -53,7 +53,6 @@ local printf = K.printf
 local strsplit = string.split
 local bxor = bit.bxor
 
-local ecolor = K.ecolor
 local debug = ksk.debug
 local info = ksk.info
 local err = ksk.err
@@ -100,195 +99,137 @@ local ehandlers = {}
 -- Main message receipt function. Checks the protocol, checksum and other
 -- sundry stuff before invoking the handler function.
 --
-local function commdispatch(sender, proto, cmd, cfg, res, ...)
-  if (res) then
-    if (not ihandlers[cmd] and not ehandlers[cmd]) then
-      KK.OldProtoDialog(ksk)
-      debug(1, "unknown command %q from %q (p=%d)", cmd, sender, proto)
-      return
-    else
-      if (ihandlers[cmd]) then
-        ihandlers[cmd](sender, proto, cmd, cfg, ...)
-      else
-        if (not ksk.configs[cfg]) then
-          --
-          -- We ignore any events for configs we dont know about.
-          --
-          return
-        end
-        local adm = ksk.csdata[cfg].is_admin
-        local estr, scrc, eid, oldeid, userevt = ...
-        if ((not adm) and (not userevt)) then
-          -- We're not an admin and this is an admin-only event - return.
-          return
-        end
-        if (adm) then
-          --
-          -- Here we need to see if we are up to date with the sender,
-          -- by checking to see if our last eventid matches their
-          -- oldeid they just sent us. If it does, we process the event.
-          -- If not, we ignore it because it means we are out of sync.
-          --
-          local senduid = ksk.FindUser(sender, cfg)
-          if (not senduid) then
-            --
-            -- If we didn't find the user in the user lists, it means our
-            -- user list and config is out of date with respect to the sender.
-            -- They think they are an admin (only admins can send events)
-            -- but we don't have them even as a simple user, let alone an
-            -- admin. So we have to ignore this event. At some point we will
-            -- need to sync with the config owner, and get the users list and
-            -- config setting that has this user marked as an admin. Until
-            -- then all we can do is ignore the event.
-            --
-            return
-          end
-
-          --
-          -- When we check to see if we are an admin, the call checks to
-          -- see if the sender is an alt, and that the alt's main is the
-          -- owner or and admin. It always returns the real ID of the
-          -- user's main if this user is an alt. We capture that user ID to
-          -- use for checking the sender's credentials by ID, as that is
-          -- the actual user we care about.
-          --
-          local ia, cksenduid = ksk.IsAdmin(senduid, cfg)
-          if (not cksenduid) then
-            cksenduid = senduid
-          end
-          if (not ia) then
-            --
-            -- Likewise for admins. We do not have this user marked as an
-            -- admin in our lists, so it means we are out of sync with at
-            -- least the config owner. Since we don't know for sure the user
-            -- is an admin, we simply return and we can get this event later
-            -- when we sync.
-            --
-            return
-          end
-
-          --
-          -- If we are an admin and we havent started a sync relationship
-          -- with anyone yet, we can still process the event below (it does
-          -- no harm and will keep their config as up to date as possible).
-          -- There is no real benefit to doing this except that we can, and
-          -- an unsynced admin will still have a rough idea of what's what
-          -- with the configuration. However, if we are syncing, we need to
-          -- check to see if the last event we received from this user was
-          -- the same as we have recorded for them, and if so, process the
-          -- event as per normal. If not, we simply return as it means we
-          -- are out of sync with respects to the sender, and we need to do
-          -- a sync.
-          --
-          if (ksk.configs[cfg].syncing) then
-            if (ksk.configs[cfg].admins[cksenduid].lastevent ~= oldeid) then
-              --
-              -- The last event we have for them is not their last event, we
-              -- are out of sync with them. Return now.
-              --
-              return
-            end
-
-            --
-            -- If we get down here it means we are a syncer, the sender is a
-            -- syncer, and we are up to date with respects to each other. We
-            -- need to update the config checksum with this new event, and
-            -- update the last event received from this sender.
-            --
-            local oldsum = ksk.configs[cfg].cksum
-            local newsum = bxor(oldsum, tonumber(scrc))
-            ksk.configs[cfg].cksum = newsum
-            ksk.configs[cfg].admins[cksenduid].lastevent = eid
-            ksk.qf.synctopbar:SetCurrentCRC()
-
-            --
-            -- Since this is a directly handled event, we want a convenient
-            -- way of telling the receiving function this. It may effect
-            -- whether or not it does a refresh (for example if we are
-            -- processing a slew of events we will do a refresh at the end).
-            -- So, we multiply the adm value by 10 to indicate it is
-            -- immediate.
-            --
-            adm = adm * 10
-          end
-        end
-        ehandlers[cmd](adm, sender, proto, cmd, cfg, strsplit(":", estr))
-      end
-    end
-  else
-    debug(1, "failed to deserialise %q from %q (p=%d)", sender, cmd, proto)
-  end
-end
-
-local userwarn = userwarn or {}
-
-function ksk:OnCommReceived(prefix, msg, dist, snd)
-  local sender = K.CanonicalName(snd)
-  if (sender == K.player.name) then
-    return -- Ignore our own messages
-  end
-  if (dist == "UNKNOWN" and (sender ~= nil and sender ~= "")) then
+local function commdispatch(self, sender, proto, cmd, cfg, res, ...)
+  if (not res) then
+    debug(1, "failed to deserialise %q from %q (proto=%d)", sender, cmd, proto)
     return
   end
 
-  debug(9, "received: prefix=%q msg=%q dist=%q sender=%q", tostring(prefix), tostring(msg), tostring(dist), tostring(sender))
-
-  local iter = gmatch(msg, "([^:]+)()")
-  local ps = iter()
-  if (not ps) then
-    debug(1, "bad msg %q received from %q", msg, sender)
-    return
-  end
-  local proto = tonumber(ps, 16)
-  if (proto > ksk.protocol) then
+  if (not ihandlers[cmd] and not ehandlers[cmd]) then
+    debug(1, "unknown command %q from %q (p=%d)", cmd, sender, proto)
     KK.OldProtoDialog(ksk)
     return
   end
 
-  local cmd = iter()
-  if (not cmd) then
-    debug(1, "malformed msg %q received from %q", msg, sender)
+  if (ihandlers[cmd]) then
+    ihandlers[cmd](self, sender, proto, cmd, cfg, ...)
     return
   end
-  local cfg = iter()
-  if (not cfg) then
-    debug(1, "malformed msg %q received from %q", msg, sender)
-    return
-  end
-  local msum, pos = iter()
-  if (not msum) then
-    debug(1, "malformed msg %q received from %q", msg, sender)
-    return
-  end
-  local data = strsub(msg, pos+1)
-  if (not data) then
-    debug(1, "malformed msg %q received from %q", msg, sender)
-    return
-  end
-  local crc = H:CRC32(ps, nil, false)
-  crc = H:CRC32(":", crc, false)
-  crc = H:CRC32(cmd, crc, false)
-  crc = H:CRC32(":", crc, false)
-  crc = H:CRC32(cfg, crc, false)
-  crc = H:CRC32(":", crc, false)
-  crc = H:CRC32(data, crc, true)
-  local mf = K.hexstr(crc)
 
-  if (mf ~= msum) then
-    if (not userwarn[sender]) then
-      printf(ecolor, "WARNING: addon message from %q was fake!", sender)
-      userwarn[sender] = true
-    end
+  if (not self.configs[cfg]) then
+    -- We ignore any events for configs we dont know about.
     return
   end
-  commdispatch(sender, proto, cmd, cfg, K.Deserialise(data))
+
+  local adm = self.csdata[cfg].is_admin
+  local estr, scrc, eid, oldeid, userevt = ...
+  if ((not adm) and (not userevt)) then
+    -- We're not an admin and this is an admin-only event - return.
+    return
+  end
+
+  if (adm) then
+    --
+    -- Here we need to see if we are up to date with the sender,
+    -- by checking to see if our last eventid matches their
+    -- oldeid they just sent us. If it does, we process the event.
+    -- If not, we ignore it because it means we are out of sync.
+    --
+    local senduid = self:FindUser(sender, cfg)
+    if (not senduid) then
+      --
+      -- If we didn't find the user in the user lists, it means our
+      -- user list and config is out of date with respect to the sender.
+      -- They think they are an admin (only admins can send events)
+      -- but we don't have them even as a simple user, let alone an
+      -- admin. So we have to ignore this event. At some point we will
+      -- need to sync with the config owner, and get the users list and
+      -- config setting that has this user marked as an admin. Until
+      -- then all we can do is ignore the event.
+      --
+      return
+    end
+
+    --
+    -- When we check to see if we are an admin, the call checks to
+    -- see if the sender is an alt, and that the alt's main is the
+    -- owner or and admin. It always returns the real ID of the
+    -- user's main if this user is an alt. We capture that user ID to
+    -- use for checking the sender's credentials by ID, as that is
+    -- the actual user we care about.
+    --
+    local ia, cksenduid = self:IsAdmin(senduid, cfg)
+    if (not cksenduid) then
+      cksenduid = senduid
+    end
+    if (not ia) then
+      --
+      -- Likewise for admins. We do not have this user marked as an
+      -- admin in our lists, so it means we are out of sync with at
+      -- least the config owner. Since we don't know for sure the user
+      -- is an admin, we simply return and we can get this event later
+      -- when we sync.
+      --
+      return
+    end
+
+    --
+    -- If we are an admin and we havent started a sync relationship
+    -- with anyone yet, we can still process the event below (it does
+    -- no harm and will keep their config as up to date as possible).
+    -- There is no real benefit to doing this except that we can, and
+    -- an unsynced admin will still have a rough idea of what's what
+    -- with the configuration. However, if we are syncing, we need to
+    -- check to see if the last event we received from this user was
+    -- the same as we have recorded for them, and if so, process the
+    -- event as per normal. If not, we simply return as it means we
+    -- are out of sync with respects to the sender, and we need to do
+    -- a sync.
+    --
+    if (self.configs[cfg].syncing) then
+      if (self.configs[cfg].admins[cksenduid].lastevent ~= oldeid) then
+        --
+        -- The last event we have for them is not their last event, we
+        -- are out of sync with them. Return now.
+        --
+        return
+      end
+
+      --
+      -- If we get down here it means we are a syncer, the sender is a
+      -- syncer, and we are up to date with respects to each other. We
+      -- need to update the config checksum with this new event, and
+      -- update the last event received from this sender.
+      --
+      local oldsum = self.configs[cfg].cksum
+      local newsum = bxor(oldsum, tonumber(scrc))
+      self.configs[cfg].cksum = newsum
+      self.configs[cfg].admins[cksenduid].lastevent = eid
+      self.qf.synctopbar:SetCurrentCRC()
+
+      --
+      -- Since this is a directly handled event, we want a convenient
+      -- way of telling the receiving function this. It may effect
+      -- whether or not it does a refresh (for example if we are
+      -- processing a slew of events we will do a refresh at the end).
+      -- So, we multiply the adm value by 10 to indicate it is
+      -- immediate.
+      --
+      adm = adm * 10
+    end
+  end
+  ehandlers[cmd](self, adm, sender, proto, cmd, cfg, strsplit(":", estr))
+end
+
+function ksk:OnCommReceived(prefix, msg, dist, snd)
+  return self:KonferCommReceived(prefix, msg, dist, snd, commdispatch)
 end
 
 --
 -- Command: DEBUG level message ...
 -- Purpose: Displays a debug message from the given sender
 --
-ihandlers.DEBUG = function(sender, proto, cmd, cfg, ...)
+ihandlers.DEBUG = function(self, sender, proto, cmd, cfg, ...)
   local lev = ...
   debug(lev, "<-" .. sender .. "->: " .. select(1, ...))
 end
@@ -297,16 +238,16 @@ end
 -- Command: VCHEK
 -- Purpose: Respond to sender with a version check
 --
-ihandlers.VCHEK = function(sender, proto, cmd, cfg, ...)
-  ksk:SendWhisperAM(sender, { proto = 2, cmd = "VCACK" }, nil, ksk.version)
+ihandlers.VCHEK = function(self, sender, proto, cmd, cfg, ...)
+  self:SendWhisperAM(sender, { proto = 2, cmd = "VCACK" }, nil, self.version)
 end
 
 --
 -- Command: VCACK version
 -- Purpose: Sent back to us in response to a VCHEK command
 --
-ihandlers.VCACK = function(sender, proto, cmd, cfg, ver)
-  ksk:VersionCheckReply(sender, ver)
+ihandlers.VCACK = function(self, sender, proto, cmd, cfg, ver)
+  self:VersionCheckReply(sender, ver)
 end
 
 --
@@ -326,10 +267,10 @@ end
 --
 local we_opened = nil
 
-ihandlers.OLOOT = function(sender, proto, cmd, cfg, ...)
+ihandlers.OLOOT = function(self, sender, proto, cmd, cfg, ...)
   local uname, uguid, realguid, loottbl = ...
 
-  if (cfg ~= ksk.currentid) then
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -337,35 +278,35 @@ ihandlers.OLOOT = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.ResetBossLoot()
-  ksk.bossloot = {}
+  self:ResetBossLoot()
+  self.bossloot = {}
 
   for k,v in ipairs(loottbl) do
     local ilink, quant = unpack(v)
     local itemid = match(ilink, "item:(%d+)")
     local ti = { itemid = itemid, ilink = ilink, slot = 0, quant = quant }
-    tinsert(ksk.bossloot, ti)
+    tinsert(self.bossloot, ti)
   end
 
-  ksk.qf.lootscroll.itemcount = #ksk.bossloot
-  ksk.qf.lootscroll:UpdateList()
+  self.qf.lootscroll.itemcount = #self.bossloot
+  self.qf.lootscroll:UpdateList()
 
-  ksk.autolooted = ksk.autolooted or {}
-  if (ksk.autolooted[uguid] == true) then
+  self.autolooted = self.autolooted or {}
+  if (self.autolooted[uguid] == true) then
     return
   end
 
   if (uguid ~= "0") then
-    ksk.autolooted[uguid] = true
+    self.autolooted[uguid] = true
   end
 
-  if (ksk.frdb.suspended or not ksk.configs[cfg].settings.auto_bid) then
+  if (self.frdb.suspended or not self.configs[cfg].settings.auto_bid) then
     return
   end
 
-  if (not ksk.mainwin:IsShown()) then
-    ksk.mainwin:Show()
-    ksk.mainwin:SetTab(ksk.LOOT_TAB, ksk.LOOT_ASSIGN_PAGE)
+  if (not self.mainwin:IsShown()) then
+    self.mainwin:Show()
+    self.mainwin:SetTab(self.LOOT_TAB, self.LOOT_ASSIGN_PAGE)
     we_opened = true
   end
 end
@@ -376,8 +317,8 @@ end
 --          Close the main window when we receive this if we opened it during
 --          OLOOT processing.
 --
-ihandlers.CLOOT = function(sender, proto, cmd, cfg, ...)
-  if (cfg ~= ksk.currentid) then
+ihandlers.CLOOT = function(self, sender, proto, cmd, cfg, ...)
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -385,10 +326,10 @@ ihandlers.CLOOT = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.CloseLoot()
+  self:CloseLoot()
   if (we_opened) then
     we_opened = nil
-    ksk.mainwin:Hide()
+    self.mainwin:Hide()
   end
 end
 
@@ -397,8 +338,8 @@ end
 -- Purpose: Sent when the master looter adds an item to the loot list
 --          manually. ITEMLINK is the item link of the item being added
 --
-ihandlers.ALOOT = function(sender, proto, cmd, cfg, ilink)
-  if (cfg ~= ksk.currentid) then
+ihandlers.ALOOT = function(self, sender, proto, cmd, cfg, ilink)
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -406,7 +347,7 @@ ihandlers.ALOOT = function(sender, proto, cmd, cfg, ilink)
     return
   end
 
-  ksk.AddLoot(ilink, true)
+  self:AddLoot(ilink, true)
 end
 
 --
@@ -417,10 +358,10 @@ end
 --          the bid list. Although it is currently unused, this event
 --          receives the itemid of the current item being bid on.
 --
-ihandlers.BIDCL = function(sender, proto, cmd, cfg, ...)
+ihandlers.BIDCL = function(self, sender, proto, cmd, cfg, ...)
   local itemid = ...
 
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+  if (cfg ~= self.currentid or not self.bossloot) then
     return
   end
 
@@ -428,7 +369,7 @@ ihandlers.BIDCL = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.ResetBidders(false)
+  self:ResetBidders(false)
 end
 
 --
@@ -438,10 +379,10 @@ end
 --          user role filter, and LIST is the list ID of the list that it
 --          will be rolled on (unless the master looter changes the list).
 --
-ihandlers.LISEL = function(sender, proto, cmd, cfg, ...)
+ihandlers.LISEL = function(self, sender, proto, cmd, cfg, ...)
   local idx, filter, role, list, rank = ...
 
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+  if (cfg ~= self.currentid or not self.bossloot) then
     return
   end
 
@@ -449,7 +390,7 @@ ihandlers.LISEL = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.SelectLootItem(idx, filter, role, list, rank)
+  self:SelectLootItem(idx, filter, role, list, rank)
 end
 
 --
@@ -461,10 +402,10 @@ end
 --          preceeded by a bidder clear event (BIDCL). If this function
 --          itself should clear bids, then CLEARBIDS is set to true.
 --
-ihandlers.LLSEL = function(sender, proto, cmd, cfg, ...)
+ihandlers.LLSEL = function(self, sender, proto, cmd, cfg, ...)
   local listid, clearbids = ...
 
-  if (cfg ~= ksk.currentid) then
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -473,10 +414,10 @@ ihandlers.LLSEL = function(sender, proto, cmd, cfg, ...)
   end
 
   if (clearbids) then
-    ksk.ResetBidList()
+    self:ResetBidList()
   end
 
-  ksk.SelectLootListByID(listid)
+  self:SelectLootListByID(listid)
 end
 
 --
@@ -485,17 +426,10 @@ end
 -- The compressed data is serialised with libserialize so we have to
 -- decompress and deserialize before we can move on.
 --
-local function prepare_config_from_bcast(zdata)
+local function prepare_config_from_bcast(self, cfd)
   local ncf = {}
-  local cfgid, cfgname, cfgtype, owner, ts, oranks, crc
-  local ok, cfd
-
-  cfgid = nil
-
-  ok, cfd = ksk:InflatePayload("BCAST", zdata)
-  if (not ok or not cfd) then
-    return ncf, cfgid
-  end
+  local cfgid = nil
+  local cfgname, cfgtype, owner, ts, oranks, crc
 
   if (cfd.v == 5) then
     cfgid, cfgname, cfgtype, owner, oranks, crc = strsplit(":", cfd.c)
@@ -518,7 +452,7 @@ local function prepare_config_from_bcast(zdata)
       if (isalt) then
         ncf.users[uid].main = alts
       elseif (alts ~= "0") then
-        ncf.users[uid].alts = ksk.SplitRaidList(alts)
+        ncf.users[uid].alts = self:SplitRaidList(alts)
       end
     end
 
@@ -536,7 +470,7 @@ local function prepare_config_from_bcast(zdata)
       ncf.lists[lid] = { name = lname, sortorder = tonumber(sorder),
         def_rank = tonumber(drank), strictcfilter = getbool(sc),
         strictrfilter = getbool(sr), extralist = el, tethered = getbool(alt),
-        nusers = tonumber(numu), users = ksk.SplitRaidList(ulist) }
+        nusers = tonumber(numu), users = self:SplitRaidList(ulist) }
     end
 
     if (cfd.s) then
@@ -553,7 +487,7 @@ local function prepare_config_from_bcast(zdata)
     end
 
     ncf.settings = {}
-    K.CopyTable(ksk.defaults, ncf.settings)
+    K.CopyTable(self.defaults, ncf.settings)
     if (cfd.d and cfd.e) then
       ncf.syncing = true
       ncf.admins[cfd.d].lastevent = cfd.e
@@ -569,18 +503,18 @@ end
 -- Purpose: Broadcasts the current config to the raid (for PUG configs) or the
 --          guild (for guild configs).
 --
-ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
+ihandlers.BCAST = function(self, sender, proto, cmd, cfg, cfdata)
   --
   -- If I am the config owner ignore all broadcasts.
   --
-  if (ksk.configs[cfg] and ksk.csdata[cfg]) then
-    if (ksk.csdata[cfg].is_admin == 2) then
+  if (self.configs[cfg] and self.csdata[cfg]) then
+    if (self.csdata[cfg].is_admin == 2) then
       debug(2, "config owner ignorning BCAST")
       return
     end
   end
 
-  local ncf, cfgid = prepare_config_from_bcast(zdata)
+  local ncf, cfgid = prepare_config_from_bcast(self, cfdata)
   local cfgtype = ncf.cfgtype
 
   if (not cfgid) then
@@ -590,7 +524,7 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
 
   if (K.player.is_guilded and cfgtype == KK.CFGTYPE_GUILD) then
     -- Guild config
-    if (not ksk.UserIsRanked(cfg, sender)) then
+    if (not self:UserIsRanked(cfg, sender)) then
       debug (2, "BCAST returning: cfgtype=1 not ranked")
       return
     end
@@ -612,7 +546,7 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
     return
   end
 
-  local tcf = ksk.configs[cfgid]
+  local tcf = self.configs[cfgid]
 
   --
   -- If this is an existing config, and we are an admin, we most probably
@@ -621,10 +555,10 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
   -- this.
   --
   if (tcf) then
-    local myuid = ksk.csdata[cfgid].myuid
-    local amadmin = ksk.csdata[cfgid].is_admin
-    local senduid = ksk.FindUser(sender, cfgid)
-    local sendowner, cksenduid = ksk.IsAdmin(senduid, cfgid)
+    local myuid = self.csdata[cfgid].myuid
+    local amadmin = self.csdata[cfgid].is_admin
+    local senduid = self:FindUser(sender, cfgid)
+    local sendowner, cksenduid = self:IsAdmin(senduid, cfgid)
 
     if (not cksenduid) then
       cksenduid = senduid
@@ -665,11 +599,6 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
         if (not ncf.admins[k]) then
           tcf.admins[k] = nil
         else
-          -- Fix a bug introduced by all clients < r738 where a MKADM was
-          -- incorrectly formed and resulted in a nil id.
-          if (not v.id) then
-            v.id = ncf.admins[k].id
-          end
           tcf.nadmins = tcf.nadmins + 1
         end
       end
@@ -677,8 +606,8 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
       --
       -- We may no longer be a coadmin.
       --
-      ksk.UpdateUserSecurity(cfgid)
-      amadmin = ksk.csdata[cfgid].is_admin
+      self:UpdateUserSecurity(cfgid)
+      amadmin = self.csdata[cfgid].is_admin
 
       --
       -- However, if we are an admin now, but we are not yet syncing, then
@@ -687,7 +616,7 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
       --
       if (amadmin and not tcf.syncing) then
         debug(2, "BCAST new admin return requesting full sync")
-        ksk:CSendWhisperAM(cfgid, sender, "GSYNC", "ALERT", 0, true, 0, 0)
+        self:CSendWhisperAM(cfgid, sender, "GSYNC", "ALERT", 0, true, 0, 0)
       end
     end
 
@@ -697,15 +626,18 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
     end
   end
 
-  local function handle_cfgdata(hnc, cid)
-    if (not ksk.configs[cid]) then
-      if (ksk.CreateNewConfig(hnc.name, false, true, cid)) then
+  local function handle_cfgdata(this, args)
+    local newcfgdata = args[1]
+    local newcfgid = args[2]
+
+    if (not this.configs[newcfgid]) then
+      if (this:CreateNewConfig(newcfgdata.name, false, true, newcfgid)) then
         return
       end
     end
-    ksk.RefreshCSData()
-    local oldadm = ksk.csdata[cid].is_admin
-    local nc = ksk.configs[cid]
+    this:RefreshCSData()
+    local oldadm = this.csdata[newcfgid].is_admin
+    local nc = this.configs[newcfgid]
     nc.users = nil
     nc.nadmins = 0
     nc.admins = nil
@@ -717,29 +649,28 @@ ihandlers.BCAST = function(sender, proto, cmd, cfg, zdata)
     nc.nusers = 0
     nc.items = {}
     nc.history = {}
-    K.CopyTable(hnc, nc)
-    if (cid == ksk.currentid) then
-      ksk.SetDefaultConfig(cid, true, true)
+    K.CopyTable(newcfgdata, nc)
+    if (newcfgid == this.currentid) then
+      this:SetDefaultConfig(newcfgid, true, true)
     end
     info(L["configuration %q updated by %q"], white(nc.name), white(sender))
-    ksk.RefreshCSData()
-    local newadm = ksk.csdata[cid].is_admin
+    this:RefreshCSData()
+    local newadm = this.csdata[newcfgid].is_admin
     if (not oldadm and newadm) then
-      ksk:CSendWhisperAM(cid, sender, "GSYNC", "ALERT", 0, true, 0, 0)
+      this:CSendWhisperAM(newcfgid, sender, "GSYNC", "ALERT", 0, true, 0, 0)
     end
   end
 
   if (cfgtype == KK.CFGTYPE_PUG) then
-    if (not ksk.configs[cfgid]) then
-      K.ConfirmationDialog(ksk, L["Accept Configuration"],
-      strfmt(L["PUGCONFIG"], white(sender), L["MODTITLE"]),
-      ncf.name, function(cfgdata) handle_cfgdata(cfgdata, cfgid) end, ncf,
-      ksk.mainwin:IsShown(), 220, nil)
+    if (not this.configs[cfgid]) then
+      K.ConfirmationDialog(self, L["Accept Configuration"],
+      strfmt(L["PUGCONFIG"], white(sender), L["MODTITLE"]), ncf.name,
+      handle_cfgdata, { ncf, cfgid }, this.mainwin:IsShown(), 220, nil)
       return
     end
   end
 
-  handle_cfgdata(ncf, cfgid)
+  handle_cfgdata(this, { ncf, cfgid })
 end
 
 --
@@ -750,10 +681,10 @@ end
 --          by the ML pressing the "Remove" button. This is also sent whenever
 --          an item is awarded to a user and removed off the corpse.
 --
-ihandlers.BIREM = function(sender, proto, cmd, cfg, ...)
+ihandlers.BIREM = function(self, sender, proto, cmd, cfg, ...)
   local itemidx = ...
 
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+  if (cfg ~= self.currentid or not self.bossloot) then
     return
   end
 
@@ -761,15 +692,15 @@ ihandlers.BIREM = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.RemoveItemByIdx(itemidx, true)
+  self:RemoveItemByIdx(itemidx, true)
 end
 
 --
 -- Command: BICAN
 -- Purpose: Used to signal a  bid was cancelled.
 --
-ihandlers.BICAN = function(sender, proto, cmd, cfg, ...)
-  if (cfg ~= ksk.currentid) then
+ihandlers.BICAN = function(self, sender, proto, cmd, cfg, ...)
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -777,7 +708,7 @@ ihandlers.BICAN = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.ResetBidders(false)
+  self:ResetBidders(false)
 end
 
 --
@@ -792,10 +723,10 @@ end
 --          WHAT = 'R' - change the role filter to VAL.
 --          WHAT = 'A' - change the strict class armour filter to VAL
 --          WHAT = 'L' - change the strict role filter to VAL
-ihandlers.FLTCH = function(sender, proto, cmd, cfg, ...)
+ihandlers.FLTCH = function(self, sender, proto, cmd, cfg, ...)
   local what, v1, v2 = ...
 
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+  if (cfg ~= self.currentid or not self.bossloot) then
     return
   end
 
@@ -803,7 +734,7 @@ ihandlers.FLTCH = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.ChangeLootFilter(what, v1, v2)
+  self:ChangeLootFilter(what, v1, v2)
 end
 
 --
@@ -818,10 +749,10 @@ end
 --          use) is a timeout which will start a bid timeout countdown on the
 --          user's end.
 --
-ihandlers.BIDOP = function(sender, proto, cmd, cfg, ...)
+ihandlers.BIDOP = function(self, sender, proto, cmd, cfg, ...)
   local idx, timeout = ...
 
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+  if (cfg ~= self.currentid or not self.bossloot) then
     return
   end
 
@@ -829,8 +760,8 @@ ihandlers.BIDOP = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.ResetBidders(false)
-  ksk.OpenBid(idx)
+  self:ResetBidders(false)
+  self:OpenBid(idx)
 end
 
 --
@@ -838,14 +769,14 @@ end
 -- Purpose: Sent by a user using KSK to the ML when they press the "Bid" button
 --          in the UI. IDX is the index of the item being bid on.
 --          This is sent by the user using the addon channel rather than
---          via whispers (ie it uses ksk:SendWhisperAM).
+--          via whispers (ie it uses self:SendWhisperAM).
 --
-ihandlers.BIDME = function(sender, proto, cmd, cfg, ...)
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+ihandlers.BIDME = function(self, sender, proto, cmd, cfg, ...)
+  if (cfg ~= self.currentid or not self.bossloot) then
     return
   end
 
-  ksk.NewBidder(sender)
+  self:NewBidder(sender)
 end
 
 --
@@ -854,16 +785,16 @@ end
 --          button in the UI. IDX is the index of the item being big on and is
 --          currently unused, as this should always match the current bid
 --          item. This is sent by the user using the addon channel rather than
---          via whispers (ie it uses ksk:SendWhisperAM).
+--          via whispers (ie it uses self:SendWhisperAM).
 --
-ihandlers.BIDRT = function(sender, proto, cmd, cfg, ...)
+ihandlers.BIDRT = function(self, sender, proto, cmd, cfg, ...)
   local idx = ...
 
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+  if (cfg ~= self.currentid or not self.bossloot) then
     return
   end
 
-  ksk.RetractBidder(sender)
+  self:RetractBidder(sender)
 end
 
 --
@@ -877,10 +808,10 @@ end
 --          UID is sent for completeness sake only and is not used by anyone
 --          except the master looter.
 --
-ihandlers.BIDER = function(sender, proto, cmd, cfg, ...)
+ihandlers.BIDER = function(self, sender, proto, cmd, cfg, ...)
   local name, class, pos, uid, prio, useprio = ...
 
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+  if (cfg ~= self.currentid or not self.bossloot) then
     return
   end
 
@@ -888,7 +819,7 @@ ihandlers.BIDER = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.AddBidder(name, class, pos, uid, prio, useprio, false)
+  self:AddBidder(name, class, pos, uid, prio, useprio, false)
 end
 
 --
@@ -896,10 +827,10 @@ end
 -- Purpose: Sent to the raid when a user retracts, so that users who have the
 --          mod can see who is bidding. NAME is the user who bid on the item.
 --
-ihandlers.BIDRM = function(sender, proto, cmd, cfg, ...)
+ihandlers.BIDRM = function(self, sender, proto, cmd, cfg, ...)
   local name = ...
 
-  if (cfg ~= ksk.currentid or not ksk.bossloot) then
+  if (cfg ~= self.currentid or not self.bossloot) then
     return
   end
 
@@ -907,7 +838,7 @@ ihandlers.BIDRM = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.DeleteBidder(name, false)
+  self:DeleteBidder(name, false)
 end
 
 --
@@ -919,10 +850,10 @@ end
 --          if this is part of a loop and we can be expecting a RFUSR command
 --          in the near future.
 --
-ehandlers.MKUSR = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.MKUSR = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, name, class, refresh = ...
 
-  ksk.CreateNewUser(name, class, cfg, getbool(refresh), true, uid, true)
+  self:CreateNewUser(name, class, cfg, getbool(refresh), true, uid, true)
 end
 
 --
@@ -931,8 +862,8 @@ end
 --          This is usually sent after a bulk user add operation has taken
 --          place. RAID is set to true if we should refresh the raid as well.
 --
-ihandlers.RFUSR = function(sender, proto, cmd, cfg, ...)
-  if (cfg ~= ksk.currentid) then
+ihandlers.RFUSR = function(self, sender, proto, cmd, cfg, ...)
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -940,8 +871,8 @@ ihandlers.RFUSR = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.RefreshUsers()
-  ksk.RefreshRaid()
+  self:RefreshUsers()
+  self:RefreshRaid()
 end
 
 --
@@ -950,16 +881,16 @@ end
 --          UID is the user ID being removed. ALTS is set to true if we
 --          should delete all alts of the user as well.
 --
-ehandlers.RMUSR = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.RMUSR = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, alts = ...
 
   if (not adm) then
-    if (not ksk.configs[cfg].users[uid]) then
+    if (not self.configs[cfg].users[uid]) then
       return
     end
   end
 
-  ksk.DeleteUser(uid, cfg, getbool(alts), true)
+  self:DeleteUser(uid, cfg, getbool(alts), true)
 end
 
 --
@@ -967,33 +898,33 @@ end
 -- Purpose: Sent to the raid / guild when a user is renamed. UID is the ID
 --          of the user and NEWNAME is the user's new name.
 --
-ehandlers.MVUSR = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.MVUSR = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, newname = ...
 
   if (not adm) then
-    if (not ksk.configs[cfg].users[uid]) then
+    if (not self.configs[cfg].users[uid]) then
       return
     end
   end
 
-  local euid = ksk.FindUser(newname, cfg)
+  local euid = self:FindUser(newname, cfg)
   if (euid == uid) then
     return
   end
   if (euid) then
-    ksk.DeleteUser(euid, cfg, true, true)
+    self:DeleteUser(euid, cfg, true, true)
   end
-  ksk.RenameUser(uid, newname, cfg, true)
+  self:RenameUser(uid, newname, cfg, true)
 end
 
 --
 -- Command: RSUSR uid onoff
 -- Purpose: Sent to the raid when a user is reserved / unreserved.
 --
-ihandlers.RSUSR = function(sender, proto, cmd, cfg, ...)
+ihandlers.RSUSR = function(self, sender, proto, cmd, cfg, ...)
   local uid, onoff = ...
 
-  if (cfg ~= ksk.currentid) then
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -1001,11 +932,11 @@ ihandlers.RSUSR = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  if (not ksk.configs[cfg].users[uid]) then
+  if (not self.configs[cfg].users[uid]) then
     return
   end
 
-  ksk.ReserveUser(uid, onoff, cfg, true)
+  self:ReserveUser(uid, onoff, cfg, true)
 end
 
 --
@@ -1014,31 +945,31 @@ end
 --          in the raid will respond with the list of user ID's they think
 --          are reserved.
 --
-ihandlers.REQRS = function(sender, proto, cmd, cfg, ...)
-  if (cfg ~= ksk.currentid) then
+ihandlers.REQRS = function(self, sender, proto, cmd, cfg, ...)
+  if (cfg ~= self.currentid) then
     return
   end
 
-  if (not ksk.configs[cfg]) then
+  if (not self.configs[cfg]) then
     return
   end
 
-  if (not ksk.csdata[cfg].is_admin) then
+  if (not self.csdata[cfg].is_admin) then
     return
   end
 
-  if (not ksk.csdata[cfg].reserved) then
+  if (not self.csdata[cfg].reserved) then
     return
   end
 
   local rus = {}
 
-  for k,v in pairs(ksk.csdata[cfg].reserved) do
+  for k,v in pairs(self.csdata[cfg].reserved) do
     tinsert(rus, k)
   end
 
   if (#rus ~= 0) then
-    ksk:CSendAM(cfg, "ACKRS", "ALERT", rus)
+    self:CSendAM(cfg, "ACKRS", "ALERT", rus)
   end
 end
 
@@ -1048,36 +979,36 @@ end
 --          they know to be reserved. USERTABLE is a simple table of
 --          user ID's they have set as reserved.
 --
-ihandlers.ACKRS = function(sender, proto, cmd, cfg, ...)
+ihandlers.ACKRS = function(self, sender, proto, cmd, cfg, ...)
   local utb = ...
 
-  if (cfg ~= ksk.currentid) then
+  if (cfg ~= self.currentid) then
     return
   end
 
-  if (not ksk.configs[cfg]) then
+  if (not self.configs[cfg]) then
     return
   end
 
-  local senduid = ksk.FindUser(sender, cfg)
+  local senduid = self:FindUser(sender, cfg)
 
   if (not senduid) then
     return
   end
 
-  if (not ksk.IsAdmin(senduid, cfg)) then
+  if (not self:IsAdmin(senduid, cfg)) then
     return
   end
 
-  if (not ksk.csdata[cfg].reserved) then
-    ksk.csdata[cfg].reserved = {}
+  if (not self.csdata[cfg].reserved) then
+    self.csdata[cfg].reserved = {}
   end
   for k,v in pairs(utb) do
-    ksk.csdata[cfg].reserved[v] = true
+    self.csdata[cfg].reserved[v] = true
   end
 
-  if (cfg == ksk.currentid) then
-    ksk.RefreshAllMemberLists()
+  if (cfg == self.currentid) then
+    self:RefreshAllMemberLists()
   end
 end
 
@@ -1091,11 +1022,11 @@ end
 --          depending on whether the flags is being set or cleared, and VAL
 --          is an optional value for the flag for some types ('A' and 'R').
 --
-ehandlers.CHUSR = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.CHUSR = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, flag, onoff, val = ...
 
   if (not adm) then
-    if (not ksk.configs[cfg].users[uid]) then
+    if (not self.configs[cfg].users[uid]) then
       return
     end
   end
@@ -1103,20 +1034,20 @@ ehandlers.CHUSR = function(adm, sender, proto, cmd, cfg, ...)
   onoff = getbool(onoff)
 
   if (flag == "E") then
-    ksk.SetUserEnchanter(uid, onoff, cfg, true)
+    self:SetUserEnchanter(uid, onoff, cfg, true)
   elseif (flag == "F") then
-    ksk.SetUserFrozen(uid, onoff, cfg, true)
+    self:SetUserFrozen(uid, onoff, cfg, true)
   elseif (flag == "A") then
-    ksk.SetUserIsAlt(uid, onoff, val, cfg, true)
+    self:SetUserIsAlt(uid, onoff, val, cfg, true)
   elseif (flag == "R") then
-    ksk.SetUserRole(uid, tonumber(val), cfg, true)
+    self:SetUserRole(uid, tonumber(val), cfg, true)
   end
 
-  if (flag ~= "A" and cfg == ksk.currentid) then
+  if (flag ~= "A" and cfg == self.currentid) then
     -- SetUserIsAlt does this internally
     if (adm and adm >= 10) then
-      ksk.RefreshUsers()
-      ksk.RefreshAllMemberLists()
+      self:RefreshUsers()
+      self:RefreshAllMemberLists()
     end
   end
 end
@@ -1125,22 +1056,22 @@ end
 -- Command: MDUSR uid role ench frozen exempt alt main
 -- Purpose: Sent to the raid / guild when a user is modified.
 --
-ehandlers.MDUSR = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.MDUSR = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, role, ench, frozen, exempt, alt, mainid = ...
 
   if (not adm) then
-    if (not ksk.configs[cfg].users[uid]) then
+    if (not self.configs[cfg].users[uid]) then
       return
     end
   end
 
-  ksk.SetUserRole(uid, tonumber(role), cfg, true)
-  ksk.SetUserEnchanter(uid, getbool(ench), cfg, true)
-  ksk.SetUserFrozen(uid, getbool(frozen), cfg, true)
-  ksk.SetUserIsAlt(uid, getbool(alt), mainid, cfg, true)
+  self:SetUserRole(uid, tonumber(role), cfg, true)
+  self:SetUserEnchanter(uid, getbool(ench), cfg, true)
+  self:SetUserFrozen(uid, getbool(frozen), cfg, true)
+  self:SetUserIsAlt(uid, getbool(alt), mainid, cfg, true)
 
-  if (cfg == ksk.currentid and adm and adm >= 10) then
-    ksk.RefreshAllMemberLists()
+  if (cfg == self.currentid and adm and adm >= 10) then
+    self:RefreshAllMemberLists()
   end
 end
 
@@ -1148,10 +1079,10 @@ end
 -- Command: MKLST listid name
 -- Purpose: Sent to the raid / guild when a new list is created.
 --
-ehandlers.MKLST = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.MKLST = function(self, adm, sender, proto, cmd, cfg, ...)
   local listid, name = ...
 
-  ksk.CreateNewList(name, cfg, listid, true)
+  self:CreateNewList(name, cfg, listid, true)
 end
 
 --
@@ -1159,16 +1090,16 @@ end
 -- Purpose: Sent to the raid / guild when a list is removed. LISTID is the
 --          ID of the list being removed.
 --
-ehandlers.RMLST = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.RMLST = function(self, adm, sender, proto, cmd, cfg, ...)
   local listid = ...
 
   if (not adm) then
-    if (not ksk.configs[cfg].lists[listid]) then
+    if (not self.configs[cfg].lists[listid]) then
       return
     end
   end
 
-  ksk.DeleteList(listid, cfg, true)
+  self:DeleteList(listid, cfg, true)
 end
 
 --
@@ -1176,23 +1107,23 @@ end
 -- Purpose: Sent to the raid / guild when a list is renamed. LISTID is the ID
 --          of the old list and NEWNAME is the list's new name.
 --
-ehandlers.MVLST = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.MVLST = function(self, adm, sender, proto, cmd, cfg, ...)
   local listid, newname = ...
 
   if (not adm) then
-    if (not ksk.configs[cfg].lists[listid]) then
+    if (not self.configs[cfg].lists[listid]) then
       return
     end
   end
 
-  local elid = ksk.FindList(newname, cfg)
+  local elid = self:FindList(newname, cfg)
   if (elid == listid) then
     return
   end
   if (elid) then
-    ksk.DeleteList(elid, cfg, true)
+    self:DeleteList(elid, cfg, true)
   end
-  ksk.RenameList(listid, newname, cfg, true)
+  self:RenameList(listid, newname, cfg, true)
 end
 
 --
@@ -1203,30 +1134,30 @@ end
 --          list already exists for the user for some reason, we delete it
 --          first (but only for non-events).
 --
-ehandlers.CPLST = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.CPLST = function(self, adm, sender, proto, cmd, cfg, ...)
   local listid, newid, name = ...
 
   if (not adm) then
-    if (ksk.configs[cfg].lists[newid]) then
-      ksk.DeleteList(newid, cfg, true)
+    if (self.configs[cfg].lists[newid]) then
+      self:DeleteList(newid, cfg, true)
     end
   end
 
-  ksk.CopyList(listid, name, cfg, newid, true)
+  self:CopyList(listid, name, cfg, newid, true)
 end
 
 --
--- Command: CHLST listid sort rank stricta strictr list tethered
+-- Command: CHLST listid sort rank stricta strictr list tethered altdisp
 -- Purpose: Syncer-only event sent when a list's paramaters are modified.
 --          SORT is the sort order,
 --          STRICTA is true if strict class armor filtering is in place,
 --          STRICTR is true if strict role filtering is in place, LIST is
 --          the additional list to suicide on.
 --
-ehandlers.CHLST = function(adm, sender, proto, cmd, cfg, ...)
-  local listid, sortorder, rank, stricta, strictr, slist, tethered = ...
+ehandlers.CHLST = function(self, adm, sender, proto, cmd, cfg, ...)
+  local listid, sortorder, rank, stricta, strictr, slist, tethered, altdisp = ...
 
-  local llist = ksk.configs[cfg].lists[listid]
+  local llist = self.configs[cfg].lists[listid]
   if (not llist) then
     return
   end
@@ -1240,11 +1171,12 @@ ehandlers.CHLST = function(adm, sender, proto, cmd, cfg, ...)
   end
   llist.extralist = slist
   llist.tethered = getbool(tethered)
+  llist.altdisp = getbool(altdisp)
 
-  if (cfg == ksk.currentid) then
-    ksk.FixupLists(cfg)
-    ksk.RefreshListsUI(false)
-    ksk.RefreshAllLists()
+  if (cfg == self.currentid) then
+    self:FixupLists(cfg)
+    self:RefreshListsUI(false)
+    self:RefreshAllLists()
   end
 end
 
@@ -1254,10 +1186,10 @@ end
 --          ID of the user being added, LISTID is the ID of the list the user
 --          is being added to, and POS is the position within the list.
 --
-ehandlers.IMLST = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.IMLST = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, listid, pos = ...
 
-  ksk.InsertMember(uid, listid, tonumber(pos), cfg, true)
+  self:InsertMember(uid, listid, tonumber(pos), cfg, true)
 end
 
 --
@@ -1267,10 +1199,10 @@ end
 --          and when configs are copied. LISTID is the list to set the members
 --          in, and ULIST is the concatenated list of users, in order.
 --
-ehandlers.SMLST = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.SMLST = function(self, adm, sender, proto, cmd, cfg, ...)
   local listid, ulist = ...
 
-  ksk.SetMemberList(ulist, listid, cfg, false)
+  self:SetMemberList(ulist, listid, cfg, false)
 end
 
 --
@@ -1279,10 +1211,10 @@ end
 --          is the ID of the user being deleted, and LISTID is the ID of the
 --          list the user is being deleted from.
 --
-ehandlers.DMLST = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.DMLST = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, listid = ...
 
-  ksk.DeleteMember(uid, listid, cfg, true)
+  self:DeleteMember(uid, listid, cfg, true)
 end
 
 --
@@ -1297,10 +1229,10 @@ end
 --          then a formal suicide event is sent (as the extreme bottom is not
 --          necessarily the bottom of the suicide list when in raid).
 --
-ehandlers.MMLST = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.MMLST = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, listid, dir = ...
 
-  ksk.MoveMember(uid, listid, tonumber(dir), cfg)
+  self:MoveMember(uid, listid, tonumber(dir), cfg)
 end
 
 --
@@ -1313,11 +1245,11 @@ end
 --          argument is a single string of all of the user ID's and needs to
 --          be split before passing it to the suicide function.
 --
-ehandlers.SULST = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.SULST = function(self, adm, sender, proto, cmd, cfg, ...)
   local listid, raidlist, uid = ...
-  local raiders = ksk.SplitRaidList(raidlist)
+  local raiders = self:SplitRaidList(raidlist)
 
-  ksk.SuicideUserLowLevel(listid, raiders, uid, cfg)
+  self:SuicideUserLowLevel(listid, raiders, uid, cfg)
 end
 
 --
@@ -1326,11 +1258,11 @@ end
 --          item database. ITEMID is the item ID to be added, and ITEMLINK is
 --          the full item link.
 --
-ehandlers.MKITM = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.MKITM = function(self, adm, sender, proto, cmd, cfg, ...)
   local itemid, ilink = ...
   local itemlink = gsub(ilink, "\7", ":")
 
-  ksk.AddItem(itemid, itemlink, cfg, true)
+  self:AddItem(itemid, itemlink, cfg, true)
 end
 
 --
@@ -1339,12 +1271,12 @@ end
 --          the item database. Users who are not admins do not need or get the
 --          item database and therefore do not need this event.
 --
-ehandlers.RMITM = function(adm, sender, proto, cmd, cfg, itemid)
-  ksk.DeleteItem(itemid, cfg, true)
+ehandlers.RMITM = function(self, adm, sender, proto, cmd, cfg, itemid)
+  self:DeleteItem(itemid, cfg, true)
 end
 
 --
--- Command: CHITM itemid ign cfilter role list rank nextuser suicide del autodench automl
+-- Command: CHITM itemid ign cfilter role list rank nextuser suicide del autodench automl ignqual
 -- Purpose: This is a syncer-only event and deals with modifying an item in
 --          the item database. The item must already exist. IGN is set to
 --          Y if the item is to be ignored, N otherwise. If it is ignored
@@ -1360,10 +1292,10 @@ end
 --          user needs to be suicided on a given list, that list ID is passed
 --          in SUICIDE, otherwise its empty.
 --
-ehandlers.CHITM = function(adm, sender, proto, cmd, cfg, ...)
-  local itemid, ign, cfilt, role, lst, rank, nextuser, slist, del, autodench, automl = ...
+ehandlers.CHITM = function(self, adm, sender, proto, cmd, cfg, ...)
+  local itemid, ign, cfilt, role, lst, rank, nextuser, slist, del, autodench, automl, ignqual = ...
 
-  local ilist = ksk.configs[cfg].items
+  local ilist = self.configs[cfg].items
   if (not ilist[itemid]) then
     return
   end
@@ -1400,11 +1332,14 @@ ehandlers.CHITM = function(adm, sender, proto, cmd, cfg, ...)
     if (automl and automl ~= "") then
       ii.automl = true
     end
+    if (ignqual and ignqual ~= "") then
+      ii.ignorequal = true
+    end
   end
   ilist[itemid] = ii
 
-  if (cfg == ksk.currentid and adm and adm >= 10) then
-    ksk.RefreshItemList()
+  if (cfg == self.currentid and adm and adm >= 10) then
+    self:RefreshItemList()
   end
 end
 
@@ -1413,18 +1348,18 @@ end
 -- Purpose: Sent when an admin is added to the list of admins. Can only ever
 --          be sent by the config owner.
 --
-ehandlers.MKADM = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.MKADM = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, adminid = ...
 
-  local cfp = ksk.frdb.configs[cfg]
+  local cfp = self.configs[cfg]
 
   if (not cfp.admins[uid]) then
     cfp.nadmins = cfp.nadmins + 1
   end
   cfp.admins[uid] = { id = adminid }
 
-  if (cfg == ksk.currentid) then
-    ksk.RefreshConfigAdminUI(true)
+  if (cfg == self.currentid) then
+    self:RefreshConfigAdminUI(true)
   end
 end
 
@@ -1433,10 +1368,10 @@ end
 -- Purpose: Sent when an admin is removed from the list of admins. Can only
 --          ever be sent by the config owner.
 --
-ehandlers.RMADM = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.RMADM = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid = ...
 
-  local cfp = ksk.configs[cfg]
+  local cfp = self.configs[cfg]
 
   --
   -- If I was just removed as an admin, get rid of any sync data I may have
@@ -1444,10 +1379,10 @@ ehandlers.RMADM = function(adm, sender, proto, cmd, cfg, ...)
   -- main was just removed as an admin.
   --
   local mymain = nil
-  if (ksk.UserIsAlt(ksk.csdata[cfg].myuid, nil, cfg)) then
-    mymain = cfp.users[ksk.csdata[cfg].myuid].main
+  if (self:UserIsAlt(self.csdata[cfg].myuid, nil, cfg)) then
+    mymain = cfp.users[self.csdata[cfg].myuid].main
   end
-  if (uid == ksk.csdata[cfg].myuid or uid == mymain) then
+  if (uid == self.csdata[cfg].myuid or uid == mymain) then
     cfp.syncing = false
     cfp.lastevent = 0
     cfp.nitems = 0
@@ -1461,10 +1396,10 @@ ehandlers.RMADM = function(adm, sender, proto, cmd, cfg, ...)
     end
   end
 
-  ksk.DeleteAdmin(uid, cfg, true)
+  self:DeleteAdmin(uid, cfg, true)
 
-  if (cfg == ksk.currentid) then
-    ksk.FullRefresh()
+  if (cfg == self.currentid) then
+    self:FullRefresh()
   end
 end
 
@@ -1482,8 +1417,8 @@ end
 --          in case the sender is spamming the sync request button.
 --
 local lastrec = {}
-ihandlers.RSYNC = function(sender, proto, cmd, cfg, ...)
-  if (not ksk.configs[cfg]) then
+ihandlers.RSYNC = function(self, sender, proto, cmd, cfg, ...)
+  if (not self.configs[cfg]) then
     return
   end
 
@@ -1495,12 +1430,12 @@ ihandlers.RSYNC = function(sender, proto, cmd, cfg, ...)
   end
   lastrec[sender] = now
 
-  local myuid = ksk.csdata[cfg].myuid
+  local myuid = self.csdata[cfg].myuid
   if (myuid == nil) then
     return
   end
 
-  if (not ksk.csdata[cfg].is_admin) then
+  if (not self.csdata[cfg].is_admin) then
     return
   end
 
@@ -1510,9 +1445,9 @@ ihandlers.RSYNC = function(sender, proto, cmd, cfg, ...)
   -- with respects to the config owner, and I need to sync with them first.
   -- We will issue a warning for this case.
   --
-  local theiruid = ksk.FindUser(sender, cfg)
-  if (theiruid == nil or not ksk.IsAdmin(theiruid, cfg)) then
-    info(L["sync request received from %q but I do not recognise them as an admin. Please sync with the config owner (%q)."], sender, aclass(ksk.configs[cfg].users[ksk.configs[cfg].owner]))
+  local theiruid = self:FindUser(sender, cfg)
+  if (theiruid == nil or not self:IsAdmin(theiruid, cfg)) then
+    info(L["sync request received from %q but I do not recognise them as an admin. Please sync with the config owner (%q)."], sender, aclass(self.configs[cfg].users[self.configs[cfg].owner]))
     return
   end
 
@@ -1523,7 +1458,7 @@ ihandlers.RSYNC = function(sender, proto, cmd, cfg, ...)
   -- or not they need any events from us. If they do they will send us a
   -- GSYNC message requesting all events from a certain number forward.
   --
-  ksk:CSendWhisperAM(cfg, sender, "SYNAK", "ALERT", ksk.cfg.lastevent, ksk.cfg.cksum)
+  self:CSendWhisperAM(cfg, sender, "SYNAK", "ALERT", self.cfg.lastevent, self.cfg.cksum)
 end
 
 --
@@ -1536,10 +1471,10 @@ end
 --          replied. LASTEVENT is the highest event number the sender has in
 --          their logs, and CKSUM is their config checksum.
 --
-ihandlers.SYNAK = function(sender, proto, cmd, cfg, ...)
+ihandlers.SYNAK = function(self, sender, proto, cmd, cfg, ...)
   local lastevt, cksum = ...
 
-  if (not ksk.configs[cfg]) then
+  if (not self.configs[cfg]) then
     return
   end
 
@@ -1548,12 +1483,12 @@ ihandlers.SYNAK = function(sender, proto, cmd, cfg, ...)
   -- even a known user in the config space). The most likely cause of this
   -- is someone trying to spoof us, so we silently ignore it.
   --
-  local myuid = ksk.csdata[cfg].myuid
+  local myuid = self.csdata[cfg].myuid
   if (myuid == nil) then
     return
   end
 
-  if (not ksk.csdata[cfg].is_admin) then
+  if (not self.csdata[cfg].is_admin) then
     return
   end
 
@@ -1561,13 +1496,13 @@ ihandlers.SYNAK = function(sender, proto, cmd, cfg, ...)
   -- I'm an admin in this config. Check to see if the sender is an admin
   -- too. If I don't know they are an admin, silently ignore the reply.
   --
-  local theiruid = ksk.FindUser(sender, cfg)
-  local ia, cktheiruid = ksk.IsAdmin(theiruid, cfg)
+  local theiruid = self:FindUser(sender, cfg)
+  local ia, cktheiruid = self:IsAdmin(theiruid, cfg)
   if (theiruid == nil or not ia) then
     return
   end
 
-  ksk.ProcessSyncAck(cfg, myuid, theiruid, cktheiruid, lastevt, cksum)
+  self:ProcessSyncAck(cfg, myuid, theiruid, cktheiruid, lastevt, cksum)
 end
 
 --
@@ -1592,23 +1527,23 @@ end
 --          CKSUM is provided for possible future use and is the senders
 --          current config checksum value.
 --
-ihandlers.GSYNC = function(sender, proto, cmd, cfg, ...)
+ihandlers.GSYNC = function(self, sender, proto, cmd, cfg, ...)
   local lastevt, full, lasteid, cksum = ...
 
-  if (not ksk.configs[cfg]) then
+  if (not self.configs[cfg]) then
     return
   end
 
-  local theiruid = ksk.FindUser(sender, cfg)
-  local ia, cktheiruid = ksk.IsAdmin(theiruid, cfg)
+  local theiruid = self:FindUser(sender, cfg)
+  local ia, cktheiruid = self:IsAdmin(theiruid, cfg)
   if (theiruid == nil or not ia) then
     return
   end
 
   if (full) then
-    if (ksk.csdata[cfg].is_admin == 2) then
-      info(L["[%s] sending sync data to user %s."], white(ksk.configs[cfg].name), aclass(ksk.configs[cfg].users[theiruid]))
-      ksk.SendFullSync(cfg, sender, false)
+    if (self.csdata[cfg].is_admin == 2) then
+      info(L["[%s] sending sync data to user %s."], white(self.configs[cfg].name), aclass(self.configs[cfg].users[theiruid]))
+      self:SendFullSync(cfg, sender, false)
     end
     return
   end
@@ -1624,7 +1559,7 @@ ihandlers.GSYNC = function(sender, proto, cmd, cfg, ...)
   -- up to a certain event ID.
   --
   local mlist = {}
-  local them = ksk.configs[cfg].admins[cktheiruid]
+  local them = self.configs[cfg].admins[cktheiruid]
   them.active = true
   if (not them.lastevent) then
     them.lastevent = 0
@@ -1638,8 +1573,8 @@ ihandlers.GSYNC = function(sender, proto, cmd, cfg, ...)
       tinsert(mlist, v)
     end
   end
-  info(L["[%s] sending sync data to user %s."], white(ksk.configs[cfg].name), aclass(ksk.configs[cfg].users[theiruid]))
-  ksk:CSendWhisperAM(cfg, sender, "MSYNC", "ALERT", ksk.csdata[cfg].myuid, theiruid, ksk:CompressPayload("MSYNC", mlist))
+  info(L["[%s] sending sync data to user %s."], white(self.configs[cfg].name), aclass(self.configs[cfg].users[theiruid]))
+  self:CSendWhisperAM(cfg, sender, "MSYNC", "ALERT", self.csdata[cfg].myuid, theiruid, mlist)
 end
 
 --
@@ -1649,19 +1584,19 @@ end
 --          that we did in fact request this, and that the sender is who
 --          we expect it to be.
 --
-ihandlers.FSYNC = function(sender, proto, cmd, cfg, ...)
+ihandlers.FSYNC = function(self, sender, proto, cmd, cfg, ...)
   local cfgd = ...
 
-  if (not ksk.configs[cfg]) then
+  if (not self.configs[cfg]) then
     return
   end
 
-  local myuid = ksk.csdata[cfg].myuid
+  local myuid = self.csdata[cfg].myuid
   if (myuid == nil) then
     return
   end
 
-  if (not ksk.csdata[cfg].is_admin) then
+  if (not self.csdata[cfg].is_admin) then
     return
   end
 
@@ -1669,26 +1604,20 @@ ihandlers.FSYNC = function(sender, proto, cmd, cfg, ...)
   -- I'm an admin in this config. Check to see if the sender is an admin
   -- too. If I don't know they are an admin, silently ignore the reply.
   --
-  local theiruid = ksk.FindUser(sender, cfg)
-  if (theiruid == nil or not ksk.IsAdmin(theiruid, cfg)) then
+  local theiruid = self:FindUser(sender, cfg)
+  if (theiruid == nil or not self:IsAdmin(theiruid, cfg)) then
     return
   end
 
-  local ncf, cfgid = prepare_config_from_bcast(cfgd)
+  local ncf, cfgid = prepare_config_from_bcast(self, cfgd)
 
   ncf.syncing = true
 
-  --
-  -- Unbelievable bug was here! Setting the new config to the new table
-  -- breaks the ksk.cfg reference, which leaves us with a "dangling" reference
-  -- and two different contents for the same config. So now after setting
-  -- this we reset all of the aliases using the new ksk.MakeAliases() function.
-  --
-  ksk.frdb.configs[cfg] = ncf
+  self.frdb.configs[cfg] = ncf
 
-  if (cfg == ksk.currentid) then
-    ksk.MakeAliases()
-    ksk.FullRefresh(true)
+  if (cfg == self.currentid) then
+    self:MakeAliases()
+    self:FullRefresh(true)
   end
   info(L["[%s] sync with user %s complete."], white(ncf.name), sender)
 
@@ -1696,11 +1625,11 @@ ihandlers.FSYNC = function(sender, proto, cmd, cfg, ...)
   -- We will want to clear the list of syncers so that we don't attempt
   -- to get another full sync from someone else.
   --
-  ksk.SyncUpdateReplier()
+  self:SyncUpdateReplier()
 end
 
 --
--- Command: MSYNC theiruid myuid zmodlist
+-- Command: MSYNC theiruid myuid modlist
 -- Purpose: This is a syncer-only event and is sent in response to a GSYNC
 --          when they want events after a specific number, and it is not a
 --          full sync (which is handled by FSYNC above). THEIRUID is the
@@ -1709,30 +1638,24 @@ end
 --          trust it) and MODLIST is a table with event strings that need to
 --          be split and processed.
 --
-ihandlers.MSYNC = function(sender, proto, cmd, cfg, ...)
-  local theiruid, myuid, zdata = ...
-  local ok, mlist
+ihandlers.MSYNC = function(self, sender, proto, cmd, cfg, ...)
+  local theiruid, myuid, mlist = ...
 
-  if (not ksk.configs[cfg]) then
+  if (not self.configs[cfg]) then
     return
   end
 
-  local cp = ksk.configs[cfg]
-  local ia, cktheiruid = ksk.IsAdmin(theiruid, cfg)
+  local cp = self.configs[cfg]
+  local ia, cktheiruid = self:IsAdmin(theiruid, cfg)
   if (not cp.users[theiruid] or not ia) then
     return
   end
 
-  if (not cp.users[myuid] or not ksk.IsAdmin(myuid, cfg)) then
+  if (not cp.users[myuid] or not self:IsAdmin(myuid, cfg)) then
     return
   end
 
-  local adm = ksk.csdata[cfg].is_admin
-
-  ok, mlist = ksk:InflatePayload(zdata)
-  if (not ok or not mlist) then
-    return
-  end
+  local adm = self.csdata[cfg].is_admin
 
   for k,v in pairs(mlist) do
     local cmd, eid, cks, cstr = strsplit("\8", v)
@@ -1751,20 +1674,20 @@ ihandlers.MSYNC = function(sender, proto, cmd, cfg, ...)
     --
     -- Update our config checksum with the new one and process the event.
     --
-    local oldsum = ksk.configs[cfg].cksum
+    local oldsum = self.configs[cfg].cksum
     local newsum = bxor(oldsum, cks)
-    ksk.configs[cfg].cksum = newsum
-    ksk.configs[cfg].admins[cktheiruid].lastevent = eid
+    self.configs[cfg].cksum = newsum
+    self.configs[cfg].admins[cktheiruid].lastevent = eid
     ehandlers[cmd](adm, sender, proto, cmd, cfg, strsplit(":", cstr))
   end
-  ksk.qf.synctopbar:SetCurrentCRC()
+  self.qf.synctopbar:SetCurrentCRC()
   cp.admins[cktheiruid].active = true
   if (not cp.admins[cktheiruid].sync) then
     cp.admins[theiruid].sync = {}
   end
-  ksk.SyncUpdateReplier(theiruid, ksk.configs[cfg].admins[cktheiruid].lastevent)
-  info(L["[%s] sync with user %s complete."], white(ksk.configs[cfg].name), aclass(ksk.configs[cfg].users[theiruid]))
-  ksk.FullRefresh(true)
+  self:SyncUpdateReplier(theiruid, self.configs[cfg].admins[cktheiruid].lastevent)
+  info(L["[%s] sync with user %s complete."], white(self.configs[cfg].name), aclass(self.configs[cfg].users[theiruid]))
+  self:FullRefresh(true)
 end
 
 --
@@ -1778,20 +1701,20 @@ end
 --          their savedvariables folder. This event is only ever sent once
 --          by each user when they first log in (or reload their UI).
 --
-ihandlers.CSYNC = function(sender, proto, cmd, cfg, cfgt)
+ihandlers.CSYNC = function(self, sender, proto, cmd, cfg, cfgt)
   for k,v in pairs(cfgt) do
     local cfgid, nadm, astr = strsplit(":", v)
     nadm = tonumber(nadm)
 
-    if (ksk.configs[cfgid]) then
-      local cap = ksk.configs[cfgid].admins
-      local myuid = ksk.csdata[cfgid].myuid
-      local mymainid = ksk.csdata[cfgid].mymainid
-      local theiruid = ksk.FindUser(sender, cfgid)
+    if (self.configs[cfgid]) then
+      local cap = self.configs[cfgid].admins
+      local myuid = self.csdata[cfgid].myuid
+      local mymainid = self.csdata[cfgid].mymainid
+      local theiruid = self:FindUser(sender, cfgid)
 
       if (theiruid) then
         if (not cap[theiruid]) then
-          local ia, aid = ksk.UserIsAlt(theiruid, nil, cfgid)
+          local ia, aid = self:UserIsAlt(theiruid, nil, cfgid)
           if (ia and cap[aid]) then
             theiruid = aid
           else
@@ -1839,30 +1762,30 @@ end
 --          config, and the reply will include the config ID, which will
 --          update the sender's config ID when they receive the data.
 --
-ihandlers.RCOVR = function(sender, proto, cmd, cfg, cfgname)
-  local cfgid = ksk.FindConfig(cfgname)
+ihandlers.RCOVR = function(self, sender, proto, cmd, cfg, cfgname)
+  local cfgid = self:FindConfig(cfgname)
 
   if (not cfgid) then
     return
   end
 
-  local uid = ksk.FindUser(sender, cfgid)
+  local uid = self:FindUser(sender, cfgid)
   if (not uid) then
     return
   end
 
-  if (ksk.configs[cfgid].owner ~= uid) then
+  if (self.configs[cfgid].owner ~= uid) then
     return
   end
 
   --
   -- If I am not an admin (or think I'm not) then ignore.
   --
-  if (ksk.csdata[cfgid].is_admin ~= 1) then
+  if (self.csdata[cfgid].is_admin ~= 1) then
     return
   end
 
-  ksk.SendFullSync(cfgid, sender, true)
+  self:SendFullSync(cfgid, sender, true)
 end
 
 --
@@ -1870,17 +1793,17 @@ end
 -- Purpose: This is a syncer-only event and is sent by an admin in response
 --          to the config owner requesting recovery.
 --
-ihandlers.RCACK = function(sender, proto, cmd, cfg, cfgdata)
-  local cfd, cfdid = prepare_config_from_bcast(cfgdata)
-  ksk.RecoverConfig(sender, cfd, cfdid, cfgdata)
+ihandlers.RCACK = function(self, sender, proto, cmd, cfg, cfgdata)
+  local cfd, cfdid = prepare_config_from_bcast(self, cfgdata)
+  self:RecoverConfig(sender, cfd, cfdid, cfgdata)
 end
 
 --
 -- Command: OROLL ilink timeout
 -- Purpose: Sent when an item is being sent to open roll.
 --
-ihandlers.OROLL = function(sender, proto, cmd, cfg, ilink, timeout, allowos)
-  if (cfg ~= ksk.currentid) then
+ihandlers.OROLL = function(self, sender, proto, cmd, cfg, ilink, timeout, allowos)
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -1888,15 +1811,15 @@ ihandlers.OROLL = function(sender, proto, cmd, cfg, ilink, timeout, allowos)
     return
   end
 
-  ksk.StartOpenRoll(ilink, timeout, allowos)
+  self:StartOpenRoll(ilink, timeout, allowos)
 end
 
 --
 -- Command: EROLL
 -- Purpose: Sent when a roll ends or is cancelled.
 --
-ihandlers.EROLL = function(sender, proto, cmd, cfg, ...)
-  if (cfg ~= ksk.currentid) then
+ihandlers.EROLL = function(self, sender, proto, cmd, cfg, ...)
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -1904,7 +1827,7 @@ ihandlers.EROLL = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.EndOpenRoll()
+  self:EndOpenRoll()
 end
 
 --
@@ -1913,10 +1836,10 @@ end
 --          pause the roll. If it is false we resume the roll with TIMEOUT
 --          seconds left.
 --
-ihandlers.PROLL = function(sender, proto, cmd, cfg, ...)
+ihandlers.PROLL = function(self, sender, proto, cmd, cfg, ...)
   local onoff, timeout = ...
 
-  if (cfg ~= ksk.currentid) then
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -1924,7 +1847,7 @@ ihandlers.PROLL = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.PauseResumeRoll(onoff, timeout)
+  self:PauseResumeRoll(onoff, timeout)
 end
 
 --
@@ -1933,10 +1856,10 @@ end
 --          tied users can roll). This is only for mod users, not the ML.
 --          It will only allow the specified users to roll.
 --
-ihandlers.RROLL = function(sender, proto, cmd, cfg, ...)
+ihandlers.RROLL = function(self, sender, proto, cmd, cfg, ...)
   local ilink, timeout, winners = ...
 
-  if (cfg ~= ksk.currentid) then
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -1944,17 +1867,17 @@ ihandlers.RROLL = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.RestrictedRoll(ilink, timeout, winners)
+  self:RestrictedRoll(ilink, timeout, winners)
 end
 
 --
 -- Command: XROLL timeout
 -- Purpose: Extend the open roll by TIMEOUT seconds.
 --
-ihandlers.XROLL = function(sender, proto, cmd, cfg, ...)
+ihandlers.XROLL = function(self, sender, proto, cmd, cfg, ...)
   local timeout = ...
 
-  if (cfg ~= ksk.currentid) then
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -1962,17 +1885,17 @@ ihandlers.XROLL = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.ExtendRoll(timeout)
+  self:ExtendRoll(timeout)
 end
 
 --
 -- Command: TROLL list
 -- Purpose: Contains a list of the top 5 rollers
 --
-ihandlers.TROLL = function(sender, proto, cmd, cfg, ...)
+ihandlers.TROLL = function(self, sender, proto, cmd, cfg, ...)
   local trolls = ...
 
-  if (cfg ~= ksk.currentid) then
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -1980,7 +1903,7 @@ ihandlers.TROLL = function(sender, proto, cmd, cfg, ...)
     return
   end
 
-  ksk.TopRollers(trolls)
+  self:TopRollers(trolls)
 end
 
 --
@@ -1997,10 +1920,10 @@ end
 --          assigned to ML, "A" is for auto-assigned. pos is set to the
 --          list position the user occupied before the suicide.
 --
-ehandlers.LHADD = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.LHADD = function(self, adm, sender, proto, cmd, cfg, ...)
   local when, what, who, how, spos = ...
 
-  local cfp = ksk.configs[cfg]
+  local cfp = self.configs[cfg]
 
   if (not cfp.settings.history) then
     return
@@ -2016,18 +1939,7 @@ ehandlers.LHADD = function(adm, sender, proto, cmd, cfg, ...)
     rf = false
   end
 
-  if (proto < 3) then
-    -- Original protocol sent the date as a string. Need to convert that.
-    local otm = {}
-    otm.year = tonumber(strsub(when, 1, 4))
-    otm.month = tonumber(strsub(when, 5, 6))
-    otm.day = tonumber(strsub(when, 7, 8))
-    otm.hour = tonumber(strsub(when, 9, 10))
-    otm.min = tonumber(strsub(when, 11, 12))
-    otm.sec = 0
-    when = time(otm) - K.utcdiff
-  end
-  ksk.AddLootHistory(cfg, when, itemlink, who, how, spos, rf, true)
+  self:AddLootHistory(cfg, when, itemlink, who, how, spos, rf, true)
 end
 
 --
@@ -2041,16 +1953,16 @@ end
 --          is the itemlink of the item that was rolled on. That is used to
 --          produce the undo record in the loot history list.
 --
-ehandlers.SUNDO = function(adm, sender, proto, cmd, cfg, ...)
+ehandlers.SUNDO = function(self, adm, sender, proto, cmd, cfg, ...)
   local listid, movers, uid, ilink = ...
 
-  if (not ksk.configs[cfg]) then
+  if (not self.configs[cfg]) then
     return
   end
 
   local rilink = gsub(ilink, "\7", ":")
-  local movelist = ksk.SplitRaidList(movers)
-  ksk.UndoSuicide(cfg, listid, movelist, uid, ilink, true)
+  local movelist = self:SplitRaidList(movers)
+  self:UndoSuicide(cfg, listid, movelist, uid, ilink, true)
 end
 
 --
@@ -2059,14 +1971,14 @@ end
 --          are considered officer ranks. We only process this message if the
 --          sender is the GM.
 --
-ihandlers.ORANK = function (sender, proto, cmd, cfg, ...)
+ihandlers.ORANK = function (self, sender, proto, cmd, cfg, ...)
   local oranks = ...
 
-  if (not ksk.configs[cfg]) then
+  if (not self.configs[cfg]) then
     return
   end
 
-  local cfp = ksk.configs[cfg]
+  local cfp = self.configs[cfg]
 
   if (cfp.settings.cfgtype ~= KK.CFGTYPE_GUILD) then
     return

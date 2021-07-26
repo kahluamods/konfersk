@@ -475,6 +475,8 @@ L["Edit Officer Ranks"] = "Edit Officer Ranks"
 L["Set Guild Officer Ranks"] = "Set Guild Officer Ranks"
 L["Main Spec Roll"] = true
 L["Off Spec Roll"] = true
+L["Display Alts in Roll List"] = true
+L["Ignore Item Quality"] = true
 
 --
 -- Tooltip text.
@@ -594,6 +596,8 @@ L["TIP094"] = "Sendet die geordnete Liste der Mitglieder für die Würfel-Liste 
 L["TIP095"] = "Setzt das Minimum-Item-Level, welches für Gebote / Würfe verfügbar ist. Wenn es größer als das Plündermeister-Level gesetzt ist, werden alle Items unter diese Marke automatisch entzaubert. Wenn dem so ist, dann überprüfe die nächste Option." 
 L["TIP096"] = "Wenn du eine Item-Level-Marke für Gebote gesetzt hast und sie ist höher als die Plündermeister-Marke, aktiviere diese Option, um alle Items unterhalb dieser Marke automatisch an den Entzauberer zu senden. Wenn kein Entzauberer vorhanden ist, wird das Item dem Plündermeister zugewiesen."
 L["TIP097"] = "Aktiviere diese Option, um das Item automatisch an den Entzauberer zu senden und nicht zum Bieten / Würfeln zuzulassen. Wenn kein Entzauberer vorhanden ist, wird das Item dem Plündermeister zugewiesen."
+L["TIP097.1"] = "Enable this option to bypass the global item quality filter. Useful if you want to bid on certain special items that may be Uncommon or Rare."
 L["TIP098"] = "Aktiviere diese Option, um das Item automatisch an den Plündermeister zu senden und nicht zum Bieten / Würfeln zuzulassen."
 L["TIP099"] = "Gib den Namen des Nutzers ein, den Du suchen willst. Dies kann auch nur ein Teil des Nutzer-Namens sein. Der erste gefundenen Nutzer wird hervorgehoben und ausgewählt."
 L["TIP100"] = "Mark which guild ranks are officer ranks. Only officers will be permitted to broadcast configs to the entire guild."
+L["TIP101"] = "If enabled, show all of a user's alternate characters (alts) indented under the main toon name in the member list. This has the potential to make the member list look a little messy but some people prefer seeing all of a user's characters grouped together. This only affects display, it does not actually change any user records."
