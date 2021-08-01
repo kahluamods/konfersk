@@ -382,7 +382,6 @@ function ksk:InitialiseSyncUI()
     font = "GameFontNormalSmall",
   }
   tbf.mycksum = KUI:CreateStringLabel(arg, tbf)
-  arg = {}
 
   -- Must preserve this in self.qf its used in many places.
   self.qf.synctopbar = tbf
@@ -395,7 +394,6 @@ function ksk:InitialiseSyncUI()
     leftsplit = true, name = "KSKSyncRSplit",
   }
   rs.hsplit = KUI:CreateHSplit(arg, rs)
-  arg = {}
   local tr = rs.hsplit.topframe
   local br = rs.hsplit.bottomframe
   -- Usable tr width = 260 (its 285 in total - 25 for the scroll bar)
@@ -424,7 +422,6 @@ function ksk:InitialiseSyncUI()
     highlightitem = KUI.HighlightItemHelper,
   }
   ls.olist = KUI:CreateScrollList(arg, ls)
-  arg = {}
   qf.syncerslist = ls.olist
 
   arg = {
@@ -437,7 +434,6 @@ function ksk:InitialiseSyncUI()
     clear_syncers_list()
     self:SendWhisperAM(self.cfg.users[selsyncer].name, "RSYNC", "ALERT")
   end)
-  arg = {}
   qf.reqsyncbutton = br.rsync
 
   arg = {
@@ -450,7 +446,6 @@ function ksk:InitialiseSyncUI()
     clear_syncers_list()
     self:SendAM("RSYNC", "ALERT")
   end)
-  arg = {}
   qf.reqsyncallbutton = br.rsyncall
   ypos = ypos - 24
 
@@ -463,7 +458,6 @@ function ksk:InitialiseSyncUI()
   br.bcast:Catch("OnClick", function(this, evt)
     broadcast_config(self, IsShiftKeyDown())
   end)
-  arg = {}
   -- Keep this in self.qf as its accessed from KKonferSK.lua
   self.qf.bcastbutton = br.bcast
 
@@ -491,7 +485,6 @@ function ksk:InitialiseSyncUI()
     end,
   }
   tr.rlist = KUI:CreateScrollList(arg, tr)
-  arg = {}
   qf.syncers = tr.rlist
 end
 

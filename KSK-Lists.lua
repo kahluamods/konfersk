@@ -1393,7 +1393,6 @@ function ksk:InitialiseListsUI()
     rightsplit = true, name = "KSKListsLHHSplit",
   }
   ls.hsplit = KUI:CreateHSplit(arg, ls)
-  arg = {}
   local tl = ls.hsplit.topframe
   local bl = ls.hsplit.bottomframe
   qf.listctl = bl
@@ -1407,7 +1406,6 @@ function ksk:InitialiseListsUI()
   bl.announcebutton:Catch("OnClick", function(this, evt)
     announce_list_button(false, IsShiftKeyDown())
   end)
-  arg = {}
   ypos = ypos - 24
 
   arg = {
@@ -1418,7 +1416,6 @@ function ksk:InitialiseListsUI()
   bl.announceallbutton:Catch("OnClick", function(this, evt)
     announce_list_button(true, IsShiftKeyDown())
   end)
-  arg = {}
   ypos = ypos - 24
 
   --
@@ -1430,7 +1427,6 @@ function ksk:InitialiseListsUI()
     name = "KSKListsTLHSplit",
   }
   tl.hsplit = KUI:CreateHSplit(arg, tl)
-  arg = {}
   local tlt = tl.hsplit.topframe
   local blt = tl.hsplit.bottomframe
 
@@ -1519,8 +1515,6 @@ function ksk:InitialiseListsUI()
   qf.suicide = mcf.suicidebutton
   ypos = ypos - 24
 
-  arg = {}
-
   -- Now for the actual scroll list of roll lists in the left top frame.
   local function rlist_och(this)
     local idx = this:GetID()
@@ -1551,7 +1545,6 @@ function ksk:InitialiseListsUI()
     end,
   }
   tlt.slist = KUI:CreateScrollList(arg, tlt)
-  arg = {}
   qf.lists = tlt.slist
 
   --
@@ -1620,7 +1613,6 @@ function ksk:InitialiseListsUI()
     end,
   }
   cf.slist = KUI:CreateScrollList(arg, cf.sframe)
-  arg = {}
   qf.memberlist = cf.slist
 
   --
@@ -1656,7 +1648,6 @@ function ksk:InitialiseListsUI()
     end
     linfo.sortorder = tonumber(newv)
   end)
-  arg = {}
   ypos = ypos - 48
 
   arg = {
@@ -1674,7 +1665,6 @@ function ksk:InitialiseListsUI()
     end
     linfo.def_rank = tonumber(nv)
   end)
-  arg = {}
   ypos = ypos - 48
 
   arg = {
@@ -1688,7 +1678,6 @@ function ksk:InitialiseListsUI()
     end
     linfo.strictcfilter = val
   end)
-  arg = {}
   ypos = ypos - 24
 
   arg = {
@@ -1702,7 +1691,6 @@ function ksk:InitialiseListsUI()
     end
     linfo.strictrfilter = val
   end)
-  arg = {}
   ypos = ypos - 24
 
   arg = {
@@ -1719,7 +1707,6 @@ function ksk:InitialiseListsUI()
     end
     linfo.extralist = newv
   end)
-  arg = {}
   ypos = ypos - 48
 
   arg = {
@@ -1733,7 +1720,6 @@ function ksk:InitialiseListsUI()
     end
     linfo.tethered = val
   end)
-  arg = {}
   ypos = ypos - 24
 
   arg = {

@@ -156,7 +156,6 @@ function ksk:InitialiseUI()
       end
     end
   end)
-  arg = {}
 
   self.qf.configtab = self.mainwin.tabs[self.CONFIG_TAB].tbutton
   self.qf.userstab = self.mainwin.tabs[self.USERS_TAB].tbutton
