@@ -31,6 +31,8 @@ local KRP = LibStub:GetLibrary("KKoreParty")
 local KLD = LibStub:GetLibrary("KKoreLoot")
 local KK = LibStub:GetLibrary("KKoreKonfer")
 local DB = LibStub:GetLibrary("AceDB-3.0")
+local ZL = LibStub:GetLibrary("LibDeflate")
+local LS = LibStub:GetLibrary("LibSerialize")
 
 if (not K) then
   error("KSK: could not find KahLua Kore.", 2)
@@ -62,6 +64,14 @@ end
 
 if (not KLD) then
   error("KSK: could not find Kore Loot Distribution library.", 2)
+end
+
+if (not ZL) then
+  error("KSK: could not find LibDeflate library.", 2)
+end
+
+if (not LS) then
+  error("KSK: could not find LibSerialize library.", 2)
 end
 
 local L = LibStub("AceLocale-3.0"):GetLocale(MAJOR, false)
@@ -97,6 +107,8 @@ ksk.KLD = KLD
 ksk.H   = H
 ksk.DB  = DB
 ksk.KK  = KK
+ksk.ZL  = ZL
+ksk.LS  = LS
 
 ksk.CHAT_MSG_PREFIX = "KSKC"
 ksk.addon_handle = "kskc"
@@ -138,7 +150,9 @@ ksk.version = MINOR
 --   4   - OROLL now has extra param for allowing offspec rolls
 --   5   - resurect guild config and rank priorities
 --   6   - alt tethered now a list option not global
-ksk.protocol = 8
+--   7/8 - can't remember
+--   9   - after rework and LZ/LS changes
+ksk.protocol = 9
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
@@ -334,13 +348,13 @@ local white = K.white
 local class = KRP.ClassString 
 
 -- cfg is known to be valid before this is called
-local function get_my_ids(this, cfg)
-  local uid = this:FindUser(K.player.name, cfg)
+local function get_my_ids(self, cfg)
+  local uid = self:FindUser(K.player.name, cfg)
   if (not uid) then
     return nil, nil
   end
 
-  local ia, main = this:UserIsAlt(uid, nil, cfg)
+  local ia, main = self:UserIsAlt(uid, nil, cfg)
   if (ia) then
     return uid, main
   else
@@ -1369,19 +1383,19 @@ function ksk:CanChangeConfigType()
   return false
 end
 
-local function update_bcast_button()
-  ksk:UpdateUserSecurity()
-  if (ksk.csdata[ksk.currentid].is_admin) then
-    if (ksk.cfg.cfgtype == KK.CFGTYPE_GUILD) then
-      ksk.qf.bcastbutton:SetEnabled(true)
+local function update_bcast_button(self)
+  self:UpdateUserSecurity()
+  if (self.csdata[self.currentid].is_admin) then
+    if (self.cfg.cfgtype == KK.CFGTYPE_GUILD) then
+      self.qf.bcastbutton:SetEnabled(true)
       return
-    elseif (ksk:AmIML() or KRP.is_aorl or KRP.is_pl or
-      ksk:UserIsRanked(ksk.currentid, K.player.name)) then
-      ksk.qf.bcastbutton:SetEnabled(true)
+    elseif (self:AmIML() or KRP.is_aorl or KRP.is_pl or
+      self:UserIsRanked(self.currentid, K.player.name)) then
+      self.qf.bcastbutton:SetEnabled(true)
       return
     end
   end
-  ksk.qf.bcastbutton:SetEnabled(false)
+  self.qf.bcastbutton:SetEnabled(false)
 end
 
 function ksk:MakeAliases()
@@ -1688,14 +1702,14 @@ local function krp_update_group_end(_, _, pvt, in_p, in_r, in_bg)
   ksk:RefreshListsUIForRaid(in_p)
   ksk.qf.addmissing:SetEnabled((in_p and ksk.nmissing > 0) and true or false)
   ksk:RefreshAllMemberLists()
-  update_bcast_button()
+  update_bcast_button(ksk)
 end
 
 --
 -- Fired when there has been a change in group leadership.
 --
 local function krp_leader_changed(_, _, pvt, leader)
-  update_bcast_button()
+  update_bcast_button(ksk)
 end
 
 --

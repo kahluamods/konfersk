@@ -1909,87 +1909,63 @@ local function open_close_bids(self)
   end
 end
 
-function ksk:MakeCHITM(itemid, ii, cfg, send)
-  local es = tostring(itemid) .. ":"
+function ksk:SendCHITM(itemid, ii, cfg)
+  local cfg = cfg or self.currentid
 
-  if (ii.ignore) then
-    es = es .. "Y"
+  local ignore = ii.ignore or false
+
+  local cfilter = ""
+  if (not ii.ignore and ii.cfilter) then
+    cfilter = ii.cfilter
   end
-  es = es .. ":"
 
-  if (not ii.ignore) then
-    if (ii.cfilter) then
-      es = es .. ii.cfilter
-    end
+  local role = ""
+  if (not ii.ignore and ii.role and ii.role ~= 0) then
+    role = tostring(ii.role)
   end
-  es = es .. ":"
 
-  if (not ii.ignore) then
-    if (ii.role and ii.role ~= 0) then
-      es = es .. tostring(ii.role)
-    end
+  local list = ""
+  if (not ii.ignore and ii.list and ii.list ~= "0") then
+    list = ii.list
   end
-  es = es .. ":"
 
-  if (not ii.ignore) then
-    if (ii.list and ii.list ~= "" and ii.list ~= "0") then
-      es = es .. ii.list
-    end
+  local rank = ""
+  if (not ii.ignore and ii.rank) then
+    rank = tostring(ii.rank)
   end
-  es = es .. ":"
 
-  if (not ii.ignore) then
-    if (ii.rank) then
-      es = es .. tostring(ii.rank)
-    end
-  end
-  es = es .. ":"
-
-  if (not ii.ignore) then
-    if (ii.user) then
-      es = es .. ii.user
-    end
-  end
-  es = es .. ":"
-
+  local user = ""
   if (not ii.ignore and ii.user) then
-    if (ii.suicide) then
-      es = es .. ii.suicide
-    end
-  end
-  es = es .. ":"
-
-  if (not ii.ignore and ii.user) then
-    if (ii.del) then
-      es = es .. "Y"
-    end
-  end
-  es = es .. ":"
-
-  if (not ii.ignore) then
-    if (ii.autodench) then
-      es = es .. "Y"
-    end
-  end
-  es = es .. ":"
-
-  if (not ii.ignore) then
-    if (ii.automl) then
-      es = es .. "Y"
-    end
-  end
-  es = es .. ":"
-
-  if (not ii.ignore) then
-    if (ii.ignorequal) then
-      es = es .. "Y"
-    end
+    user = ii.user
   end
 
-  if (send) then
-    self:AddEvent(cfg or self.currentid, "CHITM", es)
+  local suicide = false
+  if (not ii.ignore and ii.user and ii.suicide) then
+    suicide = ii.suicide
   end
-  return es
+
+  local delete = false
+  if (not ii.ignore and ii.user and ii.del) then
+    delete = true
+  end
+
+  local autodench = false
+  if (not ii.ignore and ii.autodench) then
+    autodench = true
+  end
+
+  local automl = false
+  if (not ii.ignore and ii.automl) then
+    automl = true
+  end
+
+  local ignorequal = false
+  if (not ii.ignore and ii.ignorequal) then
+    ignorequal = true
+  end
+
+  self:AdminEvent(cfg, "CHITM", itemid, ignore, cfilter, tonumber(role), list,
+    tonumber(rank), user, suicide, delete, autodench, automl, ignorequal)
 end
 
 local function make_xml_string(self)
@@ -3505,7 +3481,7 @@ function ksk:InitialiseLootUI()
         self.cfg.items[selitemid].automl = true
       end
     end
-    self:MakeCHITM(selitemid, self.cfg.items[selitemid], self.currentid, true)
+    self:SendCHITM(selitemid, self.cfg.items[selitemid], self.currentid)
     qf.itemupdbtn:SetEnabled(false)
   end)
 
@@ -4266,16 +4242,13 @@ function ksk:SuicideUser(listid, rlist, uid, cfgid, ilink, chain)
   end
 
   self:SuicideUserLowLevel(listid, rlist, ruid, cfgid, ilink)
-
-  local es = strfmt("%s:%s:%s", listid, tconcat(rlist, ""), ruid)
-  self:AddEvent(cfgid, "SULST", es, true)
+  self:AddEvent(cfgid, "SULST", listid, ruid, tconcat(rlist, ""))
 
   if (chain) then
     if (ll.extralist and ll.extralist ~= "0") then
       local trlist = self:CreateRaidList(ll.extralist)
       self:SuicideUserLowLevel(ll.extralist, trlist, ruid, cfgid, ilink)
-      local es = strfmt("%s:%s:%s", ll.extralist, tconcat(trlist, ""), ruid)
-      self:AddEvent(cfgid, "SULST", es, true)
+      self:AddEvent(cfgid, "SULST", ll.extralist, ruid, tconcat(trlist, ""))
     end
   end
 end
@@ -4302,7 +4275,7 @@ function ksk:DeleteItem(itemid, cfgid, nocmd)
   end
 
   if (not nocmd) then
-    self:AddEvent(cfg, "RMITM", itemid)
+    self:AdminEvent(cfg, "RMITM", itemid)
   end
 end
 
@@ -4335,8 +4308,7 @@ function ksk:AddItem(itemid, itemlink, cfgid, nocmd)
   self.configs[cfg].nitems = self.configs[cfg].nitems + 1
 
   if (not nocmd) then
-    local es = strfmt("%s:%s", itemid, gsub(itemlink, ":", "\7"))
-    self:AddEvent(cfg, "MKITM", es)
+    self:AdminEvent(cfg, "MKITM", itemid, itemlink)
   end
 
   if (cfg == self.currentid) then
@@ -4377,8 +4349,7 @@ function ksk:AddLootHistory(cfg, when, what, who, how, spos, norefresh, nocmd)
   end
 
   if (not nocmd) then
-    self:AddEvent(cfg, "LHADD", strfmt("%d:%s:%s:%s:%d", tonumber(when),
-      gsub(what, ":", "\7"), who, how, spos))
+    self:AdminEvent(cfg, "LHADD", when, what, who, how, spos)
   end
 end
 
@@ -4447,8 +4418,7 @@ function ksk:UndoSuicide(cfg, listid, movers, uid, ilink, nocmd)
   end
 
   if (not nocmd) then
-    local es = strfmt("%s:%s:%s:%s", listid, tconcat(movers, ""), uid, gsub(ilink, ":", "\7"))
-    self:AddEvent(cfg, "SUNDO", es)
+    self:AddEvent(cfg, "SUNDO", listid, tconcat(movers, ""), uid, ilink)
   end
 end
 

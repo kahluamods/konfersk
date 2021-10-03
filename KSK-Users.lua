@@ -156,7 +156,7 @@ local function users_selectitem(objp, idx, slot, btn, onoff)
 
   if (onoff) then
     selected_user = ksk.sortedusers[idx].id
-    setup_uinfo()
+    setup_uinfo(ksk)
 
     if (ksk.cfg.owner == selected_user) then
       qf.userbuttons.deletebutton:SetEnabled(false)
@@ -174,7 +174,7 @@ local function users_selectitem(objp, idx, slot, btn, onoff)
     selected_user = nil
   end
 
-  refresh_user_membership(keg)
+  refresh_user_membership(ksk)
   changed(true)
 end
 
@@ -197,7 +197,7 @@ function ksk:CreateRoleListDropdown(name, x, y, parent, w)
   return KUI:CreateDropDown(arg, parent)
 end
 
-local function create_user_button()
+local function create_user_button(self)
   if (not createuserdlg) then
     local arg = {
       x = "CENTER", y = "MIDDLE",
@@ -408,7 +408,7 @@ local function guild_import_button(self, shown)
 
     this:Hide()
     if (this.isshown) then
-      this.mainwin:Show()
+      self.mainwin:Show()
     end
 
     info(L["added %d user(s)."], tadd)
@@ -708,7 +708,7 @@ function ksk:InitialiseUsersUI()
   ttr.mainsel:ClearAllPoints()
   ttr.mainsel:SetPoint("TOPLEFT", ttr.mainname, "TOPRIGHT", 8, 2)
   ttr.mainsel:Catch("OnClick", function(this, evt)
-    select_main(this)
+    select_main(self, this)
   end)
   ypos = ypos - 24
 
@@ -738,10 +738,9 @@ function ksk:InitialiseUsersUI()
 
     self:RefreshAllMemberLists()
 
-    local es = strfmt("%s:%d:%s:%s:%s:%s:%s", selected_user, uinfo.role,
-      uinfo.enchanter and "Y" or "N", uinfo.frozen and "Y" or "N",
-      "N", uinfo.isalt and "Y" or "N", uinfo.mainid and uinfo.mainid or "")
-    self:AddEvent(self.currentid, "MDUSR", es, true)
+    self:AddEvent(self.currentid, "MDUSR", selected_user, tonumber(uinfo.role),
+      uinfo.enchanter and true or false, uinfo.frozen and true or false,
+      uinfo.isalt and true or false, uinfo.mainid and uinfo.mainid or "")
     ttr.updatebtn:SetEnabled(false)
   end)
 
@@ -938,12 +937,10 @@ end
 local function set_flag(this, userid, flag, onoff, cfgid, arg, nocmd)
   local cfgid = cfgid or this.currentid
   local user = this.frdb.configs[cfgid].users[userid]
-  local onoff = onoff or false
+  local onoff = onoff and true or false
 
   if (not nocmd) then
-    local es = strfmt("%s:%s:%s:%s", userid, flag, onoff and "Y" or "N",
-      arg and tostring(arg) or "")
-    this:AddEvent(cfgid, "CHUSR", es, true)
+    this:AddEvent(cfgid, "CHUSR", userid, flag, onoff, arg and tostring(arg) or "")
   end
 
   if (onoff) then
@@ -1155,8 +1152,7 @@ function ksk:SetUserRole(userid, value, cfg, nocmd)
   local cfg = cfg or self.currentid
 
   if (not nocmd) then
-    local es = strfmt("%s:R:Y:%s", userid, tostring(value))
-    self:AddEvent(cfg, "CHUSR", es, true)
+    self:AddEvent(cfg, "CHUSR", "R", true, tonumber(value))
   end
 
   self.frdb.configs[cfg].users[userid].role = value
@@ -1238,8 +1234,7 @@ function ksk:CreateNewUser(name, cls, cfgid, norefresh, bypass, myid, nocmd)
   end
 
   if (not nocmd) then
-    local es = strfmt("%s:%s:%s:%s", uid, name, cls, norefresh and "Y" or "N")
-    self:AddEvent(cfgid, "MKUSR", es, true)
+    self:AddEvent(cfgid, "MKUSR", uid, name, cls, norefresh and true or false)
   end
 
   return uid
@@ -1348,8 +1343,7 @@ function ksk:DeleteUser(uid, cfgid, alts, nocmd)
   each_delete(uid, cfg)
 
   if (not nocmd) then
-    local es = strfmt("%s:%s", uid, alts and "Y" or "N")
-    self:AddEvent(cfg, "RMUSR", es, true)
+    self:AddEvent(cfg, "RMUSR", uid, alts and true or false)
   end
 
   if (cfg ~= self.currentid) then
@@ -1397,7 +1391,7 @@ function ksk:DeleteUserCmd(userid, show, cfg)
     alts = L["Delete All Alts of User"]
   end
   K.ConfirmationDialog(self, L["Delete User"], L["DELUSER"],
-    self.frdb.configs[cfg].users[userid].name, function() confirm_delete_user(self) end,
+    self.frdb.configs[cfg].users[userid].name, function(s, ag, al) confirm_delete_user(s, ag, al) end,
     { uid=userid, cfg=cfg }, isshown, 210, alts)
 
   return false
@@ -1428,8 +1422,7 @@ function ksk:RenameUser(userid, newname, cfg, nocmd)
   end
 
   if (not nocmd) then
-    local es = strfmt("%s:%s", userid, newname)
-    self:AddEvent(cfg, "MVUSR", es, true)
+    self:AddEvent(cfg, "MVUSR", userid, newname)
   end
 
   if (cfg == self.currentid) then
@@ -1451,6 +1444,10 @@ function ksk:ReserveUser(uid, onoff, cfgid, nocmd)
   local rd = self.csdata[cfgid]
   local onoff = onoff or false
 
+  if (not rd) then
+    return
+  end
+
   if (not rd.reserved) then
     rd.reserved = {}
   end
@@ -1466,7 +1463,8 @@ function ksk:ReserveUser(uid, onoff, cfgid, nocmd)
   end
 
   if (cfgid == self.currentid) then
-    ksk:RefreshAllMemberLists()
+    self:RefreshUsers()
+    self:RefreshAllMemberLists()
   end
 end
 
@@ -1474,6 +1472,10 @@ function ksk:UserIsReserved(uid, cfgid)
   local cfgid = cfgid or self.currentid
 
   local rd = self.csdata[cfgid]
+  if (not rd) then
+    return false
+  end
+
   if (not rd.reserved or not rd.reserved[uid]) then
     return false
   end

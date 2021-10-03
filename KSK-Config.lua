@@ -113,7 +113,7 @@ local adminidseq = "0123456789abcdefghijklmnopqrstuvwxyz"
 -- when a configuration space is selected in the left hand panel.
 --
 
-local function refresh_coadmins()
+local function refresh_coadmins(self)
   if (not admincfg) then
     qf.coadminscroll.itemcount = 0
     qf.coadminscroll:UpdateList()
@@ -122,8 +122,8 @@ local function refresh_coadmins()
 
   local newadmins = {}
   local ownerlist = {}
-  local tc = ksk.frdb.configs[admincfg]
-  local ul = ksk.frdb.configs[admincfg].users
+  local tc = self.frdb.configs[admincfg]
+  local ul = self.frdb.configs[admincfg].users
 
   coadmin_selected = nil
 
@@ -210,9 +210,7 @@ local function config_selectitem(objp, idx, slot, btn, onoff)
     admincfg = nil
   end
 
-  if (admincfg and admincfg == ksk.currentid) then
-    refresh_coadmins()
-  end
+  refresh_coadmins(ksk)
 end
 
 --
@@ -264,7 +262,7 @@ local function add_coadmin(this, uid, cfgid)
   assert(newid, "fatal logic bug somewhere!")
 
   -- Must add the event BEFORE we add the admin
-  this:AddEvent(cfgid, "MKADM", strfmt("%s:%s", uid, newid))
+  this:AdminEvent(cfgid, "MKADM", uid, newid)
   pcc.nadmins = pcc.nadmins + 1
   pcc.admins[uid] = { id = newid }
 end
@@ -342,7 +340,7 @@ local function copy_space_button(this, cfgid, newname, newid, shown)
       title = L["Copy Configuration"],
       border = true,
       width = 450,
-      height = 225,
+      height = 245,
       canmove = true,
       canresize = false,
       escclose = true,
@@ -556,11 +554,9 @@ local function copy_space_button(this, cfgid, newname, newid, shown)
             end
             dl.tethered = sl.tethered
             -- If this changes MUST change in KSK-Comms.lua(CHLST)
-            local es = strfmt("%s:%d:%d:%s:%s:%s:%s:%s", dlid,
-              dl.sortorder, dl.def_rank, dl.strictcfilter and "Y" or "N",
-              dl.strictrfilter and "Y" or "N", dl.extralist,
-              dl.tethered and "Y" or "N", dl.altdisp and "Y" or "N")
-            this:AddEvent(newid, "CHLST", es)
+            this:AdminEvent(newid, "CHLST", dlid, tonumber(dl.sortorder), tonumber(dl.def_rank),
+              dl.strictcfilter and true or false, dl.strictrfilter and true or false,
+              dl.extralist, dl.tethered and true or false, dl.altdisp and true or false)
           end
         end
       end
@@ -587,7 +583,7 @@ local function copy_space_button(this, cfgid, newname, newid, shown)
               dil[k].user = this:FindUser(sc.users[v.user].name, newid)
               assert(dil[k].user)
             end
-            this:MakeCHITM(k, dil[k], newid, true)
+            this:SendCHITM(k, dil[k], newid)
           end
         end
       end
@@ -617,7 +613,7 @@ local function copy_space_button(this, cfgid, newname, newid, shown)
           local uid = this:FindUser(sc.users[k].name, newid)
           assert(uid)
           if (not dc.admins[uid]) then
-            add_coadmin(uid, newid)
+            add_coadmin(this, uid, newid)
           end
         end
       end
@@ -1401,7 +1397,7 @@ function ksk:InitialiseConfigUI()
   }
   bl.createbutton = KUI:CreateButton(arg, bl)
   bl.createbutton:Catch("OnClick", function(this, evt)
-    new_space_button()
+    new_space_button(self)
   end)
 
   arg = {
@@ -1420,7 +1416,7 @@ function ksk:InitialiseConfigUI()
   }
   bl.renamebutton = KUI:CreateButton(arg, bl)
   bl.renamebutton:Catch("OnClick", function(this, evt)
-    rename_space_button(admincfg)
+    rename_space_button(self, admincfg)
   end)
   qf.cfgrenbutton = bl.renamebutton
 
@@ -1430,7 +1426,7 @@ function ksk:InitialiseConfigUI()
   }
   bl.copybutton = KUI:CreateButton(arg, bl)
   bl.copybutton:Catch("OnClick", function(this, evt)
-    copy_space_button(admincfg, nil, nil, true)
+    copy_space_button(self, admincfg, nil, nil, true)
   end)
   qf.cfgcopybutton = bl.copybutton
 
@@ -1700,7 +1696,7 @@ function ksk:DeleteConfig(cfgid, show, private)
   if (private) then
     local oldsilent = silent_delete
     silent_delete = true
-    real_delete_config(cfgid)
+    real_delete_config(self, cfgid)
     silent_delete = oldsilent
     return
   end
@@ -1778,7 +1774,7 @@ function ksk:CreateNewConfig(name, initial, nouser, mykey)
   if (self.frdb.tempcfg) then
     self:SetDefaultConfig(newkey, true, true)
     silent_delete = true
-    real_delete_config("1")
+    real_delete_config(self, "1")
     silent_delete = nil
     self.frdb.tempcfg = nil
   end
@@ -1863,7 +1859,7 @@ function ksk:DeleteAdmin(uid, cfg, nocmd)
 
   -- Must send the event BEFORE removing the admin.
   if (not nocmd) then
-    self:AddEvent(cfg, "RMADM", uid, true)
+    self:AdminEvent(cfg, "RMADM", uid)
   end
 
   cp.nadmins = cp.nadmins - 1
@@ -1875,9 +1871,7 @@ function ksk:DeleteAdmin(uid, cfg, nocmd)
     cp.admins[cp.owner].sync = nil
   end
 
-  if (admincfg and admincfg == self.currentid) then
-    refresh_coadmins()
-  end
+  refresh_coadmins(self)
   self:RefreshSyncUI(true)
 end
 

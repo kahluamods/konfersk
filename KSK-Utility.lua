@@ -34,6 +34,8 @@ local L = ksk.L
 local KUI = ksk.KUI
 local DB = ksk.DB
 local KK = ksk.KK
+local LS = ksk.LS
+local ZL = ksk.ZL
 
 -- Local aliases for global or Lua library functions
 local _G = _G
@@ -275,14 +277,20 @@ local function get_event_id(this, cfg)
   return this.configs[cfg].lastevent
 end
 
-function ksk:AddEvent(cfgid, event, estr, ufn)
+--
+-- This function is the central processing point for adding an event.
+-- Adding events happens when an admin makes a change that results in the running CRC changing
+-- and is shared with all admins. This is where the event string is computed. The code in
+-- KSK-Comms.lua is used to process the events on receipt, and is the code that breaks apart
+-- the event string and processes it.
+--
+local function lowlevel_add_event(self, cfgid, eventname, userevent, ...)
   local cfgid = cfgid or self.currentid
 
   --
-  -- If I am an admin, but not the owner, and I am not syncing yet, do
-  -- not even bother adding the event. Its meaningless, as the owner
-  -- and other users cant sync with us until we have established a sync
-  -- relationship.
+  -- If I am an admin, but not the owner, and I am not syncing yet, do not even bother adding
+  -- the event. Its meaningless, as the owner and other users cant sync with us until we have
+  -- established a sync relationship.
   --
   local myuid = self.csdata[cfgid].myuid
   local ov = self.csdata[cfgid].is_admin
@@ -293,21 +301,28 @@ function ksk:AddEvent(cfgid, event, estr, ufn)
 
   local cfg = self.configs[cfgid]
 
+  local serialised = LS:Serialize(...)
+  assert(serialised)
+  local encoded = ZL:EncodeForWoWAddonChannel(serialised)
+  assert(encoded)
+
   --
-  -- This event will change our config checksum. We need to get the CRC for
-  -- the event string, and xor it with our current config checksum. We then
-  -- need to add it to all co-admins who are currently syncing with us. We
-  -- then broadcast the event to the raid or guild. Those syncers that are
-  -- on and up to date will perform the action, and remain up to date.
-  -- Those that are not online will simply have the event queued for when
-  -- they are. Pretty simple really.
+  -- Each event changes the config checksum. Since we are using XOR to change this running
+  -- checksum, the exact order doesn't matter, as a user could sync with other admins in
+  -- any random order, but as long as any two admins have both processed the exact same set
+  -- of events, their shecksum will be the same.
   --
-  local crc = H:CRC32(estr)
+  -- The event is broadcast to the current raid (for a PUG config) or guild (for a guild
+  -- config) and those admins that are currently online and fully synced with us will
+  -- process the event immediately. If an admin is not online, or hasn't synced with us,
+  -- then we simply queue the event for that admin.
+  --
+  local crc = H:CRC32(encoded)
   local oldsum = cfg.cksum
   local newsum = bxor(oldsum, crc)
   local oldeid = cfg.lastevent
   local eid = get_event_id(self, cfgid)
-  local scrc = strfmt("0x%s", K.hexstr(crc))
+  local scrc, ocrc = K.hexstr(crc), K.hexstr(oldsum)
 
   cfg.cksum = newsum
   if (self.qf.synctopbar) then
@@ -320,12 +335,30 @@ function ksk:AddEvent(cfgid, event, estr, ufn)
         if (not v.sync) then
           v.sync = {}
         end
-        tinsert(v.sync, strfmt("%s\8%014.0f\8%s\8%s", event, eid, scrc, estr))
+        tinsert(v.sync, strfmt("%s\8%014.0f\8%s\8%s", eventname, eid, scrc, encoded))
       end
     end
   end
 
-  ksk:CSendAM(cfgid, event, "ALERT", estr, scrc, eid, oldeid, ufn or false)
+  ksk:CSendAM(cfgid, eventname, "ALERT", scrc, ocrc, eid, oldeid, userevent or false, encoded)
+end
+
+--
+-- self:AddEvent(cfgid, eventname, ...)
+-- self:AdminEvent(cfgid, eventname, ...)
+-- The variadic portion is first serialised with LibSerialise, and then encoded for WoW. This
+-- is the portion that is CRCed - the encoded, serialised portion. We do not compress any part
+-- of the payload as the low level transmit funmction in KKore will do that for us for all
+-- traffic. USEREVENT must be set to true if this event is intended for normal, non-admin
+-- users to process as well, for example when a loot box is opened or a new item is being
+-- rolled for etc.
+--
+function ksk:AdminEvent(cfgid, eventname, ...)
+  lowlevel_add_event(self, cfgid, eventname, false, ...)
+end
+
+function ksk:AddEvent(cfgid, eventname, ...)
+  lowlevel_add_event(self, cfgid, eventname, true, ...)
 end
 
 function ksk:RepairDatabases(users, lists)
@@ -512,24 +545,21 @@ function ksk:UpdateDatabaseVersion()
 
   if (self.frdb.dbversion == 5) then
     --
-    -- Version 6 added the alt display option to lists.
+    -- Version 6 added the alt display option to lists. It also changes the way
+    -- events are stored for co-admins so we actually remove all co-admins from
+    -- the lists and force the owners to re-create them.
     --
     for k,v in pairs(self.frdb.configs) do
       for kk,vv in pairs(v.lists) do
         vv.altdisp = true
       end
-    end
-  end
-  --
-  -- Fix a potential error with co-admins
-  --
-  for k,v in pairs(self.frdb.configs) do
-    for kk,vv in pairs(v.admins) do
-      if (vv.active == true) then
-        if (vv.lastevent == nil) then
-          vv.lastevent = 0
-        end
-      end
+
+      local owner = v.owner
+      local ownerid = v.admins[owner].id
+      v.nadmins = 1
+      v.admins = { }
+      v.admins[owner] = { }
+      v.admins[owner]["id"] = ownerid
     end
   end
 

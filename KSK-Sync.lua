@@ -41,7 +41,6 @@ local tostring, tonumber = tostring, tonumber
 local strfmt = string.format
 local pairs = pairs
 local assert = assert
-local debug = ksk.debug
 
 local info = ksk.info
 local white = ksk.white
@@ -195,15 +194,15 @@ end
 -- This function will prepare the table to be broadcast for a specified
 -- config.
 -- a table suitable for transmission with the following values:
---   v=5 (version 6 broadcast)
---   c=cfgid:name:type:ownerid:oranks:crc
---   u={numusers,userlist}
---     Each element in userlist is name:class:role:ench:frozen:exempt:alt:main
---   a={numadmins,adminlist}
---     Each element in adminlist is uid:adminid
---   l={numlists,listinfo}
+--   v=6 (version 6 broadcast)
+--   c={ cfgid, name, type, ownerid, oranks, crc }
+--   u={userlist}
+--     Each element in userlist is { uid, name, class, role, flags, isalt, alts }
+--   a={adminlist} - keyed by adminid
+--     Each element in adminlist is the uid of the adminid key
+--   l={listinfo} - keyed by listid
 --     Each element in listinfo is
---       listid:name:order:strictc:strictr:xlist:tethered:tout:next:nusers:ulist
+--       { name, order, defrank, strictc, strictr, xlist, tethered, altdisp, nusers, ulist }
 --   s=syncers data (for FSYNC)
 --   i=item database (for FSYNC)
 --   e=last event ID (for FSYNC)
@@ -215,17 +214,17 @@ local function prepare_broadcast(self, cfg)
   local tc = self.configs[cfg]
 
   ci.v = 6
-  ci.c = strfmt("%s:%s:%d:%s:%s:0x%s", cfg, tc.name, tc.cfgtype, tc.owner, tc.oranks, K.hexstr(tc.cksum))
+  ci.c = { cfg, tc.name, tc.cfgtype, tc.owner, tc.oranks, K.hexstr(tc.cksum) }
 
-  local ulist = {}
+  ci.u = {}
   for k,v in pairs(tc.users) do
     local alts=""
     local isalt
     if (v.main) then
-      isalt = "Y"
+      isalt = true
       alts = v.main
     else
-      isalt = "N"
+      isalt = false
       if (v.alts) then
         for kk,vv in pairs(v.alts) do
           alts = alts .. vv
@@ -234,34 +233,26 @@ local function prepare_broadcast(self, cfg)
         alts = "0"
       end
     end
-    local us = strfmt("%s:%s:%s:%d:%s:%s:%s", k, v.name, v.class, v.role, v.flags, isalt, alts)
-    tinsert(ulist, us)
+    ci.u[k] = { v.name, v.class, v.role, v.flags, isalt, alts }
   end
-  ci.u = { #ulist, ulist }
 
-  local alist = {}
+  ci.a = {}
   for k,v in pairs(self.cfg.admins) do
     if (v.id) then
-      local us = strfmt("%s:%s", k, v.id)
-      tinsert(alist, us)
+      ci.a[k] = v.id
     end
   end
-  ci.a = { #alist, alist }
 
-  local llist = {}
+  ci.l = {}
   for k,v in pairs(tc.lists) do
     local ulist = ""
-    for kk,vv in pairs(v.users) do
+    for kk,vv in ipairs(v.users) do
       ulist = ulist .. vv
     end
-    local ls = strfmt("%s:%s:%d:%d:%s:%s:%s:%s:%s:%d:%s", k, v.name,
-      v.sortorder, v.def_rank, v.strictcfilter and "Y" or "N",
-      v.strictrfilter and "Y" or "N", tostring(v.extralist),
-      v.tethered and "Y" or "N", v.altdisp and "Y" or "N", v.nusers, ulist)
-    tinsert(llist, ls)
+    ci.l[k] = { v.name, tonumber(v.sortorder or 0), tonumber(v.def_rank or 0), v.strictcfilter and true or false,
+      v.strictrfilter and true or false, tostring(v.extralist), v.tethered and true or false,
+      v.altdisp and true or false, v.nusers, ulist }
   end
-
-  ci.l = { tc.nlists, llist }
 
   return ci
 end
@@ -457,6 +448,7 @@ function ksk:InitialiseSyncUI()
   br.bcast = KUI:CreateButton(arg, br)
   br.bcast:Catch("OnClick", function(this, evt)
     broadcast_config(self, IsShiftKeyDown())
+    info("Broadcast sent! Please do not broadcast again for at least 30 seconds.")
   end)
   -- Keep this in self.qf as its accessed from KKonferSK.lua
   self.qf.bcastbutton = br.bcast
@@ -625,8 +617,7 @@ function ksk:SendFullSync(cfg, dest, isrecover)
   ci.s = {}
   for k,v in pairs(cf.admins) do
     if (cf.users[k].name ~= dest or isrecover) then
-      local us = strfmt("%s:%014.0f", k, v.lastevent or 0)
-      tinsert(ci.s, us)
+      ci.s[k] = v.lastevent or 0
     elseif (not isrecover) then
       --
       -- We are now in an active syncing relationship with this user.

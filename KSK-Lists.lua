@@ -691,8 +691,7 @@ local function move_member(this, dir)
     local sulist = this:CreateRaidList(current_listid)
     this:SuicideUser(current_listid, sulist, uid, this.currentid)
   else
-    local es = strfmt("%s:%s:%d", uid, current_listid, dir)
-    this:AddEvent(this.currentid, "MMLST", es, true)
+    this:AddEvent(this.currentid, "MMLST", uid, current_listid, dir)
     this:MoveMember(uid, current_listid, dir, this.currentid)
   end
 end
@@ -726,8 +725,7 @@ local function insert_list_member(this, uid, listid, pos, cfg, nocmd)
   tinsert(rl.users, pos, uid)
 
   if (not nocmd) then
-    local es = strfmt("%s:%s:%d", uid, listid, pos)
-    this:AddEvent(cfg, "IMLST", es, true)
+    this:AddEvent(cfg, "IMLST", uid, listid, pos)
   end
 
   return false
@@ -856,7 +854,7 @@ local function import_list_button(this)
             if (insrand) then
               pos = rand(current_list.nusers + 1)
             end
-            insert_list_member(v, current_listid, pos)
+            insert_list_member(this, v, current_listid, pos)
           end
         end
       elseif (csvstr ~= "") then
@@ -893,7 +891,7 @@ local function import_list_button(this)
               if (csvopt == 3) then
                 pos = rand(current_list.nusers + 1)
               end
-              insert_list_member(v, current_listid, pos)
+              insert_list_member(this, v, current_listid, pos)
             end
           end
         end
@@ -1021,12 +1019,6 @@ local function final_xml_string(this)
     end
   end
   thestring = strfmt("<ksk date=%q time=%q><classes>%s</classes><users>%s</users><lists>%s</lists></ksk>", dstr, tstr, cs, tconcat(uv, ""), lststring)
-end
-
-local function final_bbcode_string(this)
-  local dstr = K.YMDStamp()
-  local tstr = K.HMStamp()
-  thestring = strfmt("[center][b]KSK Lists as of %s %s[/b][/center]\n", dstr, tstr) .. lststring
 end
 
 local function export_list_button(this)
@@ -1404,7 +1396,7 @@ function ksk:InitialiseListsUI()
   }
   bl.announcebutton = KUI:CreateButton(arg, bl)
   bl.announcebutton:Catch("OnClick", function(this, evt)
-    announce_list_button(false, IsShiftKeyDown())
+    announce_list_button(self, false, IsShiftKeyDown())
   end)
   ypos = ypos - 24
 
@@ -1414,7 +1406,7 @@ function ksk:InitialiseListsUI()
   }
   bl.announceallbutton = KUI:CreateButton(arg, bl)
   bl.announceallbutton:Catch("OnClick", function(this, evt)
-    announce_list_button(true, IsShiftKeyDown())
+    announce_list_button(self, true, IsShiftKeyDown())
   end)
   ypos = ypos - 24
 
@@ -1458,7 +1450,7 @@ function ksk:InitialiseListsUI()
   arg.tooltip = { title = "$$", text = L["TIP031"], }
   mcf.deletebutton = KUI:CreateButton(arg, mcf)
   mcf.deletebutton:Catch("OnClick", function(this, evt)
-    delete_member(this)
+    delete_member(self)
   end)
   qf.delete = mcf.deletebutton
   ypos = ypos - 24
@@ -1754,11 +1746,9 @@ function ksk:InitialiseListsUI()
     self:RefreshAllLists(false)
     tr.updatebtn:SetEnabled(false)
     -- If this changes MUST change CHLST is KSK-Config.lua
-    local es = strfmt("%s:%d:%d:%s:%s:%s:%s:%s", current_listid,
-      linfo.sortorder, linfo.def_rank, linfo.strictcfilter and "Y" or "N",
-      linfo.strictrfilter and "Y" or "N", linfo.extralist, linfo.tethered and "Y" or "N",
-      linfo.altdisp and "Y" or "N")
-    self:AddEvent(self.currentid, "CHLST", es)
+    self:AdminEvent(self.currentid, "CHLST", current_listid, tonumber(linfo.sortorder or 0), linfo.def_rank,
+      linfo.strictcfilter and true or false, linfo.strictrfilter and true or false, linfo.extralist,
+      linfo.tethered and true or false, linfo.altdisp and true or false)
     self:FixupLists(self.currentid)
     self:RefreshListsUI(false)
   end)
@@ -2004,8 +1994,7 @@ function ksk:CreateNewList(name, cfg, myid, nocmd)
   end
 
   if (not nocmd) then
-    local es = strfmt("%s:%s", newkey, name)
-    self:AddEvent(cfg, "MKLST", es, true)
+    self:AddEvent(cfg, "MKLST", newkey, name)
   end
 
   if (cfg == self.currentid) then
@@ -2060,7 +2049,7 @@ function ksk:DeleteList(listid, cfg, nocmd)
   end
 
   if (not nocmd) then
-    self:AddEvent(cfg, "RMLST", listid, true)
+    self:AddEvent(cfg, "RMLST", listid)
   end
 
   if (cfg == self.currentid) then
@@ -2106,8 +2095,7 @@ function ksk:RenameList(listid, newname, cfg, nocmd)
   self.configs[cfg].lists[listid].name = newname
 
   if (not nocmd) then
-    local es = strfmt("%s:%s", listid, newname)
-    self:AddEvent(cfg, "MVLST", es, true)
+    self:AddEvent(cfg, "MVLST", listid, newname)
   end
 
   if (cfg == self.currentid) then
@@ -2148,8 +2136,7 @@ function ksk:CopyList(listid, newname, cfg, myid, nocmd)
   K.CopyTable(src.users, dst.users)
 
   if (not nocmd) then
-    local es = strfmt("%s:%s:%s", listid, cid, newname)
-    self:AddEvent(cfg, "CPLST", es, true)
+    self:AddEvent(cfg, "CPLST", listid, cid, newname)
   end
 
   if (cfg == self.currentid) then
@@ -2189,10 +2176,56 @@ function ksk:UserInList(uid, listid, cfg)
   return false
 end
 
+function ksk:UserOrAltInList(uid, listid, cfg)
+  local cfg = cfg or self.currentid
+  local listid = listid or current_listid
+
+  if (not self.configs[cfg] or not self.configs[cfg].lists[listid]) then
+    return nil
+  end
+
+  local usr = self.configs[cfg].users[uid]
+  if (not usr) then
+    return false
+  end
+
+  local rlist = self.configs[cfg].lists[listid]
+  if (rlist.nusers < 1) then
+    return false
+  end
+
+  -- Look for main in the list first
+  for k,v in ipairs(rlist.users) do
+    if (uid == v) then
+      return true, uid, k
+    end
+  end
+
+  -- We only need to check for alts if we are not using tethered alts. If alt tethering is enabled
+  -- then the alt will not be in the list, only the main. When searching for alts if we find a match
+  -- we return the uid of the MAIN, not the alt. The calling code can then check to see if the returned
+  -- value is the same as the value passed, and if not, the caller knows that the UID passed is an alt
+  -- and that the main is on the list.
+  if (rlist.tethered) then
+    for k,v in ipairs(rlist.users) do
+      local u = self.configs[cfg].users[v]
+      if (u.alts ~= nil) then
+        for kk,vv in pairs(u.alts) do
+          if (vv == uid) then
+            return true, v, k
+          end
+        end
+      end
+    end
+  end
+
+  return false
+end
+
 function ksk:InsertMember(uid, listid, pos, cfg, nocmd)
   local cfg = cfg or self.currentid
   local listid = listid or current_listid
-  local rv = insert_list_member(uid, listid, pos, cfg, nocmd)
+  local rv = insert_list_member(self, uid, listid, pos, cfg, nocmd)
 
   if (not rv and cfg == self.currentid) then
     self:RefreshAllMemberLists(listid)
@@ -2219,7 +2252,7 @@ function ksk:SetMemberList(ulist, listid, cfg, nocmd)
   ll.nusers = #ll.users
 
   if (not nocmd) then
-    self:AddEvent(cfg, "SMLST", strfmt("%s:%s", listid, ulist), true)
+    self:AddEvent(cfg, "SMLST", listid, ulist)
   end
 
   if (cfg == self.currentid) then
@@ -2317,8 +2350,7 @@ function ksk:DeleteMember(uid, listid, cfg, nocmd)
   tremove(ul, up)
   rl.nusers = rl.nusers - 1
   if (not nocmd) then
-    local es = strfmt("%s:%s", uid, listid)
-    self:AddEvent(cfg, "DMLST", es, true)
+    self:AddEvent(cfg, "DMLST", uid, listid)
   end
 
   if (cfg == self.currentid) then

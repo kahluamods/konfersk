@@ -34,6 +34,8 @@ local KRP = ksk.KRP
 local KLD = ksk.KLD
 local H = ksk.H
 local KK = ksk.KK
+local ZL = ksk.ZL
+local LS = ksk.LS
 
 local MakeFrame = KUI.MakeFrame
 
@@ -49,7 +51,6 @@ local match = string.match
 local gmatch = string.gmatch
 local pairs, ipairs = pairs, ipairs
 local select = select
-local printf = K.printf
 local strsplit = string.split
 local bxor = bit.bxor
 
@@ -85,13 +86,6 @@ messge receipts can be for any configuration and the message handlers must
 therefore act accordingly.
 ]]
 
-local function getbool(str)
-  if (str and str == "Y") then
-    return true
-  end
-  return false
-end
-
 local ihandlers = {}
 local ehandlers = {}
 
@@ -101,12 +95,11 @@ local ehandlers = {}
 --
 local function commdispatch(self, sender, proto, cmd, cfg, res, ...)
   if (not res) then
-    debug(1, "failed to deserialise %q from %q (proto=%d)", sender, cmd, proto)
-    return
+    self.debug(9, "serialisation issue with %q from %q", cmd, sender)
+    return nil
   end
 
   if (not ihandlers[cmd] and not ehandlers[cmd]) then
-    debug(1, "unknown command %q from %q (p=%d)", cmd, sender, proto)
     KK.OldProtoDialog(ksk)
     return
   end
@@ -122,7 +115,8 @@ local function commdispatch(self, sender, proto, cmd, cfg, res, ...)
   end
 
   local adm = self.csdata[cfg].is_admin
-  local estr, scrc, eid, oldeid, userevt = ...
+  local scrc, ocrc, eid, oldeid, userevt, estr = ...
+
   if ((not adm) and (not userevt)) then
     -- We're not an admin and this is an admin-only event - return.
     return
@@ -162,6 +156,7 @@ local function commdispatch(self, sender, proto, cmd, cfg, res, ...)
     if (not cksenduid) then
       cksenduid = senduid
     end
+
     if (not ia) then
       --
       -- Likewise for admins. We do not have this user marked as an
@@ -195,14 +190,28 @@ local function commdispatch(self, sender, proto, cmd, cfg, res, ...)
         return
       end
 
+      local oldsum = self.configs[cfg].cksum
+
+      if (oldsum ~= tonumber(ocrc, 16)) then
+        --
+        -- If the current stored checksum and the one we received in the
+        -- message are not identical it means that one of the two parties
+        -- (or possibly even both) are out of date with a third party.
+        -- That's the only way the eventids can be the same (checked above)
+        -- but the checksums differ. Therefore, we punt until they are
+        -- fully synced.
+        --
+        return
+      end
+
+      local newsum = bxor(oldsum, tonumber(scrc, 16))
+
       --
       -- If we get down here it means we are a syncer, the sender is a
       -- syncer, and we are up to date with respects to each other. We
       -- need to update the config checksum with this new event, and
       -- update the last event received from this sender.
       --
-      local oldsum = self.configs[cfg].cksum
-      local newsum = bxor(oldsum, tonumber(scrc))
       self.configs[cfg].cksum = newsum
       self.configs[cfg].admins[cksenduid].lastevent = eid
       self.qf.synctopbar:SetCurrentCRC()
@@ -218,7 +227,13 @@ local function commdispatch(self, sender, proto, cmd, cfg, res, ...)
       adm = adm * 10
     end
   end
-  ehandlers[cmd](self, adm, sender, proto, cmd, cfg, strsplit(":", estr))
+
+  local decoded = ZL:DecodeForWoWAddonChannel(estr)
+  if (not decoded) then
+    self.debug(1, "decoding issue with %q from %q", cmd, sender)
+  end
+
+  ehandlers[cmd](self, adm, sender, proto, cmd, cfg, LS:DeserializeValue(decoded))
 end
 
 function ksk:OnCommReceived(prefix, msg, dist, snd)
@@ -420,63 +435,57 @@ ihandlers.LLSEL = function(self, sender, proto, cmd, cfg, ...)
   self:SelectLootListByID(listid)
 end
 
---
--- In order to save bandwidth and to stop running against the ridiculously
--- low tripwire of the addon spam catcher, we have the payload compressed.
--- The compressed data is serialised with libserialize so we have to
--- decompress and deserialize before we can move on.
---
 local function prepare_config_from_bcast(self, cfd)
   local ncf = {}
   local cfgid = nil
   local cfgname, cfgtype, owner, ts, oranks, crc
 
-  if (cfd.v == 5) then
-    cfgid, cfgname, cfgtype, owner, oranks, crc = strsplit(":", cfd.c)
+  if (cfd.v == 6) then
+    cfgid, cfgname, cfgtype, owner, oranks, crc = unpack(cfd.c)
     ncf.name = cfgname
     ncf.cfgtype = tonumber(cfgtype)
     ncf.owner = owner
-    ncf.cksum = tonumber(crc)
+    ncf.cksum = tonumber(crc, 16)
     ncf.lastevent = 0
     ncf.oranks = oranks
 
     ncf.history = {}
 
-    ncf.nusers = cfd.u[1]
+    ncf.nusers = 0
     ncf.users = {}
-    for k,v in pairs(cfd.u[2]) do
-      local uid, uname, class, role, flags, isalt, alts = strsplit(":", v)
-      isalt = getbool(isalt)
-      ncf.users[uid] = { name = uname, class = class, role = tonumber(role),
-        flags = flags }
+    for k,v in pairs(cfd.u) do
+      local uname, class, role, flags, isalt, alts = unpack(v)
+
+      ncf.users[k] = { name = uname, class = class, role = role, flags = flags }
+      ncf.nusers = ncf.nusers + 1
+
       if (isalt) then
-        ncf.users[uid].main = alts
+        ncf.users[k].main = alts
       elseif (alts ~= "0") then
-        ncf.users[uid].alts = self:SplitRaidList(alts)
+        ncf.users[k].alts = self:SplitRaidList(alts)
       end
     end
 
-    ncf.nadmins = cfd.a[1]
+    ncf.nadmins = 0
     ncf.admins = {}
-    for k,v in pairs(cfd.a[2]) do
-      local au, ai = strsplit(":", v)
-      ncf.admins[au] = { id = ai }
+    for k,v in pairs(cfd.a) do
+      ncf.admins[k] = { id = v }
+      ncf.nadmins = ncf.nadmins + 1
     end
 
-    ncf.nlists = cfd.l[1]
+    ncf.nlists = 0
     ncf.lists = {}
-    for k,v in pairs(cfd.l[2]) do
-      local lid, lname, sorder, drank, sc, sr, el, alt, numu, ulist = strsplit(":",v)
-      ncf.lists[lid] = { name = lname, sortorder = tonumber(sorder),
-        def_rank = tonumber(drank), strictcfilter = getbool(sc),
-        strictrfilter = getbool(sr), extralist = el, tethered = getbool(alt),
-        nusers = tonumber(numu), users = self:SplitRaidList(ulist) }
+    for k,v in pairs(cfd.l) do
+      local lname, sorder, drank, sc, sr, el, alt, adis, numu, ulist = unpack(v)
+      ncf.lists[k] = { name = lname, sortorder = sorder, def_rank = drank, strictcfilter = sc,
+        strictrfilter = sr, extralist = el, tethered = alt, altdisp = adis, nusers = numu,
+        users = self:SplitRaidList(ulist) }
+      ncf.nlists = ncf.nlists + 1
     end
 
     if (cfd.s) then
       for k,v in pairs(cfd.s) do
-        local adm, le = strsplit(":", v)
-        ncf.admins[adm].lastevent = tonumber(le)
+        ncf.admins[k].lastevent = v
       end
     end
 
@@ -515,17 +524,18 @@ ihandlers.BCAST = function(self, sender, proto, cmd, cfg, cfdata)
   end
 
   local ncf, cfgid = prepare_config_from_bcast(self, cfdata)
-  local cfgtype = ncf.cfgtype
 
   if (not cfgid) then
       debug(2, "invalid config in BCAST")
     return
   end
 
+  local cfgtype = ncf.cfgtype
+
   if (K.player.is_guilded and cfgtype == KK.CFGTYPE_GUILD) then
     -- Guild config
     if (not self:UserIsRanked(cfg, sender)) then
-      debug (2, "BCAST returning: cfgtype=1 not ranked")
+      debug(2, "BCAST returning: cfgtype=1 not ranked")
       return
     end
   elseif (cfgtype == KK.CFGTYPE_PUG) then
@@ -654,23 +664,23 @@ ihandlers.BCAST = function(self, sender, proto, cmd, cfg, cfdata)
       this:SetDefaultConfig(newcfgid, true, true)
     end
     info(L["configuration %q updated by %q"], white(nc.name), white(sender))
-    this:RefreshCSData()
+    this:FullRefresh(true)
     local newadm = this.csdata[newcfgid].is_admin
     if (not oldadm and newadm) then
       this:CSendWhisperAM(newcfgid, sender, "GSYNC", "ALERT", 0, true, 0, 0)
     end
   end
 
-  if (cfgtype == KK.CFGTYPE_PUG) then
-    if (not this.configs[cfgid]) then
-      K.ConfirmationDialog(self, L["Accept Configuration"],
-      strfmt(L["PUGCONFIG"], white(sender), L["MODTITLE"]), ncf.name,
-      handle_cfgdata, { ncf, cfgid }, this.mainwin:IsShown(), 220, nil)
+  if (tonumber(cfgtype) == tonumber(KK.CFGTYPE_PUG)) then
+    if (not self.configs[cfgid]) then
+      local msg = strfmt(L["PUGCONFIG"], white(sender), L["MODTITLE"])
+      K.ConfirmationDialog(self, L["Accept Configuration"], msg, ncf.name,
+        handle_cfgdata, { ncf, cfgid }, self.mainwin:IsShown(), 220, nil)
       return
     end
   end
 
-  handle_cfgdata(this, { ncf, cfgid })
+  handle_cfgdata(self, { ncf, cfgid })
 end
 
 --
@@ -853,7 +863,7 @@ end
 ehandlers.MKUSR = function(self, adm, sender, proto, cmd, cfg, ...)
   local uid, name, class, refresh = ...
 
-  self:CreateNewUser(name, class, cfg, getbool(refresh), true, uid, true)
+  self:CreateNewUser(name, class, cfg, refresh, true, uid, true)
 end
 
 --
@@ -890,7 +900,7 @@ ehandlers.RMUSR = function(self, adm, sender, proto, cmd, cfg, ...)
     end
   end
 
-  self:DeleteUser(uid, cfg, getbool(alts), true)
+  self:DeleteUser(uid, cfg, alts, true)
 end
 
 --
@@ -925,10 +935,6 @@ ihandlers.RSUSR = function(self, sender, proto, cmd, cfg, ...)
   local uid, onoff = ...
 
   if (cfg ~= self.currentid) then
-    return
-  end
-
-  if (not KK.IsSenderMasterLooter(sender)) then
     return
   end
 
@@ -1031,8 +1037,6 @@ ehandlers.CHUSR = function(self, adm, sender, proto, cmd, cfg, ...)
     end
   end
 
-  onoff = getbool(onoff)
-
   if (flag == "E") then
     self:SetUserEnchanter(uid, onoff, cfg, true)
   elseif (flag == "F") then
@@ -1053,11 +1057,11 @@ ehandlers.CHUSR = function(self, adm, sender, proto, cmd, cfg, ...)
 end
 
 --
--- Command: MDUSR uid role ench frozen exempt alt main
+-- Command: MDUSR uid role ench frozen alt main
 -- Purpose: Sent to the raid / guild when a user is modified.
 --
 ehandlers.MDUSR = function(self, adm, sender, proto, cmd, cfg, ...)
-  local uid, role, ench, frozen, exempt, alt, mainid = ...
+  local uid, role, ench, frozen, alt, mainid = ...
 
   if (not adm) then
     if (not self.configs[cfg].users[uid]) then
@@ -1065,12 +1069,13 @@ ehandlers.MDUSR = function(self, adm, sender, proto, cmd, cfg, ...)
     end
   end
 
-  self:SetUserRole(uid, tonumber(role), cfg, true)
-  self:SetUserEnchanter(uid, getbool(ench), cfg, true)
-  self:SetUserFrozen(uid, getbool(frozen), cfg, true)
-  self:SetUserIsAlt(uid, getbool(alt), mainid, cfg, true)
+  self:SetUserRole(uid, role, cfg, true)
+  self:SetUserEnchanter(uid, ench, cfg, true)
+  self:SetUserFrozen(uid, frozen, cfg, true)
+  self:SetUserIsAlt(uid, alt, mainid, cfg, true)
 
   if (cfg == self.currentid and adm and adm >= 10) then
+    self:RefreshUsers()
     self:RefreshAllMemberLists()
   end
 end
@@ -1149,7 +1154,7 @@ end
 --
 -- Command: CHLST listid sort rank stricta strictr list tethered altdisp
 -- Purpose: Syncer-only event sent when a list's paramaters are modified.
---          SORT is the sort order,
+--          SORT is the sort order, RANK is the initial guild rank filter,
 --          STRICTA is true if strict class armor filtering is in place,
 --          STRICTR is true if strict role filtering is in place, LIST is
 --          the additional list to suicide on.
@@ -1164,14 +1169,14 @@ ehandlers.CHLST = function(self, adm, sender, proto, cmd, cfg, ...)
 
   llist.sortorder = tonumber(sortorder)
   llist.def_rank = tonumber(rank)
-  llist.strictcfilter = getbool(stricta)
-  llist.strictrfilter = getbool(strictr)
+  llist.strictcfilter = stricta
+  llist.strictrfilter = strictr
   if (slist == "0") then
     slist = 0
   end
   llist.extralist = slist
-  llist.tethered = getbool(tethered)
-  llist.altdisp = getbool(altdisp)
+  llist.tethered = tethered
+  llist.altdisp = altdisp
 
   if (cfg == self.currentid) then
     self:FixupLists(cfg)
@@ -1236,7 +1241,7 @@ ehandlers.MMLST = function(self, adm, sender, proto, cmd, cfg, ...)
 end
 
 --
--- Command: SULST listid raidlist uid
+-- Command: SULST listid uid raidlist
 -- Purpose: Sent to the raid / guild when a user is suicided for either
 --          receiving loot or manually being suicided while in a raid.
 --          LISTID is the list on which to suicide the user, RAIDLIST is
@@ -1246,7 +1251,7 @@ end
 --          be split before passing it to the suicide function.
 --
 ehandlers.SULST = function(self, adm, sender, proto, cmd, cfg, ...)
-  local listid, raidlist, uid = ...
+  local listid, uid, raidlist = ...
   local raiders = self:SplitRaidList(raidlist)
 
   self:SuicideUserLowLevel(listid, raiders, uid, cfg)
@@ -1259,8 +1264,7 @@ end
 --          the full item link.
 --
 ehandlers.MKITM = function(self, adm, sender, proto, cmd, cfg, ...)
-  local itemid, ilink = ...
-  local itemlink = gsub(ilink, "\7", ":")
+  local itemid, itemlink = ...
 
   self:AddItem(itemid, itemlink, cfg, true)
 end
@@ -1458,7 +1462,7 @@ ihandlers.RSYNC = function(self, sender, proto, cmd, cfg, ...)
   -- or not they need any events from us. If they do they will send us a
   -- GSYNC message requesting all events from a certain number forward.
   --
-  self:CSendWhisperAM(cfg, sender, "SYNAK", "ALERT", self.cfg.lastevent, self.cfg.cksum)
+  self:CSendWhisperAM(cfg, sender, "SYNAK", "ALERT", self.configs[cfg].lastevent, self.configs[cfg].cksum)
 end
 
 --
@@ -1543,6 +1547,7 @@ ihandlers.GSYNC = function(self, sender, proto, cmd, cfg, ...)
   if (full) then
     if (self.csdata[cfg].is_admin == 2) then
       info(L["[%s] sending sync data to user %s."], white(self.configs[cfg].name), aclass(self.configs[cfg].users[theiruid]))
+
       self:SendFullSync(cfg, sender, false)
     end
     return
@@ -1560,20 +1565,26 @@ ihandlers.GSYNC = function(self, sender, proto, cmd, cfg, ...)
   --
   local mlist = {}
   local them = self.configs[cfg].admins[cktheiruid]
+
   them.active = true
+
   if (not them.lastevent) then
     them.lastevent = 0
   end
+
   if (not them.sync) then
     them.sync = { }
   end
+
   for k,v in pairs(them.sync) do
     local eventid = tonumber(strsub(v, 7, 20))
     if (eventid > lastevt) then
       tinsert(mlist, v)
     end
   end
+
   info(L["[%s] sending sync data to user %s."], white(self.configs[cfg].name), aclass(self.configs[cfg].users[theiruid]))
+
   self:CSendWhisperAM(cfg, sender, "MSYNC", "ALERT", self.csdata[cfg].myuid, theiruid, mlist)
 end
 
@@ -1660,33 +1671,42 @@ ihandlers.MSYNC = function(self, sender, proto, cmd, cfg, ...)
   for k,v in pairs(mlist) do
     local cmd, eid, cks, cstr = strsplit("\8", v)
     local crc = H:CRC32(cstr)
-    local cks = tonumber(cks)
+    local cks = tonumber(cks, 16)
+
     if (cks ~= crc) then
       err("possible hack attempt: mis-matched CRC from %s", white(sender))
-      debug(1, "checksum mismatch from %s: 0x%s != 0x%s", sender, K.hexstr(crc), K.hexstr(cks))
       return
     end
+
     if (not ehandlers[cmd]) then
-      debug(1, "unknown sync command %q from %q (p=%d)", cmd, sender, proto)
+      err("unknown sync command %q from %q (p=%d)", cmd, sender, proto)
       return
     end
+
     local eid = tonumber(eid)
     --
     -- Update our config checksum with the new one and process the event.
     --
     local oldsum = self.configs[cfg].cksum
     local newsum = bxor(oldsum, cks)
+
     self.configs[cfg].cksum = newsum
     self.configs[cfg].admins[cktheiruid].lastevent = eid
-    ehandlers[cmd](adm, sender, proto, cmd, cfg, strsplit(":", cstr))
+
+    local decoded = ZL:DecodeForWoWAddonChannel(cstr)
+    ehandlers[cmd](self, adm, sender, proto, cmd, cfg, LS:DeserializeValue(decoded))
   end
+
   self.qf.synctopbar:SetCurrentCRC()
+
   cp.admins[cktheiruid].active = true
   if (not cp.admins[cktheiruid].sync) then
     cp.admins[theiruid].sync = {}
   end
+
   self:SyncUpdateReplier(theiruid, self.configs[cfg].admins[cktheiruid].lastevent)
   info(L["[%s] sync with user %s complete."], white(self.configs[cfg].name), aclass(self.configs[cfg].users[theiruid]))
+
   self:FullRefresh(true)
 end
 
