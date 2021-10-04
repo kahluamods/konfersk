@@ -585,13 +585,11 @@ local function auto_loot_ok(self)
 
   if (li.announce) then
     if (self.cfg.settings.ann_winners_raid) then
-      self:SendText(strfmt(L["%s: %s%s (group %d) won %s. Grats!"],
-        L["MODABBREV"], uname, pos, li.party, li.ilink))
+      self:SendText(strfmt(L["%s: %s%s (group %d) won %s. Grats!"], L["MODABBREV"], uname, pos, li.party, li.ilink))
     end
 
     if (self.cfg.settings.ann_winners_guild) then
-      self:SendGuildText(strfmt(L["%s: %s%s won %s. Grats!"],
-        L["MODABBREV"], uname, pos, li.ilink))
+      self:SendGuildText(strfmt(L["%s: %s%s won %s. Grats!"], L["MODABBREV"], uname, pos, li.ilink))
     end
   end
 
@@ -802,8 +800,7 @@ local function rolltimer_onupdate_ml(self)
         self:AddLootHistory(nil, K.time(), ilink, uid, suicide, ipos)
       end
 
-      local ts = strfmt(L["%s: %s%s (group %d) won %s. Grats!"],
-                           L["MODABBREV"], winner, gpos, party, ilink)
+      local ts = strfmt(L["%s: %s%s (group %d) won %s. Grats!"], L["MODABBREV"], winner, gpos, party, ilink)
       if (self.cfg.settings.ann_winners_raid) then
         self:SendText(ts)
       end
@@ -1263,7 +1260,7 @@ local function mlist_setitem(objp, idx, slot, btn)
   -- has different info we care about.
   --
   local lootlist = ksk.cfg.lists[lootlistid]
-  if (lootlist.tethered and not ksk.cfg.settings.hide_absent) then
+  if (lootlist.tethered and lootlist.altdisp and not ksk.cfg.settings.hide_absent) then
     if (members[idx].isalt) then
       uc = members[idx].main
       at = "    - "
