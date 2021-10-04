@@ -904,7 +904,7 @@ function ksk:FindUser(name, cfgid)
 end
 
 function ksk:GetUserFlags(userid, cfgid)
-  local cfgid = cfgid or ksk.currentid
+  local cfgid = cfgid or self.currentid
 
   if (not cfgid or not userid) then
     return nil
