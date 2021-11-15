@@ -572,7 +572,6 @@ local function copy_space_button(this, cfgid, newname, newid, shown)
 
         for k,v in pairs(sil) do
           if (not dil[k]) then
-            local es = k .. ":"
             this:AddItem(k, v.ilink, newid)
             K.CopyTable(v, dil[k])
             --
@@ -611,7 +610,6 @@ local function copy_space_button(this, cfgid, newname, newid, shown)
       if (copycfgdlg.do_copyadm) then
         for k,v in pairs(sc.admins) do
           local uid = this:FindUser(sc.users[k].name, newid)
-          assert(uid)
           if (not dc.admins[uid]) then
             add_coadmin(this, uid, newid)
           end
@@ -1005,28 +1003,19 @@ function ksk:InitialiseConfigUI()
   ypos = ypos - 24
 
   arg = {
-    x = 4, y = ypos, name = "KSKAnnounceWhereDropDown",
-    label = { text = L["Announce Loot"], pos = "LEFT" },
-    itemheight = 16, mode = "SINGLE", border = "THIN",
-    dwidth = 125, items = {
-      { text = L["Nowhere"], value = 0,
-        tooltip = { title = "$$", text = L["TIP006.1"] },
-      },
-      { text = L["In Guild Chat"], value = 1,
-        tooltip = { title = "$$", text = L["TIP006.2"] },
-      },
-      { text = L["In Raid Chat"], value = 2,
-        tooltip = { title = "$$", text = L["TIP006.3"] },
-      },
-    },
-    tooltip = { title = "$$", text = L["TIP006"] },
+    x = 4, y = ypos, name = "KSKAnnounceWhereDropDown", label = { text = L["Announce Loot"], pos = "LEFT" },
+    itemheight = 16, mode = "SINGLE", border = "THIN", dwidth = 125, items = {
+      { text = L["Nowhere"], value = 0, tooltip = { title = "$$", text = L["TIP006.1"] }, },
+      { text = L["In Guild Chat"], value = 1, tooltip = { title = "$$", text = L["TIP006.2"] }, },
+      { text = L["In Raid Chat"], value = 2, tooltip = { title = "$$", text = L["TIP006.3"] }, },
+    }, tooltip = { title = "$$", text = L["TIP006"] },
   }
   cf.announcewhere = KUI:CreateDropDown(arg, cf)
   cf.announcewhere:Catch("OnValueChanged", function(this, evt, newv)
     change_cfg(self, "announce_where", newv)
   end)
 
-  local function oaf_checked(this)
+  local function is_oaf_checked(this)
     if (self.cfg and self.cfg.settings) then
       return self.cfg.settings[this.value]
     end
@@ -1034,50 +1023,18 @@ function ksk:InitialiseConfigUI()
   end
 
   arg = {
-    x = 275, y = ypos, name = "KSKAnnouncementsDropDown", itemheight = 16,
-    dwidth = 175, mode = "MULTI", title = { text = L["Other Announcements"],},
+    x = 275, y = ypos, name = "KSKAnnouncementsDropDown", itemheight = 16, dwidth = 175, mode = "MULTI",
+    title = { text = L["Other Announcements"],}, is_checked = is_oaf_checked,
     tooltip = { title = "$$", text = L["TIP007"] }, border = "THIN",
     items = {
-      { 
-        text = L["Announce Bid List Changes"],
-        value = "ann_bidchanges", checked = oaf_checked,
-        tooltip = { title = "$$", text = L["TIP007.1"] },
-      },
-      { 
-        text = L["Announce Winners in Raid"],
-        value = "ann_winners_raid", checked = oaf_checked,
-        tooltip = { title = "$$", text = L["TIP007.2"] },
-      },
-      { 
-        text = L["Announce Winners in Guild Chat"],
-        value = "ann_winners_guild", checked = oaf_checked,
-        tooltip = { title = "$$", text = L["TIP007.3"] },
-      },
-      { 
-        text = L["Announce Bid Progression"],
-        value = "ann_bid_progress", checked = oaf_checked,
-        tooltip = { title = "$$", text = L["TIP007.4"] },
-      },
-      { 
-        text = L["Usage Message When Bids Open"],
-        value = "ann_bid_usage", checked = oaf_checked,
-        tooltip = { title = "$$", text = L["TIP007.5"] },
-      },
-      { 
-        text = L["Announce Bid / Roll Cancelation"],
-        value = "ann_cancel", checked = oaf_checked,
-        tooltip = { title = "$$", text = L["TIP007.9"] },
-      },
-      { 
-        text = L["Announce When No Successful Bids"],
-        value = "ann_no_bids", checked = oaf_checked,
-        tooltip = { title = "$$", text = L["TIP007.10"] },
-      },
-      { 
-        text = L["Raiders Not on Current List"],
-        value = "ann_missing", checked = oaf_checked,
-        tooltip = { title = "$$", text = L["TIP007.11"] },
-      },
+      { text = L["Announce Bid List Changes"], value = "ann_bidchanges", tooltip = { title = "$$", text = L["TIP007.1"] }, },
+      { text = L["Announce Winners in Raid"], value = "ann_winners_raid", tooltip = { title = "$$", text = L["TIP007.2"] }, },
+      { text = L["Announce Winners in Guild Chat"], value = "ann_winners_guild", tooltip = { title = "$$", text = L["TIP007.3"] }, },
+      { text = L["Announce Bid Progression"], value = "ann_bid_progress", tooltip = { title = "$$", text = L["TIP007.4"] }, },
+      { text = L["Usage Message When Bids Open"], value = "ann_bid_usage", tooltip = { title = "$$", text = L["TIP007.5"] }, },
+      { text = L["Announce Bid / Roll Cancelation"], value = "ann_cancel", tooltip = { title = "$$", text = L["TIP007.9"] }, },
+      { text = L["Announce When No Successful Bids"], value = "ann_no_bids", tooltip = { title = "$$", text = L["TIP007.10"] }, },
+      { text = L["Raiders Not on Current List"], value = "ann_missing", tooltip = { title = "$$", text = L["TIP007.11"] }, },
     },
   }
   cf.otherannounce = KUI:CreateDropDown(arg, cf)

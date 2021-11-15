@@ -540,7 +540,7 @@ ihandlers.BCAST = function(self, sender, proto, cmd, cfg, cfdata)
     end
   elseif (cfgtype == KK.CFGTYPE_PUG) then
     if (not KRP.in_party) then
-      debug (2, "BCAST returning: cfgtype=1 not in raid")
+      debug(2, "BCAST returning: cfgtype=1 not in raid")
       return
     end
     if (not KRP.players or not KRP.players[sender]) then
@@ -552,7 +552,7 @@ ihandlers.BCAST = function(self, sender, proto, cmd, cfg, cfdata)
       return -- Weird, user should not have been able to press broadcast button
     end
   else
-    debug (2, "BCAST returning: cfgtype=%d", cfgtype)
+    debug(2, "BCAST returning: cfgtype=%d", cfgtype)
     return
   end
 
@@ -671,7 +671,7 @@ ihandlers.BCAST = function(self, sender, proto, cmd, cfg, cfdata)
     end
   end
 
-  if (tonumber(cfgtype) == tonumber(KK.CFGTYPE_PUG)) then
+  if (cfgtype == KK.CFGTYPE_PUG) then
     if (not self.configs[cfgid]) then
       local msg = strfmt(L["PUGCONFIG"], white(sender), L["MODTITLE"])
       K.ConfirmationDialog(self, L["Accept Configuration"], msg, ncf.name,
@@ -934,10 +934,6 @@ end
 ihandlers.RSUSR = function(self, sender, proto, cmd, cfg, ...)
   local uid, onoff = ...
 
-  if (cfg ~= self.currentid) then
-    return
-  end
-
   if (not self.configs[cfg].users[uid]) then
     return
   end
@@ -1069,7 +1065,7 @@ ehandlers.MDUSR = function(self, adm, sender, proto, cmd, cfg, ...)
     end
   end
 
-  self:SetUserRole(uid, role, cfg, true)
+  self:SetUserRole(uid, tonumber(role), cfg, true)
   self:SetUserEnchanter(uid, ench, cfg, true)
   self:SetUserFrozen(uid, frozen, cfg, true)
   self:SetUserIsAlt(uid, alt, mainid, cfg, true)
@@ -1949,12 +1945,8 @@ ehandlers.LHADD = function(self, adm, sender, proto, cmd, cfg, ...)
     return
   end
 
-  if (not spos) then
-    spos = 0
-  end
-
-  local itemlink = gsub(what, "\7", ":")
   local rf = true
+
   if (adm and adm >= 10) then
     rf = false
   end

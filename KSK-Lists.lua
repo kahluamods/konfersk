@@ -72,7 +72,7 @@ local addmissingdlg = nil
 
 local linfo = {}
 local qf = {}
---
+
 -- Pointer to the enclosing tab structure in the main dialog.
 local thistab = nil
 
@@ -92,11 +92,11 @@ local function hide_popup()
 end
 
 local function changed(res)
-  local res = res or false
+  local res = res and true or false
   if (not current_listid) then
-    res = true
+    res = false
   end
-  qf.listupdbtn:SetEnabled(not res)
+  qf.listupdbtn:SetEnabled(res)
 end
 
 --

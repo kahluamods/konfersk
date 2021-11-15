@@ -1828,8 +1828,7 @@ local function open_close_bids(self)
       -- all mod users can update their lists, but it is also stored as an
       -- event in the event log, and send to any / all co-admins.
       local sulist = self:CreateRaidList(lootlistid)
-      local winname, winuid = bidders[1].name, bidders[1].uid
-      local wincls = bidders[1].class
+      local winname, winuid, wincls = bidders[1].name, bidders[1].uid, bidders[1].class
       local party = KRP.players[winname].subgroup
       local ilink = lootitem.loot.ilink
       local gpos = ""
@@ -1844,8 +1843,7 @@ local function open_close_bids(self)
       self:SuicideUser(lootlistid, sulist, winuid, self.currentid, ilink, true)
       self:AddLootHistory(nil, K.time(), ilink, winuid, lootlistid, ipos)
 
-      local ts = strfmt(L["%s: %s%s (group %d) won %s. Grats!"],
-                        L["MODABBREV"], winname, gpos, party, ilink) 
+      local ts = strfmt(L["%s: %s%s (group %d) won %s. Grats!"], L["MODABBREV"], winname, gpos, party, ilink) 
 
       if (self.cfg.settings.ann_winners_raid) then
         self:SendText(ts)
@@ -1854,8 +1852,7 @@ local function open_close_bids(self)
       printf(icolor, "%s", ts)
 
       if (self.cfg.settings.ann_winners_guild) then
-        self:SendGuildText(strfmt(L["%s: %s%s won %s. Grats!"],
-                                 L["MODABBREV"], winname, gpos, ilink))
+        self:SendGuildText(strfmt(L["%s: %s%s won %s. Grats!"], L["MODABBREV"], winname, gpos, ilink))
       end
 
       if (lootitem.loot.slot ~= 0 and self.cfg.settings.auto_loot) then
@@ -1870,8 +1867,7 @@ local function open_close_bids(self)
       return
     else -- No bidders
       if (self.cfg.settings.ann_no_bids) then
-        self:SendText(strfmt(L["%s: no successful bids for %s."],
-                            L["MODABBREV"], lootitem.loot.ilink))
+        self:SendText(strfmt(L["%s: no successful bids for %s."], L["MODABBREV"], lootitem.loot.ilink))
       end
 
       if (boe_to_ml_or_de(self, false)) then
@@ -1916,9 +1912,9 @@ function ksk:SendCHITM(itemid, ii, cfg)
     cfilter = ii.cfilter
   end
 
-  local role = ""
+  local role = 0
   if (not ii.ignore and ii.role and ii.role ~= 0) then
-    role = tostring(ii.role)
+    role = ii.role
   end
 
   local list = ""
@@ -1926,9 +1922,9 @@ function ksk:SendCHITM(itemid, ii, cfg)
     list = ii.list
   end
 
-  local rank = ""
+  local rank = 0
   if (not ii.ignore and ii.rank) then
-    rank = tostring(ii.rank)
+    rank = ii.rank
   end
 
   local user = ""
@@ -1961,8 +1957,7 @@ function ksk:SendCHITM(itemid, ii, cfg)
     ignorequal = true
   end
 
-  self:AdminEvent(cfg, "CHITM", itemid, ignore, cfilter, tonumber(role), list,
-    tonumber(rank), user, suicide, delete, autodench, automl, ignorequal)
+  self:AdminEvent(cfg, "CHITM", itemid, ignore, cfilter, role, list, rank, user, suicide, delete, autodench, automl, ignorequal)
 end
 
 local function make_xml_string(self)
@@ -2958,7 +2953,7 @@ function ksk:InitialiseLootUI()
       end,
     setitem = function(objp, idx, slot, btn)
         return KUI.SetItemHelper(objp, btn, idx, function(op, ix)
-          return shortaclass(bidders[ix])
+          return (strfmt("[%d] %s", bidders[ix].pos, shortaclass(bidders[ix])))
         end)
       end,
     selectitem = blist_selectitem,
@@ -3668,15 +3663,11 @@ local function refresh_bidders(self)
     local ll = self.cfg.lists[lootlistid]
 
     for k,v in ipairs(bidders) do
-      if (self:UserInList(v.uid, lootlistid, nil)) then
+      local ison, _, pos = self:UserOrAltInList(v.uid, lootlistid, nil)
+
+      if (ison) then
+        v.pos = pos
         tinsert(newbidders, v)
-      elseif (ll.tethered and self.cfg.users[v.uid].alts) then
-        local ia, main = self:UserIsAlt(v)
-        if (ia) then
-          if (self:UserInList(main, lootlistid, nil)) then
-            tinsert(newbidders, main)
-          end
-        end
       end
     end
 
@@ -4093,6 +4084,7 @@ function ksk:AddBidder(name, cls, idx, uid, prio, useprio, announce)
   end
 
   local ti = { name = name, class = cls, idx = idx, uid = uid, prio = prio }
+
   tinsert(bidders, ti)
   tsort(bidders, function(a, b)
     if (not useprio) then
@@ -4188,7 +4180,7 @@ function ksk:DeleteBidder(name, announce)
   refresh_bidders(self)
 
   --
-  -- If it was me that just retracted, change my rettract button to
+  -- If it was me that just retracted, change my retract button to
   -- bid in case I want to do that again.
   --
   if (name == K.player.name) then
