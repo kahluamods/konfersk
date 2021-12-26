@@ -44,7 +44,6 @@ local strlower = string.lower
 local strfmt = string.format
 local strsub = string.sub
 local strlen = string.len
-local strfind = string.find
 local pairs, ipairs, next = pairs, ipairs, next
 local assert = assert
 
@@ -722,9 +721,7 @@ local function select_dencher(this, btn, lbl, num)
       which_dench_lbl:SetText("")
     else
       which_dench_lbl:SetText(aclass(this.cfg.users[uid]))
-      if (this.cfg.settings.denchers[which_dencher] ~= uid) then
-        this.cfg.settings.denchers[which_dencher] = uid
-      end
+      this.cfg.settings.denchers[which_dencher] = uid
     end
 
     --
@@ -740,7 +737,7 @@ local function select_dencher(this, btn, lbl, num)
   if (not dencher_popup) then
     dencher_popup = K.PopupSelectionList(this, "KSKDencherPopup",
       ulist, L["Select Enchanter"], 225, 400, btn, 16, 
-      function(idx) pop_func(idx) end)
+      function(val) pop_func(val) end)
   end
   dencher_popup:UpdateList(ulist)
   dencher_popup:ClearAllPoints()
@@ -1044,7 +1041,7 @@ function ksk:InitialiseConfigUI()
   ypos = ypos - 30
 
   arg = {
-    x = 4, y = ypos, name = "KSKDefListDropdown", mode = "SINGLE",
+    x = 4, y = ypos, name = "KSKDefListDropdown", mode = "SINGLE", border = "THIN",
     dwidth = 200, items = KUI.emptydropdown, itemheight = 16,
     label = { text = L["Use Default Roll List"], pos = "LEFT" },
     tooltip = { title = "$$", text = L["TIP010"] },
@@ -1053,15 +1050,11 @@ function ksk:InitialiseConfigUI()
   cf.deflist:Catch("OnValueChanged", function(this, evt, nv)
     change_cfg(self, "def_list", nv)
   end)
-  ypos = ypos - 28
-  --
-  -- The list items are updated by ksk:RefreshListDropdowns() in KSK-Lists.lua.
-  -- This in turns calls ksk:RefreshConfigListDropdowns() below.
-  --
   qf.deflistdd = cf.deflist
+  ypos = ypos - 28
 
   arg = {
-    x = 4, y = ypos, name = "KSKGDefRankDropdown", mode = "SINGLE",
+    x = 4, y = ypos, name = "KSKGDefRankDropdown", mode = "SINGLE", border = "THIN",
     dwidth = 175, items = KUI.emptydropdown, itemheight = 16,
     label = { text = L["Initial Guild Rank Filter"], pos = "LEFT" },
     tooltip = { title = "$$", text = L["TIP011"] },
@@ -1156,7 +1149,7 @@ function ksk:InitialiseConfigUI()
     text = L["When there are no successful bids ..."],
   }
   cf.nobidlbl = KUI:CreateStringLabel(arg, cf)
-  ypos = ypos - 20
+  ypos = ypos - 16
 
   arg = {
     x = 0, y = ypos, label = { text = L["Assign BoE Items to Master Looter"] },
@@ -1186,52 +1179,85 @@ function ksk:InitialiseConfigUI()
     change_cfg(self, "disenchant", val)
     for i = 1, self.MAX_DENCHERS do
       cf["dencher" .. i]:SetEnabled(val)
-      cf["denchbut" .. i]:SetEnabled(val)
+      if (not val) then
+        cf["dencher" .. i]:SetText("")
+        self.cfg.settings.denchers[i] = nil
+      end
     end
   end)
   ypos = ypos - 24
 
-  arg = { x = 25, y = ypos, border = true, autosize = false,
-    height=20, width = 150, text = "", enabled = false,
+  local function dencher_ovc(this, uid, which)
+    if (uid == 0) then
+      self.cfg.settings.denchers[which] = nil
+      this:SetText("")
+    else
+      self.cfg.settings.denchers[which] = uid
+      this:SetText(aclass(self.cfg.users[uid]))
+    end
+  end
+
+  local function dencher_onclick(this, is_dropped, dnum)
+    if (not is_dropped) then
+      return
+    end
+
+    local elist = {}
+    local cval = self.cfg.settings.denchers[dnum]
+
+    tinsert(elist, { value = 0, text = L["None"] })
+    if (cval) then
+      tinsert(elist, { value = cval, text = aclass(self.cfg.users[cval]), checked = true, enabled = false } )
+    end
+
+    for k,v in ipairs(self.sortedusers) do
+      local ok = true
+      for i = 1, self.MAX_DENCHERS do
+        if (self.cfg.settings.denchers[i] == v.id) then
+          ok = false
+        end
+      end
+      if (ok and self:UserIsEnchanter(v.id)) then
+        local ti = { value = v.id, text = aclass(self.cfg.users[v.id]), checked = false }
+        tinsert(elist, ti)
+      end
+    end
+    this:UpdateItems(elist)
+    this:SetValue(self.cfg.settings.denchers[dnum] or 0)
+    dencher_ovc(this, self.cfg.settings.denchers[dnum] or 0, dnum)
+  end
+
+  arg = {
+    x = 20, y = ypos, name = "KSKDencher1DD", itemheight = 16, dwidth = 140, mode = "SINGLE",
+    border = "THIN", items = KUI.emptydropdown, title = { text = "" },
   }
-  local barg = {
-    x = 180, y = ypos+2, width = 50, height = 24, text = L["Select"],
-    enabled = false,
-    tooltip = { title = L["Assign To Enchanter"],  text = L["TIP018"] },
-  }
-  cf.dencher1 = KUI:CreateStringLabel(arg, cf)
-  cf.denchbut1 = KUI:CreateButton(barg, cf)
-  cf.denchbut1:Catch("OnClick", function(this, evt)
-    select_dencher(self, this, cf.dencher1, 1)
+  cf.dencher1 = KUI:CreateDropDown(arg, cf)
+  cf.dencher1:Catch("OnClick", function(this, evt, is_dropped)
+    dencher_onclick(this, is_dropped, 1)
+  end)
+  cf.dencher1:Catch("OnValueChanged", function(this, evt, newv)
+    dencher_ovc(this, newv or 0, 1)
   end)
 
-  arg.x = 250
-  barg.x = 405
-  cf.dencher2 = KUI:CreateStringLabel(arg, cf)
-  cf.denchbut2 = KUI:CreateButton(barg, cf)
-  cf.denchbut2:Catch("OnClick", function(this, evt)
-    select_dencher(self, this, cf.dencher2, 2)
+  arg.x = 172
+  arg.name = "KSKDencher2DD"
+  cf.dencher2 = KUI:CreateDropDown(arg, cf)
+  cf.dencher2:Catch("OnClick", function(this, evt, dd,  is_dropped)
+    dencher_onclick(this, is_dropped, 2)
+  end)
+  cf.dencher2:Catch("OnValueChanged", function(this, evt, newv)
+    dencher_ovc(this, newv or 0, 2)
   end)
 
-  ypos = ypos - 24
-  arg.x = 25
-  arg.y = ypos
-  barg.x = 180
-  barg.y = ypos+2
-  cf.dencher3 = KUI:CreateStringLabel(arg, cf)
-  cf.denchbut3 = KUI:CreateButton(barg, cf)
-  cf.denchbut3:Catch("OnClick", function(this, evt)
-    select_dencher(self, this, cf.dencher3, 3)
+  arg.x = 325
+  arg.name = "KSKDencher3DD"
+  cf.dencher3 = KUI:CreateDropDown(arg, cf)
+  cf.dencher3:Catch("OnClick", function(this, evt, dd,  is_dropped)
+    dencher_onclick(this, is_dropped, 3)
   end)
-
-  arg.x = 250
-  barg.x = 405
-  cf.dencher4 = KUI:CreateStringLabel(arg, cf)
-  cf.denchbut4 = KUI:CreateButton(barg, cf)
-  cf.denchbut4:Catch("OnClick", function(this, evt)
-    select_dencher(self, this, cf.dencher4, 4)
+  cf.dencher3:Catch("OnValueChanged", function(this, evt, newv)
+    dencher_ovc(this, newv or 0, 3)
   end)
-  ypos = ypos - 24
 
   --
   -- Config panel, roll options tab
@@ -1308,7 +1334,6 @@ function ksk:InitialiseConfigUI()
   cf.ties:Catch("OnValueChanged", function(this, evt, val)
     change_cfg(self, "ann_roll_ties", val)
   end)
-  ypos = ypos - 24
 
   --
   -- Config panel, admin tab
@@ -1427,8 +1452,8 @@ function ksk:InitialiseConfigUI()
   --
   ypos = 0
   arg = {
-    x = 4, y = ypos, name = "KSKConfigOWnerDD", itemheight = 16,
-    dwidth = 150, mode = "SINGLE", items = KUI.emptydropdown,
+    x = 4, y = ypos, name = "KSKConfigOwnerDD", itemheight = 16,
+    dwidth = 150, mode = "SINGLE", items = KUI.emptydropdown, border = "THIN",
     label = { pos = "LEFT", text = L["Config Owner"] },
     tooltip = { title = "$$", text = L["TIP023"] },
   }
@@ -1444,7 +1469,7 @@ function ksk:InitialiseConfigUI()
   arg = {
     name = "KSKCfgTypeDropDown", enabled = false, itemheight = 16,
     x = 4, y = ypos, label = { text = L["Config Type"], pos = "LEFT" },
-    dwidth = 100, mode = "SINGLE", width = 75,
+    dwidth = 100, mode = "SINGLE", width = 75, border = "THIN",
     tooltip = { title = "$$", text = L["TIP025"] },
     items = {
       { text = L["Guild"], value = CFGTYPE_GUILD },
@@ -1670,11 +1695,6 @@ end
 function ksk:CreateNewConfig(name, initial, nouser, mykey)
   local lname = strlower(name)
 
-  if (strfind(name, ":")) then
-    err(L["invalid configuration name. Please try again."])
-    return true
-  end
-
   for k,v in pairs(self.frdb.configs) do
     if (strlower(v.name) == lname) then
       err(L["configuration %q already exists. Try again."], white(name))
@@ -1684,12 +1704,7 @@ function ksk:CreateNewConfig(name, initial, nouser, mykey)
 
   self.frdb.nconfigs = self.frdb.nconfigs + 1
 
-  local newkey
-  if (mykey) then
-    newkey = mykey
-  else
-    newkey = KK.CreateNewID(name)
-  end
+  local newkey = mykey or KK.CreateNewID(name)
   self.frdb.configs[newkey] = {}
   self.csdata[newkey] = {}
   self.csdata[newkey].reserved = {}
@@ -1714,8 +1729,7 @@ function ksk:CreateNewConfig(name, initial, nouser, mykey)
   K.CopyTable(self.defaults, sp.settings)
   if (not nouser) then
     sp.nusers = 1
-    sp.users["0001"] = { name = K.player.name, class = K.player.class,
-      role = 0, flags = "" }
+    sp.users["0001"] = { name = K.player.name, class = K.player.class, role = 0, flags = "" }
     sp.owner = "0001"
     self.csdata[newkey].myuid = uid
     info(L["configuration %q created."], white(name))
@@ -1767,11 +1781,6 @@ function ksk:RenameConfig(cfgid, newname)
 
   local found = false
   local lname = strlower(newname)
-
-  if (strfind(lname, ":")) then
-    err(L["invalid configuration name. Please try again."])
-    return true
-  end
 
   for k,v in pairs(self.frdb.configs) do
     if (strlower(self.frdb.configs[k].name) == lname) then
@@ -1826,6 +1835,7 @@ function ksk:DeleteAdmin(uid, cfg, nocmd)
     cp.lastevent = 0
     cp.admins[cp.owner].lastevent = nil
     cp.admins[cp.owner].sync = nil
+    qf.cfgopts.cfgowner:SetEnabled(false)
   end
 
   refresh_coadmins(self)

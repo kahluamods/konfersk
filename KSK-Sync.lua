@@ -196,7 +196,7 @@ end
 -- a table suitable for transmission with the following values:
 --   v=6 (version 6 broadcast)
 --   c={ cfgid, name, type, ownerid, oranks, crc }
---   u={userlist}
+--   u={userlist} - keyed by uid
 --     Each element in userlist is { uid, name, class, role, flags, isalt, alts }
 --   a={adminlist} - keyed by adminid
 --     Each element in adminlist is the uid of the adminid key

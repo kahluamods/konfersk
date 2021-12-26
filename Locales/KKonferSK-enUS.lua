@@ -33,7 +33,7 @@ end
 -- THIS FILE. THANK YOU.
 --
 
-L["MODTITLE"] = "KonferSK"
+L["MODTITLE"] = "Suicide Kings"
 L["MODNAME"] = "konfersk"
 L["MODABBREV"] = "KSK"
 L["CMDNAME"] = "ksk"

@@ -163,7 +163,6 @@ local HIST_EXP_JSON = 2
 --   .leaveloot - only used by the cancel button and indicates that the loot
 --     should be left in the loot list. The default is to remove it.
 --
---
 
 local lootlistid = nil
 local members = nil
@@ -774,7 +773,7 @@ local function rolltimer_onupdate_ml(self)
         lootroll.endtime = GetTime() + self.cfg.settings.roll_timeout + 1
         lootroll.lastwarn = nil
         rolling = 1
-        rlf.timerbar:SetScript("OnUpdate", rolltimer_onupdate_ml)
+        rlf.timerbar:SetScript("OnUpdate", function() rolltimer_onupdate_ml(self) end)
         self:SendAM("RROLL", "ALERT", ilink, timeout, winners)
         return
       end
@@ -1773,7 +1772,7 @@ local function select_next(self, btn)
 end
 
 --
--- This is what 95% of the mod is all about, the dealing with bids. So I will
+-- This is what 95% of the mod is all about, the dealing with bids, so I will
 -- take a little time here explaining what happens. We can only reach this
 -- code if we have a loot item selected. At the time the loot master (LM)
 -- starts the loot we assume that the entry conditions for looting have been
@@ -2229,9 +2228,9 @@ local function export_history_button(self, fmt)
 
   local fstr
   if (fmt == HIST_EXP_XML) then
-    fstr = make_xml_string()
+    fstr = make_xml_string(self)
   elseif (fmt == HIST_EXP_JSON) then
-    fstr = make_json_string()
+    fstr = make_json_string(self)
   else
     fstr = ""
   end
@@ -2803,7 +2802,7 @@ function ksk:InitialiseLootUI()
   bm.role:SetValue(0)
 
   arg = {
-    x = 0, y = ypos, mode = "SINGLE", itemheight = 16,
+    x = 0, y = ypos, mode = "SINGLE", itemheight = 16, border = "THIN",
     name = "KSKLootRankFilter", dwidth = 150, items = KUI.emptydropdown,
     label = { text = L["Guild Rank"], pos = "LEFT" },
     tooltip = { title = "$$", text = L["TIP051"], },
@@ -3205,7 +3204,7 @@ function ksk:InitialiseLootUI()
     x = 0, y = ypos, name = "KSKItemRankDropdown",
     dwidth = 200, mode = "SINGLE", itemheight = 16, items = KUI.emptydropdown,
     label = { text = L["Initial Guild Rank Filter"], },
-    enabled = false,
+    enabled = false, border = "THIN",
     tooltip = { title = "$$", text = L["TIP061"], },
   }
   rs.defrank = KUI:CreateDropDown(arg, rs)
@@ -3826,8 +3825,7 @@ function ksk:SelectLootItem(idx, filter, role, list, rank)
   local loot = self.bossloot[idx]
 
   selectedloot = idx
-  lootitem = { idx = idx, filter = filter, role = role,
-               list = list, rank = rank, loot = loot }
+  lootitem = { idx = idx, filter = filter, role = role, list = list, rank = rank, loot = loot }
 
   self.qf.lootscroll:SetSelected(idx, true, true)
 
@@ -4022,8 +4020,7 @@ function ksk:NewBidder(u)
   end
 
   -- Fifth check. Verify the user matches the currently selected class
-  -- and role and rank filters. They are individual checks but we clump
-  -- them together.
+  -- and role and rank filters. They are individual checks but we clump them together.
   if (not verify_user_class(u, usr.class, L["bid"])) then
     return
   end

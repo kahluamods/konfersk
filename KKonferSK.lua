@@ -98,8 +98,6 @@ if (not ksk) then
   error("KahLua KonferSK: addon creation failed.", 2)
 end
 
-_G["KSK"] = ksk
-
 ksk.KUI = KUI
 ksk.L   = L
 ksk.KRP = KRP
@@ -168,7 +166,7 @@ ksk.dbversion = 6
 ksk.initialised = false
 
 -- Maximum number of disenchanters that can be defined in a config
-ksk.MAX_DENCHERS = 4
+ksk.MAX_DENCHERS = 3
 
 -- Constants used to define the various UI tabs and sub-tabs. These should
 -- never be changed by code.
@@ -1486,20 +1484,20 @@ local function guild_info_updated(evt, ...)
   end
 
   oldr = ksk.qf.lootrank:GetValue() or 0
-  ksk.qf.lootrank:UpdateItems (rvals)
-  ksk.qf.lootrank:SetValue (oldr)
+  ksk.qf.lootrank:UpdateItems(rvals)
+  ksk.qf.lootrank:SetValue(oldr)
 
   oldr = ksk.qf.defrankdd:GetValue() or 0
-  ksk.qf.defrankdd:UpdateItems (rvals)
-  ksk.qf.defrankdd:SetValue (oldr)
+  ksk.qf.defrankdd:UpdateItems(rvals)
+  ksk.qf.defrankdd:SetValue(oldr)
 
   oldr = ksk.qf.gdefrankdd:GetValue() or 0
-  ksk.qf.gdefrankdd:UpdateItems (rvals)
-  ksk.qf.gdefrankdd:SetValue (oldr)
+  ksk.qf.gdefrankdd:UpdateItems(rvals)
+  ksk.qf.gdefrankdd:SetValue(oldr)
 
   oldr = ksk.qf.itemrankdd:GetValue() or 0
-  ksk.qf.itemrankdd:UpdateItems (rvals)
-  ksk.qf.itemrankdd:SetValue (oldr)
+  ksk.qf.itemrankdd:UpdateItems(rvals)
+  ksk.qf.itemrankdd:SetValue(oldr)
 
   ksk.qf.cfgtype:SetEnabled(ksk:UserIsRanked(ksk.currentid, K.player.name))
 end
@@ -1810,8 +1808,8 @@ local function kld_loot_item(_, _, pvt, item)
     end
   end
 
-  local bthresh = tonumber(ksk.cfg.settings.bid_threshold or "0")
-  local iqual = tonumber(item.quality or "0")
+  local bthresh = tonumber(ksk.cfg.settings.bid_threshold or "0") or 0
+  local iqual = tonumber(item.quality or "0") or 0
 
   if (ksk.cfg.settings.disenchant_below and not skipit) then
     if (dencher and bthresh ~= 0 and iqual < bthresh) then
@@ -2032,7 +2030,7 @@ function ksk:OnLateInit()
   -- early before we call any other functions.
   self.configs = self.frdb.configs
 
-  -- ksk.SetDefaultConfig (called next) depends on ksk.csdata being set up
+  -- self:SetDefaultConfig (called next) depends on self.csdata being set up
   -- and correct, so "refresh" that now.
   self:RefreshCSData()
 

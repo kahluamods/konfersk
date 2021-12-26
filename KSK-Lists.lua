@@ -92,6 +92,9 @@ local function hide_popup()
 end
 
 local function changed(res)
+  if (res == nil) then
+    res = true
+  end
   local res = res and true or false
   if (not current_listid) then
     res = false
@@ -161,8 +164,7 @@ local function refresh_member_list(this, listid)
           sortedmembers[i].hasalts = true
           local pos = sortedmembers[i].pos
           for j = 1, #usr.alts do
-            local ti = { id = usr.alts[j], isalt = true,
-            main = main, idx = sortedmembers[i].idx }
+            local ti = { id = usr.alts[j], isalt = true, pos = pos, main = main, idx = sortedmembers[i].idx }
             tinsert(sortedmembers, i+j, ti)
           end
         end
@@ -195,6 +197,7 @@ local function refresh_member_list(this, listid)
   if ((qf.memberlist.itemcount < 1) or not current_memberid) then
     en = false
   end
+
   qf.delete:SetEnabled(en)
   qf.resunres:SetEnabled(en)
 end
@@ -405,15 +408,14 @@ local function rlist_selectitem(objp, idx, slot, btn, onoff)
   -- Updates current_memberid, sortedmembers
   refresh_member_list(ksk, current_listid)
 
-  changed(true)
+  changed(false)
 end
 
 local function create_list_button(this)
   local box
 
   if (not newlistdlg) then
-    newlistdlg, box = K.SingleStringInputDialog(this, "KSKSetupNewList",
-      L["Create Roll List"], L["NEWLIST"], 400, 185)
+    newlistdlg, box = K.SingleStringInputDialog(this, "KSKSetupNewList", L["Create Roll List"], L["NEWLIST"], 400, 185)
 
     local function verify_with_create(objp, val)
       if (strlen(val) < 1 or this:CreateNewList(val)) then
@@ -480,9 +482,7 @@ local function rename_list_button(this, lid)
     return false
   end
 
-  K.RenameDialog(this, L["Rename Roll List"], L["Old Name"],
-    this.cfg.lists[lid].name, L["New Name"], 32, rename_helper,
-    lid, true)
+  K.RenameDialog(this, L["Rename Roll List"], L["Old Name"], this.cfg.lists[lid].name, L["New Name"], 32, rename_helper, lid, true)
 end
 
 local function copy_list_button(this, lid)
@@ -511,9 +511,7 @@ local function copy_list_button(this, lid)
     return false
   end
 
-  K.RenameDialog(this, L["Copy Roll List"], L["Source List"],
-    this.cfg.lists[lid].name, L["Destination List"], 32, copy_helper,
-    lid, true)
+  K.RenameDialog(this, L["Copy Roll List"], L["Source List"], this.cfg.lists[lid].name, L["Destination List"], 32, copy_helper, lid, true)
 end
 
 local insert_popup = nil
@@ -595,14 +593,12 @@ local function insert_member(this, btn)
       pos = rand(pos)
     end
     this:InsertMember(puid, current_listid, pos)
-    info(L["added %s to list %q at position %s."],
-      shortaclass(this.cfg.users[puid]), white(rlist.name), white(tostring(pos)))
+    info(L["added %s to list %q at position %s."], shortaclass(this.cfg.users[puid]), white(rlist.name), white(tostring(pos)))
   end
 
   if (not insert_popup) then
     insert_popup = K.PopupSelectionList(this, "KSKInsertMemberPopup",
-      ulist, nil, 205, 300, this.mainwin.tabs[this.LISTS_TAB].content, 16,
-      pop_func, 20, 20)
+      ulist, nil, 205, 300, this.mainwin.tabs[this.LISTS_TAB].content, 16, pop_func, 20, 20)
 
     local arg = {
       x = 0, y = 2, width = 150, parent = insert_popup.header,
@@ -781,7 +777,7 @@ local function import_list_button(this)
 
     arg = {
       x = 4, y = ypos, dwidth = 175, mode = "SINGLE", itemheight = 16,
-      items = KUI.emptydropdown, name = "KSKListImpRanks",
+      items = KUI.emptydropdown, name = "KSKListImpRanks", border = "THIN",
       label = { text = L["Guild Rank to Import"], pos = "LEFT" },
     }
     ret.grank = KUI:CreateDropDown(arg, ret)
@@ -821,7 +817,7 @@ local function import_list_button(this)
         { text = L["Add to Existing Members"], value = 2 },
         { text = L["Randomly Add to Existing Members"], value = 3 },
       }, name = "KSKCSVImpOpts", enabled = false, initialvalue = 1,
-      itemheight = 16,
+      itemheight = 16, border = "THIN",
     }
     ret.csvopts = KUI:CreateDropDown(arg, ret)
     ret.csvopts:Catch("OnValueChanged", function(t, evt, newv)
@@ -1056,7 +1052,7 @@ local function export_list_button(this)
 
 
     arg = {
-      label = { text = L["Select"], pos = "LEFT" },
+      label = { text = L["Select"], pos = "LEFT" }, border = "THIN",
       name = "KSKWhatToExport", mode = "SINGLE",
       x = 5, y = ypos, dwidth = 250, items = {
         { text = L["Nothing"], value = 0 },
@@ -1206,7 +1202,7 @@ local function add_missing_button(this)
     ypos = ypos - 24
 
     arg = {
-      label = { text = L["Select"], pos = "LEFT" },
+      label = { text = L["Select"], pos = "LEFT" }, border = "THIN",
       name = "KSKWhoMissingToAdd", mode = "SINGLE",
       x = 4, y = ypos, dwidth = 250, items = {
         { text = L["Add Missing Raid Members"], value = 1 },
@@ -1644,7 +1640,7 @@ function ksk:InitialiseListsUI()
 
   arg = {
     x = 0, y = ypos, name = "KSKDefRankDropdown", itemheight = 16,
-    dwidth = 175, items = KUI.emptydropdown, mode = "SINGLE",
+    dwidth = 175, items = KUI.emptydropdown, mode = "SINGLE", border = "THIN",
     label = { text = L["Initial Guild Rank Filter"], },
     tooltip = { title = "$$", text = L["TIP038"] },
   }
@@ -1688,6 +1684,7 @@ function ksk:InitialiseListsUI()
   arg = {
     x = 0, y = ypos, name = "KSKAdditionalSuicideDD", itemheight = 16,
     dwidth = 175, mode = "SINGLE", items = KUI.emptydropdown,
+    border = "THIN",
     label = { text = L["Suicide on Additional List"] },
     tooltip = { title = "$$", text = L["TIP041"] },
   }
@@ -1710,7 +1707,12 @@ function ksk:InitialiseListsUI()
     if (user) then
       changed()
     end
+    if (not val) then
+      linfo.altdisp = false
+    end
     linfo.tethered = val
+    qf.altdisp:SetEnabled(val)
+    qf.altdisp:SetChecked(linfo.altdisp)
   end)
   ypos = ypos - 24
 
@@ -1746,7 +1748,7 @@ function ksk:InitialiseListsUI()
     self:RefreshAllLists(false)
     tr.updatebtn:SetEnabled(false)
     -- If this changes MUST change CHLST is KSK-Config.lua
-    self:AdminEvent(self.currentid, "CHLST", current_listid, tonumber(linfo.sortorder or 0), linfo.def_rank,
+    self:AdminEvent(self.currentid, "CHLST", current_listid, tonumber(linfo.sortorder) or 0, linfo.def_rank,
       linfo.strictcfilter and true or false, linfo.strictrfilter and true or false, linfo.extralist,
       linfo.tethered and true or false, linfo.altdisp and true or false)
     self:FixupLists(self.currentid)

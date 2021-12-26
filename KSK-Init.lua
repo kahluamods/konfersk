@@ -135,12 +135,8 @@ function ksk:InitialiseUI()
   --
   local tbf = self.mainwin.topbar
   local arg = { 
-    x = 250, y = 0,
-    name = "ConfigSpacesDropdown",
-    itemheight = 16,
-    dwidth = 125, items = KUI.emptydropdown,
-    level = 12,
-    tooltip = { title = L["TIP028.0"], text = L["TIP028.1"] },
+    x = 250, y = 0, name = "ConfigSpacesDropdown", itemheight = 16, dwidth = 135, items = KUI.emptydropdown,
+    level = 12, tooltip = { title = L["TIP028.0"], text = L["TIP028.1"] }, border = "THIN",
   }
   self.mainwin.cfgselector = KUI:CreateDropDown(arg, tbf)
   self.mainwin.cfgselector:ClearAllPoints()

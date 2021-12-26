@@ -948,11 +948,11 @@ end
 --          are reserved.
 --
 ihandlers.REQRS = function(self, sender, proto, cmd, cfg, ...)
-  if (cfg ~= self.currentid) then
+  if (not self.configs[cfg]) then
     return
   end
 
-  if (not self.configs[cfg]) then
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -984,11 +984,11 @@ end
 ihandlers.ACKRS = function(self, sender, proto, cmd, cfg, ...)
   local utb = ...
 
-  if (cfg ~= self.currentid) then
+  if (not self.configs[cfg]) then
     return
   end
 
-  if (not self.configs[cfg]) then
+  if (cfg ~= self.currentid) then
     return
   end
 
@@ -1002,9 +1002,8 @@ ihandlers.ACKRS = function(self, sender, proto, cmd, cfg, ...)
     return
   end
 
-  if (not self.csdata[cfg].reserved) then
-    self.csdata[cfg].reserved = {}
-  end
+  self.csdata[cfg].reserved = self.csdata[cfg].reserved or {}
+
   for k,v in pairs(utb) do
     self.csdata[cfg].reserved[v] = true
   end
@@ -1301,7 +1300,7 @@ ehandlers.CHITM = function(self, adm, sender, proto, cmd, cfg, ...)
   end
 
   local ii = {ilink = ilist[itemid].ilink }
-  if (ign == "Y") then
+  if (ign) then
     ii.ignore = true
   else
     if (cfilt and cfilt ~= "") then
@@ -1322,7 +1321,7 @@ ehandlers.CHITM = function(self, adm, sender, proto, cmd, cfg, ...)
       if (slist and slist ~= "" and slist ~= "0") then
         ii.suicide = slist
       end
-      if (del and del == "Y") then
+      if (del) then
         ii.del = true
       end
     end

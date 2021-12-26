@@ -194,7 +194,7 @@ function ksk:SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
         foundfirst = true
       end
       if (foundfirst) then
-        if (lu[i] == uid or not ksk:UserIsFrozen(lu[i], nil, cfgid)) then
+        if (lu[i] == uid or not self:UserIsFrozen(lu[i], nil, cfgid)) then
           tinsert(movers, i)
         end
       end
@@ -228,7 +228,7 @@ function ksk:SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
       return
     end
     for i = p+1, #lu do
-      if (not ksk:UserIsFrozen(lu[i], nil, cfgid)) then
+      if (not self:UserIsFrozen(lu[i], nil, cfgid)) then
         tinsert(movers, i)
       end
     end
@@ -340,7 +340,7 @@ local function lowlevel_add_event(self, cfgid, eventname, userevent, ...)
     end
   end
 
-  ksk:CSendAM(cfgid, eventname, "ALERT", scrc, ocrc, eid, oldeid, userevent or false, encoded)
+  self:CSendAM(cfgid, eventname, "ALERT", scrc, ocrc, eid, oldeid, userevent or false, encoded)
 end
 
 --

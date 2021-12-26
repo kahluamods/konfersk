@@ -181,9 +181,8 @@ end
 function ksk:CreateRoleListDropdown(name, x, y, parent, w)
   local kk = ksk.KK
   local arg = {
-    name = name, mode = "SINGLE", itemheight = 16,
-    x = x, y = y, dwidth = w or 150,
-    label =  { text = L["User Role"], pos = "LEFT" },
+    name = name, mode = "SINGLE", itemheight = 16, x = x, y = y, dwidth = w or 150,
+    label =  { text = L["User Role"], pos = "LEFT" }, border = "THIN",
     items = {
       { text = kk.rolenames[kk.ROLE_UNSET], value = kk.ROLE_UNSET },
       { text = kk.rolenames[kk.ROLE_HEALER], value = kk.ROLE_HEALER },
@@ -225,9 +224,8 @@ local function create_user_button(self)
     ret.username:SetFocus()
 
     arg = {
-      x = 5, y = -30, dwidth = 125, mode = "SINGLE", itemheight = 16,
-      label = { text = L["User Class"], pos = "LEFT" },
-      items = {}, name = "KSKCreateUserClassDD",
+      x = 5, y = -30, dwidth = 125, mode = "SINGLE", itemheight = 16, label = { text = L["User Class"], pos = "LEFT" },
+      items = {}, name = "KSKCreateUserClassDD", border = "THIN",
       tooltip = { title = "$$", text = L["TIP073"] },
     }
     for k,v in pairs(K.IndexClass) do
