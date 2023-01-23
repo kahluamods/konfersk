@@ -2779,6 +2779,17 @@ function ksk:InitialiseLootUI()
     class_filter_func(this, evt, val, K.CLASS_PRIEST, user)
   end)
 
+  ypos = ypos - 16
+
+  arg = {
+    x = 0, y = ypos, label = { text = K.IndexClass[K.CLASS_DEATHKNIGHT].c },
+    font = "GameFontHighlightSmall", height = 16,
+  }
+  bm.deathknight = KUI:CreateCheckBox(arg, bm)
+  bm.deathknight:Catch("OnValueChanged", function(this, evt, val, user)
+    class_filter_func(this, evt, val, K.CLASS_DEATHKNIGHT, user)
+  end)
+
   ypos = ypos - 20
 
   arg = {
@@ -3316,6 +3327,17 @@ function ksk:InitialiseLootUI()
   rs.priest:Catch("OnValueChanged", function(this, evt, val, user)
     iclass_filter_func(this, evt, val, K.CLASS_PRIEST, user)
   end)
+
+  arg = {
+  x = 120, y = ypos, label = { text = K.IndexClass[K.CLASS_DEATHKNIGHT].c },
+  font = "GameFontHighlightSmall", height = 16,
+  enabled = false,
+  }
+  rs.deathknight = KUI:CreateCheckBox(arg, rs)
+  rs.deathknight:Catch("OnValueChanged", function(this, evt, val, user)
+  iclass_filter_func(this, evt, val, K.CLASS_DEATHKNIGHT, user)
+  end)
+  
 
   ypos = ypos - 18
 

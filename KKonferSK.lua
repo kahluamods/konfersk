@@ -22,8 +22,7 @@
 ]]
 
 local MAJOR= "KKonferSK"
-local MINOR = tonumber("@revision@")
-local MINOR = 1 -- @debug-delete@
+local MINOR = tonumber("20")
 local K,KM = LibStub:GetLibrary("KKore")
 local H = LibStub:GetLibrary("KKoreHash")
 local KUI = LibStub:GetLibrary("KKoreUI")
@@ -1230,7 +1229,6 @@ local function ksk_cps(input)
   info("throttle speed set to %d", ctl.MAX_CPS)
 end
 
-K.debugging[L["MODNAME"]] = 9   -- @debug-delete@
 
 local kcmdtab = {}
 kcmdtab["debug"] = ksk_debug

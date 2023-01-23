@@ -1,27 +1,22 @@
-﻿## Interface: 20502
+﻿## Interface: 30401
 ## Title: Konfer Suicide Kings |cffff2222-K-|r
 ## Notes: Suicide Kings loot distribution system.
 ## Notes-deDE: Suicide Kings Loot Verteilungs System.
 ## Author: Cruciformer
-## Version: @revision@
+## Version: 21.0.1
 ## X-email: me@cruciformer.com
 ## X-Credits: Ace3 development team
 ## X-Category: Loot
 ## X-License: Apache
 ## X-Website: http://kahluamod.com/ksk
-## X-Curse-Packaged-Version: r@revision@
+## X-Curse-Packaged-Version: r20
 ## X-Curse-Project-Name: KKonferSK
 ## X-Curse-Project-ID: ksk
 ## X-git: git@github.com:kahluamods/konfersk
 ## SavedVariables: KKonferSKOptions, KKonferSKDB
 ## SavedVariablesPerCharacter: KKonferSKCharDB
-#@debug-start@
-## RequiredDeps: KKore
-#@debug-end@
-#@release-start@
-# ## X-Embeds: KKore
-# ## OptionalDeps: KKore
-#@release-end@
+## X-Embeds: KKore
+## OptionalDeps: KKore
 
 embeds.xml
 locales\locales.xml
