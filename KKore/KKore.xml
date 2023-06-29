@@ -1,0 +1,31 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
+..\FrameXML\UI.xsd">
+
+<Script file="Libs\LibStub.lua"/>
+<Script file="Libs\CallbackHandler-1.0.lua"/>
+<Script file="Libs\AceAddon-3.0.lua"/>
+<Script file="Libs\AceLocale-3.0.lua"/>
+<Script file="Libs\AceEvent-3.0.lua"/>
+<Script file="Libs\ChatThrottleLib.lua"/>
+<Script file="Libs\AceTimer-3.0.lua"/>
+<Script file="Libs\AceComm-3.0.lua"/>
+<Script file="Libs\AceDB-3.0.lua"/>
+<Script file="Libs\LibDeformat-3.0.lua"/>
+<Script file="Libs\LibSerialize.lua"/>
+<Script file="Libs\LibDeflate.lua"/>
+
+<Script file="KKore.lua"/>
+
+<Script file="Locales\KKore-enUS.lua"/>
+<Script file="Locales\KKore-deDE.lua"/>
+<Script file="Locales\KKore-frFR.lua"/>
+<Script file="Locales\KKore-ruRU.lua"/>
+
+<Script file="KKoreHash.lua"/>
+<Script file="KKoreUI.lua"/>
+<Script file="KKoreParty.lua"/>
+<Script file="KKoreLoot.lua"/>
+<Script file="KKoreKonfer.lua"/>
+<Script file="KKoreDialogs.lua"/>
+
+</Ui>
