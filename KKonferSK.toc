@@ -1,4 +1,4 @@
-﻿## Interface: 30401
+﻿## Interface: 30402
 ## Title: Konfer Suicide Kings |cffff2222-K-|r
 ## Notes: Suicide Kings loot distribution system.
 ## Notes-deDE: Suicide Kings Loot Verteilungs System.
