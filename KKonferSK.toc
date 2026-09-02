@@ -1,4 +1,4 @@
-﻿## Interface: 20502
+﻿## Interface: 20506
 ## Title: Konfer Suicide Kings |cffff2222-K-|r
 ## Notes: Suicide Kings loot distribution system.
 ## Notes-deDE: Suicide Kings Loot Verteilungs System.

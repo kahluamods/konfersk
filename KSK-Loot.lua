@@ -23,13 +23,7 @@
 ]]
 
 local K = LibStub:GetLibrary("KKore")
-local LibDeformat = LibStub:GetLibrary("LibDeformat-3.0")
 
-if (not K or not LibDeformat) then
-  return
-end
-
-local dfmt = LibDeformat.Deformat
 local ksk = K:GetAddon("KKonferSK")
 local L = ksk.L
 local KUI = ksk.KUI
@@ -1019,7 +1013,7 @@ end
 
 local function rlf_onevent(self, this, evt, arg1, ...)
   if (evt == "CHAT_MSG_SYSTEM") then
-    local plr, roll, minr, maxr = dfmt(arg1, RANDOM_ROLL_RESULT)
+    local plr, roll, minr, maxr = K.Deformat(arg1, RANDOM_ROLL_RESULT)
     local player = K.CanonicalName(plr, nil)
 
     if (player and not KRP.players[player]) then
