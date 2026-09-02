@@ -38,7 +38,7 @@ if (not K) then
   error("KSK: could not find KahLua Kore.", 2)
 end
 
-if (tonumber(KM) < 5) then
+if (tonumber(KM) < 6) then
   error("KSK: outdated KahLua Kore. Please update all KahLua addons.")
 end
 
@@ -86,12 +86,6 @@ local strlower = string.lower
 local match = string.match
 local pairs, ipairs, type = pairs, ipairs, type
 local printf = K.printf
-
-local LOOT_METHOD_UNKNOWN    = KRP.LOOT_METHOD_UNKNWON
-local LOOT_METHOD_FREEFORALL = KRP.LOOT_METHOD_FREEFORALL
-local LOOT_METHOD_GROUP      = KRP.LOOT_METHOD_GROUP
-local LOOT_METHOD_PERSONAL   = KRP.LOOT_METHOD_PERSONAL
-local LOOT_METHOD_MASTER     = KRP.LOOT_METHOD_MASTER
 
 ksk = K:NewAddon(nil, MAJOR, MINOR, L["Suicide Kings loot distribution system."], L["MODNAME"], L["CMDNAME"] )
 if (not ksk) then
