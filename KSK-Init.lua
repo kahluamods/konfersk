@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
@@ -135,7 +133,7 @@ function ksk:InitialiseUI()
   --
   local tbf = self.mainwin.topbar
   local arg = { 
-    x = 250, y = 0, name = "ConfigSpacesDropdown", itemheight = 16, dwidth = 135, items = KUI.emptydropdown,
+    x = 250, y = 0, name = "KSKConfigSpacesDropdown", itemheight = 16, dwidth = 135, items = KUI.emptydropdown,
     level = 12, tooltip = { title = L["TIP028.0"], text = L["TIP028.1"] }, border = "THIN",
   }
   self.mainwin.cfgselector = KUI:CreateDropDown(arg, tbf)

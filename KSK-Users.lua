@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
@@ -200,7 +198,7 @@ local function create_user_button(self)
   if (not createuserdlg) then
     local arg = {
       x = "CENTER", y = "MIDDLE",
-      name = "KSK CreateUserDlg",
+      name = "KSKCreateUserDlg",
       title = L["Create User"],
       border = true,
       width = 350,
@@ -1225,7 +1223,7 @@ function ksk:CreateNewUser(name, cls, cfgid, norefresh, bypass, myid, nocmd)
       self.nmissing = self.nmissing - 1
       self.missing[olduid] = nil
       qf.userbuttons.addmissing:SetEnabled(self.csdata[self.currentid].is_admin and self.nmissing > 0)
-      if (not norefreh) then
+      if (not norefresh) then
         self:RefreshRaid()
       end
     end

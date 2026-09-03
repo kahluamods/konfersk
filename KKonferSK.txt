@@ -5,7 +5,7 @@ This one implements the Suicide Kings system.  KonferEPGP implements the EP/GP
 loot system, KPUG is a tool for pugs, and Konfer Kouncil is a tool to assist
 loot councils.
 
-KSK is fully documented at http://kahluamod.com/ksk.
+KSK is fully documented at https://www.curseforge.com/wow/addons/ksk-classic.
 
 Hopefully using KonferSK is largely self-explainatory, but here are some
 pointers on initial setup, and best practices.

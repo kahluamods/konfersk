@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
@@ -87,10 +85,13 @@ local match = string.match
 local pairs, ipairs, type = pairs, ipairs, type
 local printf = K.printf
 
-ksk = K:NewAddon(nil, MAJOR, MINOR, L["Suicide Kings loot distribution system."], L["MODNAME"], L["CMDNAME"] )
+local ksk = K:NewAddon(nil, MAJOR, MINOR, L["Suicide Kings loot distribution system."], L["MODNAME"], L["CMDNAME"] )
 if (not ksk) then
   error("KahLua KonferSK: addon creation failed.", 2)
 end
+
+-- Nothing internal uses this; it stays for people's /run macros.
+_G["ksk"] = ksk
 
 ksk.KUI = KUI
 ksk.L   = L
@@ -129,13 +130,17 @@ KK:RegisterAddon(ksk.addon_handle)
 -- display and mod registration.
 ksk.version = MINOR
 
--- The KSK "protocol" version number. This is used in every addon message
--- that KSK sends. As a general principle someone with a version of the mod
--- that has a higher protocol version number should be able to decode messages
--- from a lower version protocol, but so far we have made no attempt to code
--- this backwards compatibility into each protocol message. So at the moment
--- these protocol versions must match exactly in order for two KSK mods to
--- talk to each other.
+-- The KSK "protocol" version number. This versions the *events* KSK sends and
+-- understands, and their arguments. It says nothing about the wire format:
+-- the framing, checksum and serialisation belong to KKore and are versioned
+-- separately by KK.WIRE_VERSION. A change to one must never require a bump of
+-- the other.
+--
+-- As a general principle someone with a version of the mod that has a higher
+-- protocol version number should be able to decode messages from a lower
+-- version protocol, but so far we have made no attempt to code this backwards
+-- compatibility into each protocol message. So at the moment these protocol
+-- versions must match exactly in order for two KSK mods to talk to each other.
 --   1   - internal only (version check)
 --   2   - initial protocol
 --   3   - dates now in UTC seconds since epoch for history
@@ -144,7 +149,10 @@ ksk.version = MINOR
 --   6   - alt tethered now a list option not global
 --   7/8 - can't remember
 --   9   - after rework and LZ/LS changes
-ksk.protocol = 9
+--   10  - MKITM now carries the class filter, so the master looter's value is
+--         authoritative instead of every admin re-deriving it from an item
+--         that may not be in their client's cache yet.
+ksk.protocol = 10
 
 -- The format and "shape" of the KSK stored variables database. As various new
 -- features have been added or bugs fixed, this changes. The code in the file
@@ -337,7 +345,10 @@ ksk.aclass = KRP.AlwaysClassString
 ksk.shortaclass = KRP.ShortAlwaysClassString
 
 local white = K.white
-local class = KRP.ClassString 
+local class = KRP.ClassString
+
+-- Forward declaration; defined further down, used by chat_msg_whisper below.
+local get_user_pos
 
 -- cfg is known to be valid before this is called
 local function get_my_ids(self, cfg)
@@ -1125,9 +1136,19 @@ local function ksk_additem(input)
     return true
   end
 
+  --
+  -- GetItemInfoInstant tells us whether the id is real; GetItemInfo tells us
+  -- whether we have the data yet. Asking prompts the fetch, so a second
+  -- attempt succeeds.
+  --
+  if (not GetItemInfoInstant(tonumber(itemid))) then
+    err(L["item %d is an invalid item."], itemid)
+    return true
+  end
+
   local iname, ilink = GetItemInfo(tonumber(itemid))
   if (iname == nil or iname == "") then
-    err(L["item %d is an invalid item."], itemid)
+    err(L["still retrieving information for item %d. Please try again in a moment."], itemid)
     return true
   end
 
@@ -1162,9 +1183,15 @@ local function ksk_addloot(input)
     return true
   end
 
+  -- See the note in ksk_additem above about these two calls.
+  if (not GetItemInfoInstant(tonumber(itemid))) then
+    err(L["item %d is an invalid item."], itemid)
+    return true
+  end
+
   local iname, ilink = GetItemInfo(tonumber(itemid))
   if (iname == nil or iname == "") then
-    err(L["item %d is an invalid item."], itemid)
+    err(L["still retrieving information for item %d. Please try again in a moment."], itemid)
     return true
   end
 
@@ -1215,7 +1242,7 @@ local function ksk_cps(input)
   elseif (input == "normal") then
     ctl.MAX_CPS = 800
   else
-    n = tonumber(input) or 0
+    local n = tonumber(input) or 0
     if (n >= 100 and n <= 4000) then
       ctl.MAX_CPS = n
     end
@@ -1477,7 +1504,7 @@ local function guild_info_updated(evt, ...)
     end
   end
 
-  oldr = ksk.qf.lootrank:GetValue() or 0
+  local oldr = ksk.qf.lootrank:GetValue() or 0
   ksk.qf.lootrank:UpdateItems(rvals)
   ksk.qf.lootrank:SetValue(oldr)
 
@@ -1500,14 +1527,18 @@ function ksk:RefreshRaid()
   KRP.UpdateGroup(true, true, false)
 end
 
-function ksk:AddItemToBossLoot(ilink, quant, lootslot)
-  self.bossloot = self.bossloot or {}
+--
+-- Work out the strict and relaxed class filters and the BoE flag for an item,
+-- writing them into TI. Split out from AddItemToBossLoot so it can be redone
+-- in place when GET_ITEM_INFO_RECEIVED fills in an item we did not have.
+--
+function ksk:SetBossLootFilters(ti)
+  local ilink = ti.ilink
+  local slot, icls, isubcls = K.GetItemClassInfo(ilink)
+  local filt, boe, cached = K.GetItemClassFilter(ilink)
 
-  local lootslot = lootslot or 0
-  local itemid = match(ilink, "item:(%d+)")
-  local _, _, _, _, _, _, _, _, slot, _, _, icls, isubcls = GetItemInfo(ilink)
-  local filt, boe = K.GetItemClassFilter(ilink)
-  local ti = { itemid = itemid, ilink = ilink, slot = lootslot, quant = quant, boe = boe }
+  ti.boe = boe
+  ti.needsfilter = (not cached) or nil
 
   if (icls == K.classfilters.weapon) then
     if (filt == K.classfilters.allclasses) then
@@ -1538,10 +1569,32 @@ function ksk:AddItemToBossLoot(ilink, quant, lootslot)
     ti.strict = filt
     ti.relaxed = filt
   end
-  tinsert(self.bossloot, ti)
+
+  -- These are indexed character by character later on and must never be nil.
+  ti.strict = ti.strict or K.classfilters.allclasses
+  ti.relaxed = ti.relaxed or K.classfilters.allclasses
+
+  return ti
 end
 
-local function get_user_pos(uid, lp)
+function ksk:AddItemToBossLoot(ilink, quant, lootslot)
+  self.bossloot = self.bossloot or {}
+
+  local ti = {
+    itemid = match(ilink, "item:(%d+)"), ilink = ilink,
+    slot = lootslot or 0, quant = quant,
+  }
+
+  self:SetBossLootFilters(ti)
+  tinsert(self.bossloot, ti)
+
+  if (ti.needsfilter) then
+    self:WatchPendingItems()
+  end
+end
+
+-- Forward declared at the top of this file.
+function get_user_pos(uid, lp)
   local cuid = uid
   local rpos = 0
   local ulist = lp.users
@@ -1893,7 +1946,7 @@ local function kld_end_loot_info()
       else
         ksk.lastannouncetime = ksk.lastannouncetime or time()
         local now = time()
-        local elapsed = difftime(now, ksk.lastannounce)
+        local elapsed = difftime(now, ksk.lastannouncetime)
         if (elapsed < 60) then
           dloot = false
         end
@@ -1927,6 +1980,101 @@ local function kld_looting_ended(_, _, pvt)
     ksk:SendAM("CLOOT", "ALERT")
   end
   sentoloot = nil
+end
+
+--
+-- Any class filter worked out while the client did not yet have the item data
+-- is provisional. When the data turns up, redo it: for the loot currently on
+-- offer, and for stored items in any config that recorded one as pending.
+--
+local function item_info_received(evt, itemid, success)
+  if (not itemid or not success or not ksk.initialised) then
+    return
+  end
+
+  local sitemid = tostring(itemid)
+  local refreshloot = false
+
+  if (ksk.bossloot) then
+    for k, v in ipairs(ksk.bossloot) do
+      if (v.needsfilter and tostring(v.itemid) == sitemid) then
+        ksk:SetBossLootFilters(v)
+        refreshloot = true
+      end
+    end
+  end
+
+  for cfgid, csd in pairs(ksk.csdata) do
+    local pend = csd.pendingitems
+    if (pend and pend[sitemid]) then
+      local cfp = ksk.configs[cfgid]
+      local ii = cfp and cfp.items and cfp.items[pend[sitemid]]
+      if (ii) then
+        local ifs, cached = ksk:DeriveItemClassFilter(ii.ilink)
+        if (cached) then
+          ii.cfilter = ifs
+          pend[sitemid] = nil
+          if (cfgid == ksk.currentid) then
+            ksk:RefreshItemList()
+          end
+        end
+      else
+        pend[sitemid] = nil
+      end
+    end
+  end
+
+  if (refreshloot) then
+    ksk:RefreshBossLoot(nil)
+  end
+
+  ksk:WatchPendingItems()
+end
+
+--
+-- GET_ITEM_INFO_RECEIVED fires for every item the client resolves - bags, the
+-- auction house, tooltips, other addons' queries - so it is far too noisy to
+-- sit on permanently for something that comes up once or twice a raid. Listen
+-- only while a provisional class filter is actually waiting on an item.
+--
+-- WatchPendingItems is called after anything that can create pending state,
+-- and from the handler itself, so a path that clears the last pending item
+-- without saying so costs at most one more event before we unregister.
+--
+local item_watch = false
+
+local function items_pending()
+  if (ksk.bossloot) then
+    for k, v in ipairs(ksk.bossloot) do
+      if (v.needsfilter) then
+        return true
+      end
+    end
+  end
+
+  for cfgid, csd in pairs(ksk.csdata) do
+    if (csd.pendingitems and next(csd.pendingitems)) then
+      return true
+    end
+  end
+
+  return false
+end
+
+function ksk:WatchPendingItems()
+  local want = items_pending()
+
+  if (want == item_watch) then
+    return
+  end
+
+  item_watch = want
+
+  if (want) then
+    self:RegisterEvent("GET_ITEM_INFO_RECEIVED", item_info_received)
+  else
+    self:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
+  end
 end
 
 local function ksk_initialised(self)

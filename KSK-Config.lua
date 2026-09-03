@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
@@ -495,9 +493,8 @@ local function copy_space_button(this, cfgid, newname, newid, shown)
           if (not du) then
             du = this:CreateNewUser(v.name, v.class, newid, true, true)
           end
-          if (copyflags) then
-            local fs
-            fs = this:UserIsEnchanter(k, v.flags, cfgid)
+          if (copycfgdlg.do_copyflags) then
+            local fs = this:UserIsEnchanter(k, v.flags, cfgid)
             this:SetUserEnchanter(du, fs, newid)
             fs = this:UserIsFrozen(k, v.flags, cfgid)
             this:SetUserFrozen(du, fs, newid)
@@ -784,7 +781,7 @@ local function rank_editor(this)
     arg = {
       x = 8, y = 0, width = 215, text = "",
     }
-    earg = {
+    local earg = {
       x = 225, y = 0, width = 36, initialvalue = "1", numeric = true, len = 2,
     }
     for i = 1, 10 do
@@ -1535,7 +1532,7 @@ function ksk:InitialiseConfigUI()
   arg = {
     x = 0, y = -22, height = 12, font = "GameFontNormalSmall",
     autosize = false, width = 290,
-    text = strfmt(L["ABOUT3"], white("http://kahluamod.com/ksk"))
+    text = strfmt(L["ABOUT3"], white("CurseForge"))
   }
   about.str2 = KUI:CreateStringLabel(arg, about)
 
@@ -1731,7 +1728,7 @@ function ksk:CreateNewConfig(name, initial, nouser, mykey)
     sp.nusers = 1
     sp.users["0001"] = { name = K.player.name, class = K.player.class, role = 0, flags = "" }
     sp.owner = "0001"
-    self.csdata[newkey].myuid = uid
+    self.csdata[newkey].myuid = "0001"
     info(L["configuration %q created."], white(name))
     sp.nadmins = 1
     sp.admins["0001"] = { id = "0" }

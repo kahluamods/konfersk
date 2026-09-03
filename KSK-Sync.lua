@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
@@ -237,7 +235,7 @@ local function prepare_broadcast(self, cfg)
   end
 
   ci.a = {}
-  for k,v in pairs(self.cfg.admins) do
+  for k,v in pairs(tc.admins) do
     if (v.id) then
       ci.a[k] = v.id
     end
@@ -264,7 +262,7 @@ local function broadcast_config(self, isshifted)
     return
   end
 
-  if (ishshifted and K.player.is_guilded) then
+  if (isshifted and K.player.is_guilded) then
     self:SendGuildAM("BCAST", "ALERT", ci)
   else
     self:SendAM("BCAST", "ALERT", ci)

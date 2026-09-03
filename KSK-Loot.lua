@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
@@ -768,7 +766,7 @@ local function rolltimer_onupdate_ml(self)
         lootroll.lastwarn = nil
         rolling = 1
         rlf.timerbar:SetScript("OnUpdate", function() rolltimer_onupdate_ml(self) end)
-        self:SendAM("RROLL", "ALERT", ilink, timeout, winners)
+        self:SendAM("RROLL", "ALERT", ilink, self.cfg.settings.roll_timeout, winners)
         return
       end
 
@@ -1100,6 +1098,8 @@ function ksk:RestrictedRoll(ilink, timeout, winners)
   if (not lootroll) then
     return
   end
+
+  local rlf = qf.lootroll
 
   for i = 1,5 do
     rlf["pos"..i]:SetText("")
@@ -1885,7 +1885,8 @@ local function open_close_bids(self)
     qf.lootwin.remcancel:SetText(K.CANCEL_STR)
     lootbid_setenabled(true)
 
-    self:SendAM("BIDOP", "ALERT", biditem, timeout)
+    -- Second field is reserved for a future bid countdown; ignored on receipt.
+    self:SendAM("BIDOP", "ALERT", biditem, 0)
 
     self:SendWarning(strfmt(L["Bids now open for %s on the %q list."], lootitem.loot.ilink, lootlist.name))
 
@@ -2294,7 +2295,7 @@ local function undo_button(self)
 
       local cid = self.currentid
       local csd = self.csdata[cid]
-      urec = tremove(csd.undo, 1)
+      local urec = tremove(csd.undo, 1)
       if (#csd.undo < 1) then
         csd.undo = nil
         qf.undobutton:SetEnabled(false)
@@ -2346,6 +2347,8 @@ local function refresh_loot_lists(self)
 end
 
 local function set_classes_from_filter(filter)
+  local filter = filter or K.classfilters.allclasses
+
   for k,v in pairs(K.IndexClass) do
     local n = tonumber(k)
     local val = false
@@ -4261,7 +4264,30 @@ function ksk:DeleteItem(itemid, cfgid, nocmd)
   end
 end
 
-function ksk:AddItem(itemid, itemlink, cfgid, nocmd)
+--
+-- Work out the class filter for an item. Returns the filter, and whether the
+-- client had the item data to hand (only the tooltip scan needs it cached;
+-- GetItemInfoInstant never misses).
+--
+function ksk:DeriveItemClassFilter(itemlink)
+  local ifs, _, cached = K.GetItemClassFilter(itemlink)
+
+  if (ifs == K.classfilters.allclasses) then
+    local slot, icls, isubcls = K.GetItemClassInfo(itemlink)
+    if (icls == K.classfilters.weapon) then
+      ifs = K.classfilters.weapons[isubcls]
+    elseif (icls == K.classfilters.armor) then
+      ifs = K.classfilters.strict[isubcls]
+      if (slot == "INVTYPE_CLOAK") then
+        ifs = K.classfilters.relaxed[isubcls]
+      end
+    end
+  end
+
+  return ifs or K.classfilters.allclasses, cached
+end
+
+function ksk:AddItem(itemid, itemlink, cfgid, nocmd, cfilter)
   local cfg = cfgid or self.currentid
 
   if (not self.configs[cfg]) then
@@ -4273,24 +4299,32 @@ function ksk:AddItem(itemid, itemlink, cfgid, nocmd)
     return
   end
 
-  local ifs = K.GetItemClassFilter(itemlink)
-  if (ifs == K.classfilters.allclasses) then
-    local _, _, _, _, _, _, _, _, slot, _, _, icls, isubcls = GetItemInfo(itemlink)
-    if (icls == K.classfilters.weapon) then
-      ifs = K.classfilters.weapons[isubcls]
-    elseif (icls == K.classfilters.armor) then
-      ifs = K.classfilters.strict[isubcls]
-      if (slot == "INVTYPE_CLOAK") then
-        ifs = K.classfilters.relaxed[isubcls]
-      end
-    end
+  -- CFILTER is the master looter's value, sent with MKITM from protocol 10.
+  local ifs, cached = cfilter, true
+
+  if (not ifs) then
+    ifs, cached = self:DeriveItemClassFilter(itemlink)
   end
 
   il[itemid] = { ilink = itemlink, cfilter = ifs }
   self.configs[cfg].nitems = self.configs[cfg].nitems + 1
 
+  --
+  -- Provisional filters get redone when GET_ITEM_INFO_RECEIVED arrives. This
+  -- is csdata, so nothing provisional is written to disk.
+  --
+  if (not cached) then
+    local csd = self.csdata[cfg]
+    if (csd) then
+      csd.pendingitems = csd.pendingitems or {}
+      -- Keyed by string id, valued with the key the items table actually uses.
+      csd.pendingitems[tostring(itemid)] = itemid
+      self:WatchPendingItems()
+    end
+  end
+
   if (not nocmd) then
-    self:AdminEvent(cfg, "MKITM", itemid, itemlink)
+    self:AdminEvent(cfg, "MKITM", itemid, itemlink, ifs)
   end
 
   if (cfg == self.currentid) then

@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
@@ -1926,7 +1924,6 @@ function ksk:RefreshListsUI(reset)
     current_list = nil
     sortedmembers = nil
     current_memberid = nil
-    current_members = nil
     qf.lists.itemcount = 0
     qf.lists.UpdateList()
     qf.lists.SetSelected(nil, false, true)
@@ -2085,7 +2082,7 @@ function ksk:RenameList(listid, newname, cfg, nocmd)
   local cid = self:FindList(newname, cfg)
   if (cid) then
     if (not nocmd) then
-      err(L["roll list %q already exists. Try again."], white(name))
+      err(L["roll list %q already exists. Try again."], white(newname))
     end
     return true
   end
@@ -2113,7 +2110,7 @@ function ksk:CopyList(listid, newname, cfg, myid, nocmd)
   local cid = self:FindList(newname, cfg)
   if (cid) then
     if (not nocmd) then
-      err(L["roll list %q already exists. Try again."], white(name))
+      err(L["roll list %q already exists. Try again."], white(newname))
     end
     return true
   end

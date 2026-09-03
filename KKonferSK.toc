@@ -8,7 +8,7 @@
 ## X-Credits: Ace3 development team
 ## X-Category: Loot
 ## X-License: Apache
-## X-Website: http://kahluamod.com/ksk
+## X-Website: https://www.curseforge.com/wow/addons/ksk-classic
 ## X-Curse-Packaged-Version: r@revision@
 ## X-Curse-Project-Name: KKonferSK
 ## X-Curse-Project-ID: ksk

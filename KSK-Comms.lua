@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
@@ -254,7 +252,7 @@ end
 -- Purpose: Respond to sender with a version check
 --
 ihandlers.VCHEK = function(self, sender, proto, cmd, cfg, ...)
-  self:SendWhisperAM(sender, { proto = 2, cmd = "VCACK" }, nil, self.version)
+  self:SendWhisperAM(sender, { proto = KK.VCHECK_PROTOCOL, cmd = "VCACK" }, nil, self.version)
 end
 
 --
@@ -1249,19 +1247,28 @@ ehandlers.SULST = function(self, adm, sender, proto, cmd, cfg, ...)
   local listid, uid, raidlist = ...
   local raiders = self:SplitRaidList(raidlist)
 
-  self:SuicideUserLowLevel(listid, raiders, uid, cfg)
+  --
+  -- adm >= 10 means this event arrived live. A batched replay refreshes once
+  -- when it finishes, so skip the per-suicide member list rebuild.
+  --
+  local norefresh = not (adm and adm >= 10)
+
+  self:SuicideUserLowLevel(listid, raiders, uid, cfg, nil, norefresh)
 end
 
 --
--- Command: MKITM itemid itemlink
+-- Command: MKITM itemid itemlink cfilter
 -- Purpose: This is a syncer-only event and deals with adding a new item to the
---          item database. ITEMID is the item ID to be added, and ITEMLINK is
---          the full item link.
+--          item database. ITEMID is the item ID to be added, ITEMLINK is the
+--          full item link, and CFILTER is the sender's class filter for it.
+--          CFILTER is authoritative: deriving it locally depends on the item
+--          being in this client's cache, which would let two admins end up
+--          with different filters for the same item.
 --
 ehandlers.MKITM = function(self, adm, sender, proto, cmd, cfg, ...)
-  local itemid, itemlink = ...
+  local itemid, itemlink, cfilter = ...
 
-  self:AddItem(itemid, itemlink, cfg, true)
+  self:AddItem(itemid, itemlink, cfg, true, cfilter)
 end
 
 --
@@ -1950,7 +1957,7 @@ ehandlers.LHADD = function(self, adm, sender, proto, cmd, cfg, ...)
     rf = false
   end
 
-  self:AddLootHistory(cfg, when, itemlink, who, how, spos, rf, true)
+  self:AddLootHistory(cfg, when, what, who, how, spos, rf, true)
 end
 
 --

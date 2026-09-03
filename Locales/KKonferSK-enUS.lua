@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
@@ -28,9 +26,8 @@ end
 
 --
 -- NOTE TO PEOPLE LOCALISING THIS FILE:
--- PLEASE BE SURE TO VIEW THE LOCALISATION INSTRUCTIONS FOUND AT
--- http://kahluamod.com/l10n BEFORE STARTING ANY TRANSLATIONS OF
--- THIS FILE. THANK YOU.
+-- PLEASE BE SURE TO VIEW THE LOCALISATION INSTRUCTIONS ON CURSEFORGE
+-- BEFORE STARTING ANY TRANSLATIONS OF THIS FILE. THANK YOU.
 --
 
 L["MODTITLE"] = "Suicide Kings"
@@ -317,6 +314,7 @@ L["Guild"] = true
 L["PUG"] = true
 L["item %s already exists."] = true
 L["item %d is an invalid item."] = true
+L["still retrieving information for item %d. Please try again in a moment."] = true
 L["Initial Guild Rank Filter"] = true
 L["Request Sync"] = true
 L["Request Sync (All)"] = true

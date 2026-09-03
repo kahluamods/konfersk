@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
 
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
@@ -147,7 +145,11 @@ end
 -- suicided is themselves frozen, we simply pretend that they are not, and
 -- move them to the bottom of the list.
 --
-function ksk:SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
+--
+-- NOREFRESH suppresses the member list rebuild, for callers replaying a batch
+-- of events who will refresh once at the end.
+--
+function ksk:SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink, norefresh)
   cfgid = cfgid or self.currentid
 
   if (not self.configs[cfgid]) then
@@ -256,8 +258,13 @@ function ksk:SuicideUserLowLevel(listid, rlist, uid, cfgid, ilink)
     lu[movers[i]] = lu[movers[i+1]]
   end
   lu[movers[nmove+1]] = uid
-  self:RefreshAllMemberLists()
+
+  if (not norefresh) then
+    self:RefreshAllMemberLists()
+  end
 end
+
+local ts_datebase, ts_evtcount = nil, 0
 
 local function get_event_id(this, cfg)
   local cfg = cfg or this.currentid

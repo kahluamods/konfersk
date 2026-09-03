@@ -1,8 +1,6 @@
 --[[
    KahLua KonferSK - a suicide kings loot distribution addon.
-     WWW: http://kahluamod.com/ksk
      Git: https://github.com/kahluamods/konfersk
-     IRC: #KahLua on irc.freenode.net
      E-mail: me@cruciformer.com
    Please refer to the file LICENSE.txt for the Apache License, Version 2.0.
 
@@ -119,7 +117,7 @@ L["  Opens the user list management window."] = "Ouvre la fen\195\170tre de gest
 L["  Opens the loot management window."] = "Ouvre la fen\195\170tre de gestion de loot."
 L["  Opens the sync manager window."] = "Ouvre la fen\195\170tre de gestion de synchronisation."
 L["  Suspend %s (no auto-open on loot, no missing member warnings etc)."] = "Suspendre %s (pas d'ouverture auto au loot, pas d'avertissement de membre manquant, etc)."
-L["  Resume normal %s operations."] = "  Reprendre les activités normales de %s."
+L["  Resume normal %s operations."] = "  Reprendre les activitï¿½s normales de %s."
 L["  Set up various options and manage configurations."] = " Configurer diverses options et g\195\169rer les configurations."
 L["  %s - configure lists and list options"] = "  %s - Configurer les listes et les options de liste"
 L["  %s - set up loot related options"] = "  %s - Configurer les options li\195\169es au loot"
@@ -313,6 +311,7 @@ L["Guild"] = "Guilde"
 L["PUG"] = "Pick-up"
 L["item %s already exists."] = "L'objet %s existe d\195\169j\195\160."
 L["item %d is an invalid item."] = "L'objet %d est un objet invalide"
+L["still retrieving information for item %d. Please try again in a moment."] = "R\195\169cup\195\169ration des informations sur l'objet %d en cours. Veuillez r\195\169essayer dans un instant."
 L["Initial Guild Rank Filter"] = "Filtre sur le rang de guilde de d\195\169part"
 L["Request Sync"] = "Demande synchro"
 L["Request Sync (All)"] = "Demande synchro (tous)"
@@ -347,8 +346,8 @@ L["%s: you are not in my guild - bid ignored."] = "%s : Vous n'\195\170tes pas d
 L["user %q has no role defined - permitting %s."] = "Le joueur %q n'a pas de r\195\180le d\195\169fini - permitting %s." -- WTF ?
 L["%s: you are not a member of the %q list - bid ignored."] = "%s : Vous ne faites pas partie de la liste %q - ench\195\168re ignor\195\169e."
 L["%q attempted to bid on the %q list but is not a member."] = "%q a essay\195\169 d'ench\195\169rir sur la liste %q mais il n'en fait pas partie."
-L["%s: you have already bid on that item. Whisper %s the word %q to retract your bid."] = "%s : Vous avez d\195\169j\195\160 ench\195\169ri sur cet objet. Chuchotez à %s le mot %q pour vous r\195\169tracter."
-L["%s: new bid received. Number of bidders: %d."] = "%s : nouvelle ench\195\168re reçue. Nombre d'ench\195\169risseurs : %d."
+L["%s: you have already bid on that item. Whisper %s the word %q to retract your bid."] = "%s : Vous avez d\195\169j\195\160 ench\195\169ri sur cet objet. Chuchotez ï¿½ %s le mot %q pour vous r\195\169tracter."
+L["%s: new bid received. Number of bidders: %d."] = "%s : nouvelle ench\195\168re reï¿½ue. Nombre d'ench\195\169risseurs : %d."
 L["%s: bid retracted. Number of bidders: %d."] = "%s : Ench\195\168re r\195\169tract\195\169e. Nombre d'ench\195\169risseurs : %d."
 L["%s: %s (position %d) has bid (highest bidder is %s)."] = "%s : %s (Place n\194\176 %d) a ench\195\169ri (le plus haut ench\195\169risseur est %s)."
 L["%s: %s has retracted (highest bidder is %s)."] = "%s : %s s'est r\195\169tract\195\169 (le plus haut ench\195\169risseur est %s)."
@@ -380,7 +379,7 @@ L["My checksum: %s"] = "Ma cl\195\169 de v\195\169rification : %s"
 L["Not active!"] = "Inactif !"
 L["maximum number of co-admins (36) reached"] = "Nombre maximum de co-admins (36) atteint"
 L["%s: %s - #%d (#%d in raid)"] = "%s : %s - n\194\176%d (n\194\176%d dans le raid)"
-L["%s: %s - #%d"] = "%s : %s - n°%d"
+L["%s: %s - #%d"] = "%s : %s - nï¿½%d"
 L["%s: (End of list)"] = "%s : (fin de la liste)"
 L["%s: you are not on any roll lists (yet)."] = "%s : Vous n'\195\170tes sur aucune liste (actuellement)."
 L["[%s] sync with user %s complete."] = "[%s] Synchronisation avec le joueur %s termin\195\169e."
@@ -388,7 +387,7 @@ L["[%s] sending sync data to user %s."] = "[%s] Envoi des donn\195\169es de sync
 L["%s: %s cancelled!"] = "%s : %s a annul\195\169 !"
 L["Set List to Imported Values"] = "Ecraser la liste actuelle"
 L["Add to Existing Members"] = "Ajouter en fin de liste"
-L["Randomly Add to Existing Members"] = "Ajouter aléatoirement"
+L["Randomly Add to Existing Members"] = "Ajouter alï¿½atoirement"
 L["The following users are missing from the user list: %s"] = "Les joueurs suivants ne font pas partie de la liste de joueurs : %s"
 L["Import from the CSV string cannot continue until these users are added."] = "L'import depuis le texte CSV ne peut pas continuer tant que ces joueurs ne sont pas ajout\195\169s."
 L["Nothing"] = "Rien"
