@@ -3980,7 +3980,9 @@ function ksk:NewBidder(u)
   local klid = nil
 
   if (slot > 0) then
-    klid = KLD.items[slot]
+    if KLD.items and KLD.items[slot] then
+      klid = KLD.items[slot]
+    end
 
     if (not klid or not klid.candidates[u]) then
       self:SendWhisper(strfmt(L["%s: you are not eligible to receive loot - %s ignored."], L["MODTITLE"], L["bid"]), u)
