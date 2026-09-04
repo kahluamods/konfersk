@@ -3430,10 +3430,6 @@ function ksk:InitialiseLootUI()
           cs[n] = "0"
         end
       end
-      for k,v in pairs(K.UnsupClasses) do
-        local n = tonumber(v)
-        cs[n] = "0"
-      end
       local fcs = tconcat(cs)
       if (ns > 0) then
         self.cfg.items[selitemid].cfilter = fcs
