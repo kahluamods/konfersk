@@ -761,8 +761,8 @@ local function import_list_button(this)
       canresize = false,
       escclose = true,
       blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = { text = K.CANCELSTR },
+      okbutton = { text = K.ACCEPT_STR },
+      cancelbutton = { text = K.CANCEL_STR },
     }
     local ret = KUI:CreateDialogFrame(arg)
 
@@ -1036,8 +1036,8 @@ local function export_list_button(this)
       canresize = false,
       escclose = true,
       blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = { text = K.CANCELSTR },
+      okbutton = { text = K.ACCEPT_STR },
+      cancelbutton = { text = K.CANCEL_STR },
     }
     local ret = KUI:CreateDialogFrame(arg)
 
@@ -1187,8 +1187,8 @@ local function add_missing_button(this)
       canresize = false,
       escclose = true,
       blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = { text = K.CANCELSTR },
+      okbutton = { text = K.ACCEPT_STR },
+      cancelbutton = { text = K.CANCEL_STR },
     }
     local ret = KUI:CreateDialogFrame(arg)
 
@@ -1925,11 +1925,11 @@ function ksk:RefreshListsUI(reset)
     sortedmembers = nil
     current_memberid = nil
     qf.lists.itemcount = 0
-    qf.lists.UpdateList()
-    qf.lists.SetSelected(nil, false, true)
+    qf.lists:UpdateList()
+    qf.lists:SetSelected(nil, false, true)
     qf.memberlist.itemcount = 0
     qf.memberlist:UpdateList()
-    qf.memberlist.SetSelected(nil, false, true)
+    qf.memberlist:SetSelected(nil, false, true)
     return
   end
 

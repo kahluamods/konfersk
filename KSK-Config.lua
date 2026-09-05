@@ -342,8 +342,8 @@ local function copy_space_button(this, cfgid, newname, newid, shown)
       canresize = false,
       escclose = true,
       blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = { text = K.CANCELSTR },
+      okbutton = { text = K.ACCEPT_STR },
+      cancelbutton = { text = K.CANCEL_STR },
     }
     local ret = KUI:CreateDialogFrame(arg)
 
@@ -763,8 +763,8 @@ local function rank_editor(this)
       canresize = false,
       escclose = true,
       blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = { text = K.CANCELSTR },
+      okbutton = { text = K.ACCEPT_STR },
+      cancelbutton = { text = K.CANCEL_STR },
     }
     local ret = KUI:CreateDialogFrame(arg)
 
@@ -860,8 +860,8 @@ local function orank_edit_button(self)
       canresize = false,
       escclose = true,
       blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = {text = K.CANCELSTR },
+      okbutton = { text = K.ACCEPT_STR },
+      cancelbutton = {text = K.CANCEL_STR },
     }
 
     local y = 24
@@ -1229,7 +1229,7 @@ function ksk:InitialiseConfigUI()
     border = "THIN", items = KUI.emptydropdown, title = { text = "" },
   }
   cf.dencher1 = KUI:CreateDropDown(arg, cf)
-  cf.dencher1:Catch("OnClick", function(this, evt, is_dropped)
+  cf.dencher1:Catch("OnClick", function(this, evt, dd, is_dropped)
     dencher_onclick(this, is_dropped, 1)
   end)
   cf.dencher1:Catch("OnValueChanged", function(this, evt, newv)

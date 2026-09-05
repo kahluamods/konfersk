@@ -557,7 +557,7 @@ end
 --
 local function auto_loot_ok(self)
   local li = qf.autoloot
-  local lh = li.listid
+  local lh = nil
   local uname = li.name
   local pos = ""
   local ipos = 0
@@ -622,7 +622,7 @@ local function auto_loot_cancel(self)
 
   if (not li.announce and not li.leaveloot) then
     if (li.uid) then
-      local lh = li.listid
+      local lh = nil
       local ipos = 0
       if (li.suicide) then
         local il, lp = self:UserInList(li.uid, li.suicide)
@@ -780,12 +780,12 @@ local function rolltimer_onupdate_ml(self)
 
       if (lootroll.suicide and not missing) then
         local ipos = 0
+        suicide = lootlistid
         local il, lp = self:UserInList(uid, suicide)
         if (il) then
           gpos = strfmt("[%d]", lp)
           ipos = lp
         end
-        suicide = lootlistid
         local sulist = self:CreateRaidList(lootlistid)
         self:SuicideUser(suicide, sulist, uid, self.currentid, ilink, true)
         self:AddLootHistory(nil, K.time(), ilink, uid, suicide, ipos)
@@ -1321,8 +1321,7 @@ local function lloot_on_click(self, this)
   local cf = nil
   local role = 0
   local slist = nil
-  local rank = 0
-  local strict = nil
+  local rank = nil
 
   if (self.iitems[itemid]) then
     cf = self.iitems[itemid].cfilter
@@ -1351,8 +1350,9 @@ local function lloot_on_click(self, this)
   end
 
   if (slist ~= nil) then
-    if (not rank and self.cfg.lists[slist].def_rank) then
-      rank = self.cfg.lists[slist].def_rank
+    local slp = self.cfg.lists[slist]
+    if (not rank and slp) then
+      rank = slp.def_rank
     end
   else
     if (lootlistid) then
@@ -1366,6 +1366,12 @@ local function lloot_on_click(self, this)
   if (not rank and self.cfg.settings.def_rank) then
     rank = self.cfg.settings.def_rank
   end
+
+  --
+  -- Neither the item, the list nor the config supplied a rank, so fall back
+  -- to no rank filtering.
+  --
+  rank = rank or 0
 
   if (not cf) then
     if (qf.lootrules.strictarmour:GetChecked()) then
@@ -2177,8 +2183,8 @@ local function export_history_button(self, fmt)
       canresize = false,
       escclose = true,
       blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = { text = K.CANCELSTR },
+      okbutton = { text = K.ACCEPT_STR },
+      cancelbutton = { text = K.CANCEL_STR },
     }
     local ret = KUI:CreateDialogFrame(arg)
 
@@ -2249,8 +2255,8 @@ local function undo_button(self)
       canresize = false,
       escclose = true,
       blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = { text = K.CANCELSTR },
+      okbutton = { text = K.ACCEPT_STR },
+      cancelbutton = { text = K.CANCEL_STR },
     }
     local ret = KUI:CreateDialogFrame(arg)
     arg = {
@@ -3652,7 +3658,6 @@ local function refresh_bidders(self)
   qf.bidscroll.itemcount = 0
   if (bidders) then
     local newbidders = {}
-    local ll = self.cfg.lists[lootlistid]
 
     for k,v in ipairs(bidders) do
       local ison, _, pos = self:UserOrAltInList(v.uid, lootlistid, nil)
@@ -3835,8 +3840,15 @@ function ksk:SelectLootItem(idx, filter, role, list, rank)
     end
   end
 
-  lootitem.strictarmor = self.cfg.lists[list].strictcfilter
-  lootitem.strictrole = self.cfg.lists[list].strictrfilter
+  --
+  -- LIST can be nil by this point: if the master looter picked a list this
+  -- client does not have, SelectLootListByID above cleared the selection and
+  -- lootlistid went with it.
+  --
+  local llp = list and self.cfg.lists[list]
+
+  lootitem.strictarmor = llp and llp.strictcfilter or false
+  lootitem.strictrole = llp and llp.strictrfilter or false
 
   -- Set up the various filters
   set_classes_from_filter(filter)
@@ -4227,7 +4239,7 @@ function ksk:SuicideUser(listid, rlist, uid, cfgid, ilink, chain)
 
   if (chain) then
     if (ll.extralist and ll.extralist ~= "0") then
-      local trlist = self:CreateRaidList(ll.extralist)
+      local trlist = self:CreateRaidList(ll.extralist, cfgid)
       self:SuicideUserLowLevel(ll.extralist, trlist, ruid, cfgid, ilink)
       self:AddEvent(cfgid, "SULST", ll.extralist, ruid, tconcat(trlist, ""))
     end
@@ -4401,7 +4413,7 @@ function ksk:UndoSuicide(cfg, listid, movers, uid, ilink, nocmd)
 
   local mpos = {}
   for k,v in ipairs(movers) do
-    local il, lp = self:UserInList(v, listid)
+    local il, lp = self:UserInList(v, listid, cfg)
     assert(il)
     tinsert(mpos, lp)
   end
@@ -4555,7 +4567,7 @@ function ksk:RefreshLootLists(llist, reset)
 
   val = "0"
   if (selitemid) then
-    val = self.cfg.items[selitemid].speclist or "0"
+    val = self.cfg.items[selitemid].list or "0"
   end
   qf.itemlistdd:SetValue(val)
 

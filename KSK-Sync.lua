@@ -295,8 +295,12 @@ function ksk:RecoverConfig(sender, cfg, cfgid, rdata)
     K.CopyTable(self.configs[cfgid].history, cfg.history)
   end
 
+  --
+  -- rdata.s is keyed by admin uid, with that admin's last event ID as the
+  -- value (see SendFullSync). It is not a "uid:eventid" string.
+  --
   for k,v in pairs(rdata.s) do
-    local adm, le = strsplit(":", v)
+    local adm, le = k, v
     if (adm == cfg.owner) then
       cfg.lastevent = tonumber(le)
       cfg.admins[adm] = { id = "0" }

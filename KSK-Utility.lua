@@ -93,16 +93,25 @@ end
 -- If we have tethered alts, and the alt is in the raid, we need to store
 -- the UID of the alt's main, else they will not be suicided.
 --
-function ksk:CreateRaidList(listid)
+-- CFGID defaults to the current config. Note that raid presence itself
+-- (self.users) is only ever built for the current config, because the uid to
+-- name map is derived from that config's user list. So passing some other
+-- CFGID gives you that config's list order and reserved users, but raid
+-- membership still comes from the current one. Every caller passes the
+-- current config.
+--
+function ksk:CreateRaidList(listid, cfgid)
+  local cfgid = cfgid or self.currentid
+  local cfp = self.configs[cfgid]
   local raiders = {}
-  local ll = self.cfg.lists[listid]
+  local ll = cfp.lists[listid]
   for k,v in ipairs(ll.users) do
-    if (self:UserIsReserved(v)) then
+    if (self:UserIsReserved(v, cfgid)) then
       tinsert(raiders, v)
     elseif (self.users[v]) then
       tinsert(raiders, v)
-    elseif (ll.tethered and self.cfg.users[v].alts) then
-      for ak,av in pairs(self.cfg.users[v].alts) do
+    elseif (ll.tethered and cfp.users[v].alts) then
+      for ak,av in pairs(cfp.users[v].alts) do
         if (self.users[av]) then
           tinsert(raiders, v)
           break
@@ -548,6 +557,9 @@ function ksk:UpdateDatabaseVersion()
         vv[HIST_POS] = 0
       end
     end
+
+    ret = true
+    self.frdb.dbversion = 5
   end
 
   if (self.frdb.dbversion == 5) then
@@ -561,13 +573,23 @@ function ksk:UpdateDatabaseVersion()
         vv.altdisp = true
       end
 
+      --
+      -- A config whose owner is missing from its own admin table would throw
+      -- here, during login, before there is any UI to report it. A nil owner
+      -- would throw on the table write below. The owner's admin id is always
+      -- "0" by convention (see CreateNewConfig), so that is the safe default.
+      --
       local owner = v.owner
-      local ownerid = v.admins[owner].id
-      v.nadmins = 1
-      v.admins = { }
-      v.admins[owner] = { }
-      v.admins[owner]["id"] = ownerid
+      if (owner) then
+        local ownerid = v.admins[owner] and v.admins[owner].id or "0"
+        v.nadmins = 1
+        v.admins = {}
+        v.admins[owner] = { id = ownerid }
+      end
     end
+
+    ret = true
+    self.frdb.dbversion = 6
   end
 
   -- Somehow, tempcfg survives an initial broadcast.

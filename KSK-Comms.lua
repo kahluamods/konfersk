@@ -229,6 +229,7 @@ local function commdispatch(self, sender, proto, cmd, cfg, res, ...)
   local decoded = ZL:DecodeForWoWAddonChannel(estr)
   if (not decoded) then
     self.debug(1, "decoding issue with %q from %q", cmd, sender)
+    return
   end
 
   ehandlers[cmd](self, adm, sender, proto, cmd, cfg, LS:DeserializeValue(decoded))
@@ -1703,7 +1704,7 @@ ihandlers.MSYNC = function(self, sender, proto, cmd, cfg, ...)
 
   cp.admins[cktheiruid].active = true
   if (not cp.admins[cktheiruid].sync) then
-    cp.admins[theiruid].sync = {}
+    cp.admins[cktheiruid].sync = {}
   end
 
   self:SyncUpdateReplier(theiruid, self.configs[cfg].admins[cktheiruid].lastevent)
@@ -1978,7 +1979,6 @@ ehandlers.SUNDO = function(self, adm, sender, proto, cmd, cfg, ...)
     return
   end
 
-  local rilink = gsub(ilink, "\7", ":")
   local movelist = self:SplitRaidList(movers)
   self:UndoSuicide(cfg, listid, movelist, uid, ilink, true)
 end
@@ -1998,7 +1998,7 @@ ihandlers.ORANK = function (self, sender, proto, cmd, cfg, ...)
 
   local cfp = self.configs[cfg]
 
-  if (cfp.settings.cfgtype ~= KK.CFGTYPE_GUILD) then
+  if (cfp.cfgtype ~= KK.CFGTYPE_GUILD) then
     return
   end
 

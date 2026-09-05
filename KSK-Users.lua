@@ -207,8 +207,8 @@ local function create_user_button(self)
       canresize = false,
       escclose = true,
       blackbg = true,
-      okbutton = { text = K.ACCEPTSTR },
-      cancelbutton = { text = K.CANCELSTR },
+      okbutton = { text = K.ACCEPT_STR },
+      cancelbutton = { text = K.CANCEL_STR },
     }
 
     local ret = KUI:CreateDialogFrame(arg)
@@ -325,8 +325,8 @@ local function guild_import_button(self, shown)
     canresize = false,
     escclose = true,
     blackbg = true,
-    okbutton = { text = K.ACCEPTSTR },
-    cancelbutton = {text = K.CANCELSTR },
+    okbutton = { text = K.ACCEPT_STR },
+    cancelbutton = {text = K.CANCEL_STR },
   }
 
   local y = 24
@@ -1070,10 +1070,6 @@ function ksk:SetUserIsAlt(userid, onoff, main, cfg, nocmd)
 
   set_flag(self, userid, "A", onoff, cfg, main, nocmd)
 
-  if (self.lootmemberid == userid) then
-    self.lootmemberid = nil
-  end
-
   local usr = cfu[userid]
 
   if (onoff) then
@@ -1148,7 +1144,7 @@ function ksk:SetUserRole(userid, value, cfg, nocmd)
   local cfg = cfg or self.currentid
 
   if (not nocmd) then
-    self:AddEvent(cfg, "CHUSR", "R", true, tonumber(value))
+    self:AddEvent(cfg, "CHUSR", userid, "R", true, tonumber(value))
   end
 
   self.frdb.configs[cfg].users[userid].role = value
@@ -1251,7 +1247,7 @@ end
 --
 function ksk:DeleteUser(uid, cfgid, alts, nocmd)
   local cfg = cfgid or self.currentid
-  local lcp = self.frdb.configs[cfgid]
+  local lcp = self.frdb.configs[cfg]
   local refreshitems = false
   local refreshhistory = false
 
